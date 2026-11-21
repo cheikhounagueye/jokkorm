@@ -54,7 +54,7 @@ public final class PhysicalArchiveRecord {
 
     /** Transition {@code REGISTERED → STORED} après versement physique + attribution emplacement. */
     public void markStored(Instant at) {
-        requireNotDestroyed();
+        requireNotTerminal();
         if (status == PhysicalArchiveStatus.FROZEN) {
             throw new IllegalStateException("Cannot store a frozen archive: " + cote.value());
         }
@@ -64,10 +64,7 @@ public final class PhysicalArchiveRecord {
 
     /** Gel contentieux prononcé par le maître. Bloque toute sortie ultérieure. */
     public void markFrozen(Instant at) {
-        requireNotDestroyed();
-        if (status == PhysicalArchiveStatus.TRANSFERRED) {
-            throw new IllegalStateException("Cannot freeze a transferred archive: " + cote.value());
-        }
+        requireNotTerminal();
         this.status = PhysicalArchiveStatus.FROZEN;
         this.lastTransitionAt = at;
     }
@@ -83,7 +80,7 @@ public final class PhysicalArchiveRecord {
 
     /** Destruction exécutée. Transition terminale. */
     public void markDestroyed(Instant at) {
-        requireNotDestroyed();
+        requireNotTerminal();
         if (status == PhysicalArchiveStatus.FROZEN) {
             throw new IllegalStateException("Cannot destroy a frozen archive: " + cote.value());
         }
@@ -93,7 +90,7 @@ public final class PhysicalArchiveRecord {
 
     /** Transfert aux Archives nationales. Transition terminale. */
     public void markTransferred(Instant at) {
-        requireNotDestroyed();
+        requireNotTerminal();
         if (status == PhysicalArchiveStatus.FROZEN) {
             throw new IllegalStateException("Cannot transfer a frozen archive: " + cote.value());
         }
@@ -101,9 +98,13 @@ public final class PhysicalArchiveRecord {
         this.lastTransitionAt = at;
     }
 
-    private void requireNotDestroyed() {
+    /** DESTROYED et TRANSFERRED sont terminaux : aucune transition ultérieure possible. */
+    private void requireNotTerminal() {
         if (status == PhysicalArchiveStatus.DESTROYED) {
             throw new IllegalStateException("Archive already destroyed: " + cote.value());
+        }
+        if (status == PhysicalArchiveStatus.TRANSFERRED) {
+            throw new IllegalStateException("Archive already transferred: " + cote.value());
         }
     }
 

@@ -3,6 +3,7 @@ package com.jokkorm.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jokkorm.adapter.out.persistence.record.JpaPhysicalArchiveRecordRepository;
+import com.jokkorm.boot.Application;
 import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.record.Cote;
@@ -34,7 +35,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *   <li>La transition de statut est bien persistée.</li>
  * </ol>
  */
-@SpringBootTest
+@SpringBootTest(classes = Application.class)
 @Testcontainers
 @ActiveProfiles("test")
 @Transactional
