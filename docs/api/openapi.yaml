@@ -1,0 +1,274 @@
+# JokkoRM API v1 — contrat REST figé.
+#
+# Statut : v1.draft (sera v1.0 en fin de phase 4). Toute évolution rétro-incompatible
+# = bump majeur vers v2. Cette spec est la source de vérité face à ce que renvoie
+# springdoc au runtime sur /v3/api-docs ; divergence = bug.
+#
+# Authentification : OIDC Bearer (Keycloak realm jokkorm). Scopes à documenter en phase 3.
+# Multi-tenant : claim JWT `tenant` OU header `X-Tenant-Id` (scénarios admin).
+
+openapi: 3.1.0
+
+info:
+  title: JokkoRM API
+  version: "1.0.0-draft"
+  summary: Records Management physical archive module — public REST API.
+  description: |
+    JokkoRM est un module d'archivage physique qui se branche sur une GED/SAE
+    maître (Maarch RM, Alfresco, Nuxeo, SI custom) via le `SaeMasterPort`.
+
+    Voir [docs/pattern/](../pattern/) pour le modèle fonctionnel
+    « une seule archive, deux gardiens ».
+  license:
+    name: AGPL-3.0-or-later
+    url: https://www.gnu.org/licenses/agpl-3.0.txt
+  contact:
+    name: JokkoRM maintainers
+    url: https://github.com/cheikhounagueye/jokkorm
+
+servers:
+  - url: http://localhost:8090
+    description: Dev local
+  - url: https://rm.jokkofile.com
+    description: Démo (phase 4, à venir)
+
+tags:
+  - name: Records
+    description: Enveloppes physiques des archives (lecture).
+  - name: Master events
+    description: Hooks entrants depuis la GED/SAE maître.
+
+security:
+  - OIDCBearer: []
+
+paths:
+  /api/v1/records:
+    get:
+      tags: [Records]
+      summary: Liste paginée des enveloppes physiques pour le tenant courant.
+      operationId: listRecords
+      parameters:
+        - $ref: "#/components/parameters/TenantHeader"
+        - name: page
+          in: query
+          description: Numéro de page, 0-based.
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          description: Taille de page, entre 1 et 200.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 20 }
+        - name: status
+          in: query
+          description: Filtre optionnel sur le statut physique.
+          schema: { $ref: "#/components/schemas/PhysicalArchiveStatus" }
+      responses:
+        "200":
+          description: Page de résultats.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordsPageResponse" }
+        "400": { $ref: "#/components/responses/InvalidArgument" }
+        "401": { $ref: "#/components/responses/TenantUnresolved" }
+
+  /api/v1/records/by-cote:
+    get:
+      tags: [Records]
+      summary: Détail d'une enveloppe physique par sa cote.
+      description: |
+        La cote peut contenir des `/` (ex. `DMG/MP/2024/047`). On passe par un query
+        param plutôt que par un path variable pour éviter les restrictions Tomcat +
+        Spring Security sur les slashes encodés en path.
+      operationId: findRecordByCote
+      parameters:
+        - $ref: "#/components/parameters/TenantHeader"
+        - name: cote
+          in: query
+          required: true
+          description: Cote émise par le maître.
+          example: DMG/MP/2024/047
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: La ressource.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordResponse" }
+        "400": { $ref: "#/components/responses/InvalidArgument" }
+        "401": { $ref: "#/components/responses/TenantUnresolved" }
+        "404": { $ref: "#/components/responses/RecordNotFound" }
+
+  /api/v1/events/master/cote-assigned:
+    post:
+      tags: [Master events]
+      summary: Hook entrant — nouvelle cote attribuée par le maître.
+      description: |
+        Provisionne l'enveloppe physique côté JokkoRM. Idempotent : rejouer avec le
+        même payload retourne le même record sans effet de bord additionnel.
+      operationId: handleCoteAssigned
+      parameters:
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CoteAssignedRequest" }
+      responses:
+        "202":
+          description: Record provisionné (créé ou déjà existant).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordResponse" }
+        "400": { $ref: "#/components/responses/InvalidArgument" }
+        "401": { $ref: "#/components/responses/TenantUnresolved" }
+
+  /api/v1/events/master/legal-hold:
+    post:
+      tags: [Master events]
+      summary: Hook entrant — gel ou dégel contentieux sur une archive.
+      description: |
+        FREEZE bloque toute sortie physique. RELEASE lève le gel (requiert statut
+        actuel FROZEN, sinon 409).
+      operationId: handleLegalHold
+      parameters:
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LegalHoldRequest" }
+      responses:
+        "202":
+          description: État mis à jour.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordResponse" }
+        "400": { $ref: "#/components/responses/InvalidArgument" }
+        "401": { $ref: "#/components/responses/TenantUnresolved" }
+        "404": { $ref: "#/components/responses/RecordNotFound" }
+        "409": { $ref: "#/components/responses/IllegalStateTransition" }
+
+components:
+  securitySchemes:
+    OIDCBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    TenantHeader:
+      name: X-Tenant-Id
+      in: header
+      required: false
+      description: |
+        Discriminant tenant. Optionnel si le claim JWT `tenant` est présent ; obligatoire
+        sinon (scénarios admin cross-tenant).
+      schema:
+        type: string
+        pattern: "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
+        example: acme
+
+  schemas:
+    PhysicalArchiveStatus:
+      type: string
+      enum: [REGISTERED, STORED, FROZEN, DESTROYED, TRANSFERRED]
+      description: |
+        REGISTERED → cote provisionnée, versement physique en attente.
+        STORED → en magasin, emplacement attribué.
+        FROZEN → gel contentieux, toute sortie bloquée.
+        DESTROYED → destruction exécutée (terminal).
+        TRANSFERRED → versé aux Archives nationales (terminal).
+
+    RecordResponse:
+      type: object
+      required: [id, cote, status, registeredAt, lastTransitionAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        cote:
+          type: string
+          example: DMG/MP/2024/047
+        status:
+          $ref: "#/components/schemas/PhysicalArchiveStatus"
+        registeredAt:
+          type: string
+          format: date-time
+        lastTransitionAt:
+          type: string
+          format: date-time
+
+    RecordsPageResponse:
+      type: object
+      required: [content, page, size, totalElements, totalPages, last]
+      properties:
+        content:
+          type: array
+          items: { $ref: "#/components/schemas/RecordResponse" }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+        last: { type: boolean }
+
+    CoteAssignedRequest:
+      type: object
+      required: [cote]
+      properties:
+        cote:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: DMG/MP/2024/047
+
+    LegalHoldRequest:
+      type: object
+      required: [cote, action]
+      properties:
+        cote:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: DMG/MP/2024/047
+        action:
+          type: string
+          enum: [FREEZE, RELEASE]
+
+    ProblemDetail:
+      type: object
+      description: RFC 7807 problem+json. Famille d'URIs `https://jokkorm.io/errors/<slug>`.
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri }
+        timestamp: { type: string, format: date-time }
+        fieldErrors:
+          type: object
+          additionalProperties: { type: string }
+          description: Présent seulement sur `validation-failed`.
+
+  responses:
+    InvalidArgument:
+      description: Argument invalide (hors borne, type mauvais, …).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+
+    TenantUnresolved:
+      description: Aucun tenant lié à la requête.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+
+    RecordNotFound:
+      description: Aucun record pour cette cote sur ce tenant.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+
+    IllegalStateTransition:
+      description: Transition d'état refusée (ex. détruire un FROZEN, relâcher un non-FROZEN).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }

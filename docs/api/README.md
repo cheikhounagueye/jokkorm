@@ -2,18 +2,23 @@
 
 ## Statut
 
-**v1.draft** — le contrat sera figé à la phase 2 (fin S3). D'ici là, tout évolue librement.
+**v1.0-draft** (phase 2). Le fichier `openapi.yaml` ci-contre est la source de vérité. Il sera gelé en `v1.0.0` à la phase 4 ; après ça, toute rupture rétro-incompatible = `v2`.
 
 ## Spécification
 
-Le fichier de référence sera `openapi.yaml` à partir de la phase 2. Il décrira :
+Le fichier de référence est [`openapi.yaml`](openapi.yaml). Il décrit les endpoints livrés en phase 2 :
 
-- **Lectures** — `/api/v1/records`, `/api/v1/records/{cote}`, `/api/v1/records/{cote}/consolidated`
-- **Écritures physiques** — mouvement, prêt/retour, récolement, destruction
-- **Événements entrants maître** — `/api/events/master/cote-assigned`, `/legal-hold`, `/disposal-ordered`
-- **Admin** — adapters maître, politique quorum, agents service
+- **Lecture** — `GET /api/v1/records` (liste paginée), `GET /api/v1/records/by-cote?cote=X`
+- **Événements entrants maître** — `POST /api/v1/events/master/cote-assigned`, `POST /api/v1/events/master/legal-hold`
 
-Entre temps, l'exploration se fait via Swagger UI en runtime : http://localhost:8090/swagger-ui.html
+Endpoints prévus en phases ultérieures (hors scope v1.0-draft) :
+
+- **Écritures physiques** — mouvement, prêt/retour, récolement, destruction (phase 3)
+- **Vue consolidée** — `/records/{cote}/consolidated` (fusion numérique maître + physique local, phase 3)
+- **Événements entrants additionnels** — `/events/master/disposal-ordered` (phase 3)
+- **Admin** — adapters maître, politique quorum, rôles service (phase 3-4)
+
+Exploration en runtime : http://localhost:8090/swagger-ui.html
 
 ## Versioning
 

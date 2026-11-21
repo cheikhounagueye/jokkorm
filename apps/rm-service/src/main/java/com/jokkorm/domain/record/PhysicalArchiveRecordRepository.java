@@ -1,6 +1,8 @@
 package com.jokkorm.domain.record;
 
 import com.jokkorm.commons.tenancy.TenantId;
+import com.jokkorm.domain.common.Page;
+import com.jokkorm.domain.common.PageRequest;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,4 +21,13 @@ public interface PhysicalArchiveRecordRepository {
     Optional<PhysicalArchiveRecord> findByCote(TenantId tenant, Cote cote);
 
     boolean existsByCote(TenantId tenant, Cote cote);
+
+    /** Liste paginée triée par date d'enregistrement décroissante. */
+    Page<PhysicalArchiveRecord> findAll(TenantId tenant, PageRequest pageRequest);
+
+    /**
+     * Même pagination, filtré sur un statut précis. {@code null} = pas de filtre.
+     */
+    Page<PhysicalArchiveRecord> findAllByStatus(
+        TenantId tenant, PhysicalArchiveStatus status, PageRequest pageRequest);
 }
