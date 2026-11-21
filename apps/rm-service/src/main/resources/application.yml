@@ -26,6 +26,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
+          # Realm `jokkorm` importé au boot Keycloak depuis
+          # deploy/keycloak/realms/jokkorm-realm.json (compose.dev.yml).
           issuer-uri: ${JOKKORM_OIDC_ISSUER:http://localhost:8085/realms/jokkorm}
 
 management:

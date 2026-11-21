@@ -1,0 +1,153 @@
+{
+  "realm": "jokkorm",
+  "enabled": true,
+  "displayName": "JokkoRM",
+  "displayNameHtml": "<strong>JokkoRM</strong> — Records Management",
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+
+  "roles": {
+    "realm": [
+      { "name": "RM_VIEW",    "description": "Consulte le référentiel physique." },
+      { "name": "RM_INGEST",  "description": "Enregistre un versement, crée un conteneur." },
+      { "name": "RM_MOVE",    "description": "Déplace un conteneur, trace un mouvement physique." },
+      { "name": "RM_APPROVE", "description": "Approuve une étape (quorum N-eyes)." },
+      { "name": "RM_MANAGE",  "description": "Administre le référentiel physique (sites, magasins, politiques)." },
+      { "name": "RM_MASTER_WEBHOOK", "description": "Rôle réservé aux comptes machine qui pousent les hooks maître (cote-assigned, legal-hold)." }
+    ]
+  },
+
+  "groups": [
+    {
+      "name": "jokkorm-admins",
+      "realmRoles": ["RM_VIEW", "RM_INGEST", "RM_MOVE", "RM_APPROVE", "RM_MANAGE"]
+    },
+    {
+      "name": "jokkorm-operators",
+      "realmRoles": ["RM_VIEW", "RM_INGEST", "RM_MOVE"]
+    },
+    {
+      "name": "jokkorm-viewers",
+      "realmRoles": ["RM_VIEW"]
+    }
+  ],
+
+  "clientScopes": [
+    {
+      "name": "tenant",
+      "description": "Mapper le claim `tenant` sur chaque access token.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "tenant",
+            "claim.name": "tenant",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "defaultDefaultClientScopes": ["tenant", "roles", "profile", "email"],
+
+  "clients": [
+    {
+      "clientId": "jokkorm-web",
+      "name": "JokkoRM Web UI",
+      "description": "Frontend Next.js, flow Authorization Code + PKCE.",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3100/*",
+        "https://rm.jokkofile.com/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3100",
+        "https://rm.jokkofile.com"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": ["tenant", "roles", "profile", "email", "web-origins"]
+    },
+    {
+      "clientId": "jokkorm-master-webhook",
+      "name": "Master webhook (M2M)",
+      "description": "Client machine-to-machine utilisé par un maître (Maarch, SI custom) pour pousser les hooks /api/v1/events/master/*.",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "change-me-in-prod-via-admin-cli",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "300"
+      },
+      "defaultClientScopes": ["tenant", "roles"]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "demo.admin",
+      "enabled": true,
+      "email": "demo.admin@jokkorm.local",
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "credentials": [
+        { "type": "password", "value": "JokkoRM2026!", "temporary": false }
+      ],
+      "attributes": {
+        "tenant": ["demo"]
+      },
+      "groups": ["jokkorm-admins"]
+    },
+    {
+      "username": "demo.operator",
+      "enabled": true,
+      "email": "demo.operator@jokkorm.local",
+      "firstName": "Demo",
+      "lastName": "Operator",
+      "credentials": [
+        { "type": "password", "value": "JokkoRM2026!", "temporary": false }
+      ],
+      "attributes": {
+        "tenant": ["demo"]
+      },
+      "groups": ["jokkorm-operators"]
+    },
+    {
+      "username": "service-account-jokkorm-master-webhook",
+      "enabled": true,
+      "serviceAccountClientId": "jokkorm-master-webhook",
+      "attributes": {
+        "tenant": ["demo"]
+      },
+      "realmRoles": ["RM_MASTER_WEBHOOK", "RM_INGEST"]
+    }
+  ]
+}
