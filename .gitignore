@@ -13,10 +13,11 @@ build/
 # OS
 Thumbs.db
 
-# Node
+# Node — scope explicite au seul apps/web/ pour ne pas matcher les packages
+# hexagonaux `adapter/out/` (feedback .dockerignore identique dans eversuite-modern).
 node_modules/
-.next/
-out/
+/apps/web/.next/
+/apps/web/out/
 *.log
 .env.local
 .env.*.local
