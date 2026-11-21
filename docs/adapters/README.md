@@ -7,7 +7,7 @@ JokkoRM se branche sur un maître (GED/SAE) via une interface unique, `com.jokko
 | Nom | Package | Statut | Doc |
 |---|---|---|---|
 | **noop** | `adapter.out.master.noop` | ✅ phase 2 | [noop.md](noop.md) |
-| **maarch** | `adapter.out.master.maarch` | 🚧 phase 3 | [maarch.md](maarch.md) *(à venir)* |
+| **maarch** | `adapter.out.master.maarch` | ✅ phase 3B | [maarch.md](maarch.md) |
 | **generic** | `adapter.out.master.generic` | 🚧 phase 3 | [generic.md](generic.md) *(à venir)* |
 
 ## Backlog
