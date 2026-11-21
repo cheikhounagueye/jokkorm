@@ -1,0 +1,106 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0003-audit-event-table
+      author: jokkorm
+      comment: >
+        Journal d'audit append-only, chaîné HMAC-SHA256 par tenant+target.
+        Phase 3A. Voir com.jokkorm.application.audit.AuditChainService.
+      changes:
+        - createTable:
+            tableName: audit_event
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_audit_event_tenant
+                    references: tenant(id)
+              - column:
+                  name: ts
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: actor
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: action
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_type
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload_hash
+                  type: BYTEA
+                  constraints:
+                    nullable: false
+              - column:
+                  name: prev_event_hash
+                  type: BYTEA
+              - column:
+                  name: hmac
+                  type: BYTEA
+                  constraints:
+                    nullable: false
+              - column:
+                  name: metadata
+                  type: TEXT
+        - createIndex:
+            tableName: audit_event
+            indexName: ix_audit_event_tenant_target_ts
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: target_type
+              - column:
+                  name: target_id
+              - column:
+                  name: ts
+              # DESC implicite — recherche du dernier évent pour prevHash
+
+  - changeSet:
+      id: 0003-audit-event-append-only
+      author: jokkorm
+      comment: >
+        Triggers append-only sur audit_event — empêche UPDATE et DELETE au niveau SGBD
+        pour que la chaîne HMAC reste non-répudiable (ISO 27001 A.12.4.2 / NF Z 42-013).
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              CREATE OR REPLACE FUNCTION audit_event_forbid_write() RETURNS trigger AS $$
+              BEGIN
+                RAISE EXCEPTION 'audit_event is append-only (ISO 27001 A.12.4.2)';
+              END;
+              $$ LANGUAGE plpgsql;
+
+              DROP TRIGGER IF EXISTS trg_audit_event_no_update ON audit_event;
+              DROP TRIGGER IF EXISTS trg_audit_event_no_delete ON audit_event;
+
+              CREATE TRIGGER trg_audit_event_no_update
+                BEFORE UPDATE ON audit_event
+                FOR EACH ROW EXECUTE FUNCTION audit_event_forbid_write();
+
+              CREATE TRIGGER trg_audit_event_no_delete
+                BEFORE DELETE ON audit_event
+                FOR EACH ROW EXECUTE FUNCTION audit_event_forbid_write();

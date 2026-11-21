@@ -70,4 +70,18 @@ public final class TenantContext {
             }
         }
     }
+
+    /**
+     * Variante qui enveloppe les checked exceptions en {@link RuntimeException}. Utile dans
+     * les lambdas de test et les callbacks REST où on ne veut pas propager {@code throws Exception}.
+     */
+    public static <T> T callWithUnchecked(TenantId tenant, Callable<T> body) {
+        try {
+            return callWith(tenant, body);
+        } catch (RuntimeException re) {
+            throw re;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
