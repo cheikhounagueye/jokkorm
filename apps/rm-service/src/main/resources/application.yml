@@ -1,0 +1,58 @@
+server:
+  port: 8090
+  shutdown: graceful
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: jokkorm-rm-service
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  datasource:
+    url: ${JOKKORM_DB_URL:jdbc:postgresql://localhost:5490/jokkorm}
+    username: ${JOKKORM_DB_USER:jokkorm}
+    password: ${JOKKORM_DB_PASSWORD:jokkorm}
+    hikari:
+      maximum-pool-size: 10
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JOKKORM_OIDC_ISSUER:http://localhost:8085/realms/jokkorm}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.jokkorm: INFO
+    org.springframework.security: INFO
+
+jokkorm:
+  # Which SAE master this instance is paired with.
+  # Supported values: noop (standalone), maarch, generic.
+  # See docs/adr/0003-sae-master-port.md.
+  master:
+    kind: ${JOKKORM_MASTER_KIND:noop}

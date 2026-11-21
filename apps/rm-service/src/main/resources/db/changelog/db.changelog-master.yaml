@@ -1,0 +1,6 @@
+databaseChangeLog:
+  - includeAll:
+      path: classpath:db/changelog/changes/
+      errorIfMissingOrEmpty: false
+  - include:
+      file: db/changelog/0001-baseline.yaml

@@ -1,0 +1,40 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0001-baseline-tenant
+      author: jokkorm
+      comment: >
+        Baseline multi-tenant. Every row in every table carries tenant_id.
+        See docs/adr/0002-multi-tenant-row-level.md.
+      changes:
+        - createTable:
+            tableName: tenant
+            columns:
+              - column:
+                  name: id
+                  type: VARCHAR(64)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: display_name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        - sql:
+            comment: Seed the demo tenant so a fresh checkout boots usable.
+            sql: >
+              INSERT INTO tenant (id, display_name)
+              VALUES ('demo', 'JokkoRM Demo Tenant')
+              ON CONFLICT (id) DO NOTHING;
