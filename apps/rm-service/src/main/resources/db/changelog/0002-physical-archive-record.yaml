@@ -1,0 +1,63 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0002-physical-archive-record
+      author: jokkorm
+      comment: >
+        Bounded context <record>. Agrégat PhysicalArchiveRecord — l'enveloppe physique
+        d'une archive côté module physique. La cote est la clé naturelle, émise par le
+        maître (ADR-0004). Tenant discriminant en tête de chaque index composite.
+      changes:
+        - createTable:
+            tableName: physical_archive_record
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_phys_archive_tenant
+                    references: tenant(id)
+              - column:
+                  name: cote
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: registered_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_transition_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: physical_archive_record
+            columnNames: tenant_id, cote
+            constraintName: uq_phys_archive_tenant_cote
+        - createIndex:
+            tableName: physical_archive_record
+            indexName: ix_phys_archive_tenant_status
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: status

@@ -1,6 +1,5 @@
 databaseChangeLog:
-  - includeAll:
-      path: classpath:db/changelog/changes/
-      errorIfMissingOrEmpty: false
   - include:
       file: db/changelog/0001-baseline.yaml
+  - include:
+      file: db/changelog/0002-physical-archive-record.yaml
