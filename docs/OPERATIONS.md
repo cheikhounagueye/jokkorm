@@ -6,7 +6,7 @@ Runbook opérationnel. Mis à jour à chaque jalon.
 
 | Env | URL backend | URL frontend | Notes |
 |---|---|---|---|
-| dev local | http://localhost:8090 | http://localhost:3100 | `make dev` |
+| dev local | http://localhost:8091 | http://localhost:3100 | `make dev` |
 | demo | https://rm.jokkofile.com (à venir) | idem | Coolify, sous-domaine jokkofile |
 | prod client | fixé par déploiement | idem | compose.prod.yml |
 
@@ -14,7 +14,7 @@ Runbook opérationnel. Mis à jour à chaque jalon.
 
 ```bash
 make dev                              # stack Postgres + Keycloak + Mailpit
-./gradlew :apps:rm-service:bootRun    # backend :8090
+./gradlew :apps:rm-service:bootRun    # backend :8091
 cd apps/web && npm run dev            # frontend :3100
 ```
 
@@ -33,7 +33,7 @@ Format JSON structuré (Logstash encoder). Champs standards :
 
 ## Métriques Prometheus
 
-Exposées sur `/actuator/prometheus`. Scrapper avec un `prometheus.yml` qui pointe vers `rm-service:8090/actuator/prometheus`.
+Exposées sur `/actuator/prometheus`. Scrapper avec un `prometheus.yml` qui pointe vers `rm-service:8091/actuator/prometheus`.
 
 Métriques clés à surveiller (phase 2+) :
 - `jokkorm_master_call_duration_seconds` — latence appels sortants vers le maître

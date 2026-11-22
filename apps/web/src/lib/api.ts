@@ -5,7 +5,7 @@
  * est passé via X-Tenant-Id — en dev, la sécurité backend est désactivée avec
  * `jokkorm.security.enabled=false` quand on veut tester sans Keycloak.
  *
- * Toutes les requêtes passent par le rewrite Next.js `/api/*` → `http://localhost:8090/api/*`
+ * Toutes les requêtes passent par le rewrite Next.js `/api/*` → `http://localhost:8091/api/*`
  * configuré dans next.config.mjs.
  */
 

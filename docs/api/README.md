@@ -18,7 +18,7 @@ Endpoints prévus en phases ultérieures (hors scope v1.0-draft) :
 - **Événements entrants additionnels** — `/events/master/disposal-ordered` (phase 3)
 - **Admin** — adapters maître, politique quorum, rôles service (phase 3-4)
 
-Exploration en runtime : http://localhost:8090/swagger-ui.html
+Exploration en runtime : http://localhost:8091/swagger-ui.html
 
 ## Versioning
 

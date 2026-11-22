@@ -27,7 +27,7 @@ info:
     url: https://github.com/cheikhounagueye/jokkorm
 
 servers:
-  - url: http://localhost:8090
+  - url: http://localhost:8091
     description: Dev local
   - url: https://rm.jokkofile.com
     description: Démo (phase 4, à venir)

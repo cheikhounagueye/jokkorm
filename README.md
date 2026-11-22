@@ -42,7 +42,7 @@ make dev
 cd apps/web && npm install && npm run dev
 
 # 4. Smoke test
-curl http://localhost:8090/actuator/health
+curl http://localhost:8091/actuator/health
 open http://localhost:3100
 ```
 

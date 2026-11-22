@@ -56,7 +56,7 @@ TOKEN=$(curl -s -X POST \
   -d "client_id=jokkorm-master-webhook" \
   -d "client_secret=change-me-in-prod-via-admin-cli" | jq -r .access_token)
 
-curl -s -X POST http://localhost:8090/api/v1/events/master/cote-assigned \
+curl -s -X POST http://localhost:8091/api/v1/events/master/cote-assigned \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"cote":"SMOKE/2026/001"}'

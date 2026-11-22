@@ -1,5 +1,7 @@
 server:
-  port: 8090
+  # Port 8091 et pas 8090 : l'auteur initial avait un ancien container
+  # glpi-senum HAProxy qui occupait déjà 8090 côté hôte (changement 2026-11-22).
+  port: 8091
   shutdown: graceful
   error:
     include-message: always

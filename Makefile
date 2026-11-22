@@ -37,7 +37,7 @@ clean:
 	./gradlew clean
 
 smoke:
-	@curl -fsSL http://localhost:8090/actuator/health | python3 -m json.tool || echo "Backend injoignable sur :8090"
+	@curl -fsSL http://localhost:8091/actuator/health | python3 -m json.tool || echo "Backend injoignable sur :8091"
 
 pattern-check:
 	@test -f docs/pattern/README.md && \
