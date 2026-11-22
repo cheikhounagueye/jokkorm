@@ -47,7 +47,8 @@ function TopBar() {
         <a href="/records" style={{ color: "white", textDecoration: "none" }}>Archives</a>
         <a href="/magasin" style={{ color: "white", textDecoration: "none" }}>Magasin</a>
         <a href="/magasin/lots" style={{ color: "white", textDecoration: "none" }}>Lots</a>
-        <a href="/prets" style={{ color: "white", textDecoration: "none" }}>Prêts</a>
+        <a href="/demandes" style={{ color: "white", textDecoration: "none", fontWeight: 600 }}>Demandes</a>
+        <a href="/prets" style={{ color: "white", textDecoration: "none", opacity: 0.6 }}>Prêts (legacy)</a>
         <a href="https://github.com/cheikhounagueye/jokkorm" target="_blank" rel="noreferrer"
            style={{ color: "white", textDecoration: "none", opacity: 0.7 }}>GitHub</a>
       </nav>

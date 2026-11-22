@@ -271,6 +271,127 @@ export async function downloadGhostCard(loanId: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+// ─── Access requests workflow 4-eyes (phase 5P) ────────────────────────────────
+
+export type RequestType = "BORROW_BOX" | "EXTRACT_PIECES" | "DIGITIZE_EXTRACT";
+export type AccessRequestStatus = "DRAFT" | "SUBMITTED" | "QUALIFIED" | "APPROVED"
+  | "FULFILLED" | "COMPLETED" | "REJECTED" | "CANCELLED";
+export type UserRole = "REQUESTER" | "ARCHIVIST" | "ARCHIVES_HEAD" | "AUDITOR";
+
+export interface AccessRequestResponse {
+  id: string;
+  type: RequestType;
+  containerId: string;
+  status: AccessRequestStatus;
+  requesterId: string;
+  requesterName: string;
+  requesterDept: string | null;
+  purpose: string;
+  piecesDescription: string | null;
+  expectedReturnAt: string | null;
+  qualifiedAt: string | null; qualifiedBy: string | null; qualificationNotes: string | null;
+  approvedAt: string | null; approvedBy: string | null; approvalNotes: string | null;
+  fulfilledAt: string | null; fulfilledBy: string | null; fulfillmentNotes: string | null;
+  completedAt: string | null;
+  maarchResId: string | null; maarchUrl: string | null;
+  rejectedAt: string | null; rejectedBy: string | null; rejectReason: string | null;
+  cancelledAt: string | null; cancelReason: string | null;
+  physicalLoanId: string | null;
+  createdAt: string; updatedAt: string;
+}
+
+export interface QualificationCheck {
+  code: string;
+  severity: "BLOCKING" | "WARNING" | "INFO";
+  passed: boolean;
+  message: string;
+}
+
+const ROLE_KEY = "jokkorm.role";
+const ACTOR_KEY = "jokkorm.actor";
+
+export function getCurrentRole(): UserRole {
+  if (typeof window === "undefined") return "REQUESTER";
+  return (localStorage.getItem(ROLE_KEY) as UserRole) || "REQUESTER";
+}
+export function setCurrentRole(role: UserRole) {
+  if (typeof window !== "undefined") localStorage.setItem(ROLE_KEY, role);
+}
+export function getCurrentActor(): string {
+  if (typeof window === "undefined") return "requester";
+  return localStorage.getItem(ACTOR_KEY) || "requester";
+}
+export function setCurrentActor(actor: string) {
+  if (typeof window !== "undefined") localStorage.setItem(ACTOR_KEY, actor);
+}
+
+function accessHeaders(): HeadersInit {
+  return {
+    ...headers(),
+    "X-Role": getCurrentRole(),
+    "X-Actor": getCurrentActor(),
+  };
+}
+
+export async function createAccessRequest(body: {
+  type: RequestType; containerId: string;
+  requesterName: string; requesterDept?: string;
+  purpose: string; piecesDescription?: string; expectedReturnAt?: string;
+}): Promise<AccessRequestResponse> {
+  const r = await fetch(`/api/v1/access-requests`, {
+    method: "POST",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parse<AccessRequestResponse>(r);
+}
+
+export async function listMyRequests(): Promise<AccessRequestResponse[]> {
+  const r = await fetch(`/api/v1/access-requests/mine`, { headers: accessHeaders() });
+  return parse<AccessRequestResponse[]>(r);
+}
+
+export async function listToQualify(): Promise<AccessRequestResponse[]> {
+  const r = await fetch(`/api/v1/access-requests/to-qualify`, { headers: accessHeaders() });
+  return parse<AccessRequestResponse[]>(r);
+}
+
+export async function listToApprove(): Promise<AccessRequestResponse[]> {
+  const r = await fetch(`/api/v1/access-requests/to-approve`, { headers: accessHeaders() });
+  return parse<AccessRequestResponse[]>(r);
+}
+
+export async function listToFulfill(): Promise<AccessRequestResponse[]> {
+  const r = await fetch(`/api/v1/access-requests/to-fulfill`, { headers: accessHeaders() });
+  return parse<AccessRequestResponse[]>(r);
+}
+
+async function postAction<T>(id: string, action: string, body?: object): Promise<T> {
+  const r = await fetch(`/api/v1/access-requests/${id}/${action}`, {
+    method: "POST",
+    headers: body
+      ? { ...accessHeaders(), "Content-Type": "application/json" }
+      : accessHeaders(),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return parse<T>(r);
+}
+
+export const submitAccessRequest = (id: string) => postAction<AccessRequestResponse>(id, "submit");
+export const qualifyAccessRequest = (id: string, notes?: string) =>
+  postAction<{ request: AccessRequestResponse; checks: QualificationCheck[]; qualified: boolean; blockingReason: string | null }>(id, "qualify", { notes });
+export const approveAccessRequest = (id: string, notes?: string) =>
+  postAction<AccessRequestResponse>(id, "approve", { notes });
+export const rejectAccessRequest = (id: string, reason: string) =>
+  postAction<AccessRequestResponse>(id, "reject", { reason });
+export const cancelAccessRequest = (id: string, reason: string) =>
+  postAction<AccessRequestResponse>(id, "cancel", { reason });
+export const fulfillAccessRequest = (id: string, notes?: string, digitizedPdfBase64?: string) =>
+  postAction<{ request: AccessRequestResponse; createdLoanId: string | null }>(id, "fulfill", {
+    notes, digitizedPdfBase64,
+  });
+export const completeAccessRequest = (id: string) => postAction<AccessRequestResponse>(id, "complete");
+
 // ─── Import Excel topographie (phase 5I) ──────────────────────────────────────
 
 export interface ImportTopographyReport {
