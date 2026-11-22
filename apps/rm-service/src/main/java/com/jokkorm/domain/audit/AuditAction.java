@@ -37,5 +37,14 @@ public enum AuditAction {
     CONTAINER_EXTERNAL_REFERENCE_SET,
 
     /** Import Excel topographie exécuté — phase 5I. */
-    STORAGE_LOCATIONS_IMPORTED
+    STORAGE_LOCATIONS_IMPORTED,
+
+    /** Prêt de boîte demandé (phase 5E). */
+    LOAN_REQUESTED,
+    /** Prêt marqué sorti (boîte remise à l'emprunteur, fantôme imprimé) — phase 5E. */
+    LOAN_OUT,
+    /** Prêt retourné (boîte rangée, fantôme retiré) — phase 5E. */
+    LOAN_RETURNED,
+    /** Prêt annulé avant sortie — phase 5E. */
+    LOAN_CANCELLED
 }

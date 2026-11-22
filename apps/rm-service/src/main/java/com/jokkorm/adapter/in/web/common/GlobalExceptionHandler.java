@@ -1,6 +1,8 @@
 package com.jokkorm.adapter.in.web.common;
 
 import com.jokkorm.application.AccessGuard;
+import com.jokkorm.application.loan.LoanConflictException;
+import com.jokkorm.application.loan.LoanNotFoundException;
 import com.jokkorm.application.physical.BatchNotFoundException;
 import com.jokkorm.application.physical.PhysicalContainerConflictException;
 import com.jokkorm.application.physical.PhysicalContainerNotFoundException;
@@ -75,6 +77,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> batchNotFound(
         BatchNotFoundException e, HttpServletRequest request) {
         return problem(HttpStatus.NOT_FOUND, "batch-not-found", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(LoanNotFoundException.class)
+    public ResponseEntity<ProblemDetail> loanNotFound(
+        LoanNotFoundException e, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "loan-not-found", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(LoanConflictException.class)
+    public ResponseEntity<ProblemDetail> loanConflict(
+        LoanConflictException e, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "loan-conflict", e.getMessage(), request);
     }
 
     @ExceptionHandler(AccessGuard.TenantMismatchException.class)

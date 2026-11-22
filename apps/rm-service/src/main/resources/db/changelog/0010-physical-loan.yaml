@@ -1,0 +1,105 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0010-physical-loan
+      author: jokkorm
+      comment: >
+        Phase 5E — prêts physiques. 1 ligne par prêt, référence container_id
+        (une boîte peut avoir plusieurs prêts terminés dans sa vie mais un seul
+        actif à la fois — invariant applicatif, index partiel pour aider).
+      changes:
+        - createTable:
+            tableName: physical_loan
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_physical_loan_tenant
+                    references: tenant(id)
+              - column:
+                  name: container_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_physical_loan_container
+                    references: physical_container(id)
+              - column:
+                  name: borrower_name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: borrower_dept
+                  type: VARCHAR(255)
+              - column:
+                  name: purpose
+                  type: VARCHAR(500)
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: requested_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: requested_by
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expected_return_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: out_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: out_by
+                  type: VARCHAR(255)
+              - column:
+                  name: returned_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: returned_by
+                  type: VARCHAR(255)
+              - column:
+                  name: cancel_reason
+                  type: VARCHAR(500)
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: physical_loan
+            indexName: ix_physical_loan_tenant_status
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: status
+        - createIndex:
+            tableName: physical_loan
+            indexName: ix_physical_loan_tenant_container
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: container_id

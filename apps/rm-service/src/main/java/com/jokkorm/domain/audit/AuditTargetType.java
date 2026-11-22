@@ -17,5 +17,8 @@ public enum AuditTargetType {
     CONTAINER_BATCH,
 
     /** Conteneur physique individuel (boîte, carton) — phase 5N. */
-    CONTAINER
+    CONTAINER,
+
+    /** Prêt physique d'une boîte — phase 5E. */
+    LOAN
 }
