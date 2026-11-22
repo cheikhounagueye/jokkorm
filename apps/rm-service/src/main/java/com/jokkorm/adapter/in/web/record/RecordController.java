@@ -1,5 +1,9 @@
 package com.jokkorm.adapter.in.web.record;
 
+import com.jokkorm.adapter.in.web.physical.PhysicalMovementResponse;
+import com.jokkorm.adapter.in.web.physical.RecordMovementRequest;
+import com.jokkorm.application.physical.ListRecordMovementsUseCase;
+import com.jokkorm.application.physical.RecordMovementUseCase;
 import com.jokkorm.application.record.FindRecordByCoteUseCase;
 import com.jokkorm.application.record.GetConsolidatedRecordUseCase;
 import com.jokkorm.application.record.ListRecordsUseCase;
@@ -8,6 +12,7 @@ import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.domain.common.PageRequest;
 import com.jokkorm.domain.record.Cote;
 import com.jokkorm.domain.record.PhysicalArchiveStatus;
+import java.util.List;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,16 +48,22 @@ public class RecordController {
     private final FindRecordByCoteUseCase findByCote;
     private final GetConsolidatedRecordUseCase getConsolidated;
     private final StoreRecordInContainerUseCase storeInContainer;
+    private final RecordMovementUseCase recordMovement;
+    private final ListRecordMovementsUseCase listMovements;
 
     public RecordController(
         ListRecordsUseCase listRecords,
         FindRecordByCoteUseCase findByCote,
         GetConsolidatedRecordUseCase getConsolidated,
-        StoreRecordInContainerUseCase storeInContainer) {
+        StoreRecordInContainerUseCase storeInContainer,
+        RecordMovementUseCase recordMovement,
+        ListRecordMovementsUseCase listMovements) {
         this.listRecords = listRecords;
         this.findByCote = findByCote;
         this.getConsolidated = getConsolidated;
         this.storeInContainer = storeInContainer;
+        this.recordMovement = recordMovement;
+        this.listMovements = listMovements;
     }
 
     @GetMapping
@@ -75,6 +86,32 @@ public class RecordController {
                    example = "DMG/MP/2024/047")
         @RequestParam String cote) {
         return RecordResponse.from(findByCote.execute(TenantContext.current(), Cote.of(cote)));
+    }
+
+    @GetMapping("/movements")
+    @Operation(
+        summary = "Timeline des mouvements physiques pour une cote (phase 5D).",
+        description = "Liste chronologique append-only des 6 verbes INGRESS/RELOCATE/LOAN_OUT/"
+            + "LOAN_IN/DIGITIZE_REQUEST/EGRESS. Alimentée automatiquement par /records/store "
+            + "(INGRESS ou RELOCATE selon qu'il y avait déjà une boîte) et manuellement via "
+            + "POST /records/movements.")
+    public List<PhysicalMovementResponse> movements(
+        @Parameter(description = "Cote du dossier")
+        @RequestParam String cote) {
+        return listMovements.execute(Cote.of(cote)).stream()
+            .map(PhysicalMovementResponse::from)
+            .toList();
+    }
+
+    @PostMapping("/movements")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Enregistre un mouvement physique manuel (prêt, retour, numérisation, destruction).")
+    public PhysicalMovementResponse recordMovement(
+        @Parameter(description = "Cote du dossier")
+        @RequestParam String cote,
+        @Valid @RequestBody RecordMovementRequest request) {
+        return PhysicalMovementResponse.from(
+            recordMovement.execute(Cote.of(cote), request.kind(), request.actor(), request.motive()));
     }
 
     @PostMapping("/store")

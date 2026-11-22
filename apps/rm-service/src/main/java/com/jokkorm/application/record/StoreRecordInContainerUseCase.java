@@ -8,8 +8,11 @@ import com.jokkorm.domain.audit.AuditAction;
 import com.jokkorm.domain.audit.AuditTargetType;
 import com.jokkorm.domain.master.PhysicalLocation;
 import com.jokkorm.domain.master.SaeMasterPort;
+import com.jokkorm.domain.physical.MovementKind;
 import com.jokkorm.domain.physical.PhysicalContainer;
 import com.jokkorm.domain.physical.PhysicalContainerRepository;
+import com.jokkorm.domain.physical.PhysicalMovement;
+import com.jokkorm.domain.physical.PhysicalMovementRepository;
 import com.jokkorm.domain.physical.StorageLocation;
 import com.jokkorm.domain.physical.StorageLocationKind;
 import com.jokkorm.domain.physical.StorageLocationRepository;
@@ -48,6 +51,7 @@ public class StoreRecordInContainerUseCase {
     private final PhysicalArchiveRecordRepository records;
     private final PhysicalContainerRepository containers;
     private final StorageLocationRepository locations;
+    private final PhysicalMovementRepository movements;
     private final SaeMasterPort master;
     private final AuditChainService audit;
     private final Clock clock;
@@ -56,12 +60,14 @@ public class StoreRecordInContainerUseCase {
         PhysicalArchiveRecordRepository records,
         PhysicalContainerRepository containers,
         StorageLocationRepository locations,
+        PhysicalMovementRepository movements,
         SaeMasterPort master,
         AuditChainService audit,
         Clock clock) {
         this.records = records;
         this.containers = containers;
         this.locations = locations;
+        this.movements = movements;
         this.master = master;
         this.audit = audit;
         this.clock = clock;
@@ -98,6 +104,7 @@ public class StoreRecordInContainerUseCase {
         }
 
         java.time.Instant now = clock.instant();
+        boolean firstIngress = record.containerId().isEmpty();
 
         // 1) mise à jour record + container
         record.storeInContainer(container.id(), now);
@@ -105,21 +112,27 @@ public class StoreRecordInContainerUseCase {
         records.save(record);
         containers.save(container);
 
-        // 2) notify master avec l'adresse complète (5 niveaux parsés depuis le path)
+        // 2) journal physique : INGRESS pour un premier rangement, RELOCATE sinon (phase 5D)
+        MovementKind kind = firstIngress ? MovementKind.INGRESS : MovementKind.RELOCATE;
+        movements.save(PhysicalMovement.create(
+            tenant, record.id(), container.id(), kind, "user", now,
+            "container=%s path=%s".formatted(container.barcode(), position.path())));
+
+        // 3) notify master avec l'adresse complète (5 niveaux parsés depuis le path)
         PhysicalLocation address = resolveFiveLevelLocation(position);
         master.notifyPhysicalLocation(tenant, cote, address);
 
-        // 3) audit
+        // 4) audit
         audit.record(
             AuditAction.RECORD_STORED,
             AuditTargetType.PHYSICAL_ARCHIVE_RECORD,
             record.id(),
             "user",
-            "cote=%s container=%s path=%s"
-                .formatted(cote.value(), container.barcode(), position.path()));
+            "cote=%s container=%s path=%s kind=%s"
+                .formatted(cote.value(), container.barcode(), position.path(), kind));
 
-        LOG.info("Record cote={} stored in container={} at path={}",
-            cote.value(), container.barcode(), position.path());
+        LOG.info("Record cote={} stored in container={} at path={} (kind={})",
+            cote.value(), container.barcode(), position.path(), kind);
 
         return record;
     }

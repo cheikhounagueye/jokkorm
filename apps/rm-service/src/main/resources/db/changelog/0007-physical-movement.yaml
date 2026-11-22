@@ -1,0 +1,94 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0007-physical-movement-table
+      author: jokkorm
+      comment: >
+        Phase 5D — journal des mouvements physiques, append-only.
+        6 verbes INGRESS / RELOCATE / LOAN_OUT / LOAN_IN / DIGITIZE_REQUEST / EGRESS.
+        FK vers physical_archive_record et physical_container (nullable).
+      changes:
+        - createTable:
+            tableName: physical_movement
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_phys_movement_tenant
+                    references: tenant(id)
+              - column:
+                  name: record_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_phys_movement_record
+                    references: physical_archive_record(id)
+              - column:
+                  name: container_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_phys_movement_container
+                    references: physical_container(id)
+              - column:
+                  name: kind
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: actor
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: occurred_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: motive
+                  type: VARCHAR(512)
+        - createIndex:
+            tableName: physical_movement
+            indexName: ix_phys_movement_tenant_record_ts
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: record_id
+              - column:
+                  name: occurred_at
+
+  - changeSet:
+      id: 0007-physical-movement-append-only
+      author: jokkorm
+      comment: >
+        Triggers append-only — un mouvement enregistré est un fait historique immuable,
+        on ne doit jamais pouvoir l'éditer ni le supprimer (traçabilité SAE / NF Z 42-013).
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: false
+            sql: |
+              CREATE OR REPLACE FUNCTION physical_movement_forbid_write() RETURNS trigger AS $$
+              BEGIN
+                RAISE EXCEPTION 'physical_movement is append-only';
+              END;
+              $$ LANGUAGE plpgsql;
+
+              DROP TRIGGER IF EXISTS trg_phys_movement_no_update ON physical_movement;
+              DROP TRIGGER IF EXISTS trg_phys_movement_no_delete ON physical_movement;
+
+              CREATE TRIGGER trg_phys_movement_no_update
+                BEFORE UPDATE ON physical_movement
+                FOR EACH ROW EXECUTE FUNCTION physical_movement_forbid_write();
+
+              CREATE TRIGGER trg_phys_movement_no_delete
+                BEFORE DELETE ON physical_movement
+                FOR EACH ROW EXECUTE FUNCTION physical_movement_forbid_write();

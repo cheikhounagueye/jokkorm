@@ -47,13 +47,16 @@ class RecordControllerTest {
     @Mock FindRecordByCoteUseCase findByCote;
     @Mock GetConsolidatedRecordUseCase getConsolidated;
     @Mock com.jokkorm.application.record.StoreRecordInContainerUseCase storeInContainer;
+    @Mock com.jokkorm.application.physical.RecordMovementUseCase recordMovement;
+    @Mock com.jokkorm.application.physical.ListRecordMovementsUseCase listMovements;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setup() {
         mvc = MockMvcBuilders
-            .standaloneSetup(new RecordController(listRecords, findByCote, getConsolidated, storeInContainer))
+            .standaloneSetup(new RecordController(listRecords, findByCote, getConsolidated,
+                storeInContainer, recordMovement, listMovements))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
         // Simule le TenantContextFilter autour de chaque requête.

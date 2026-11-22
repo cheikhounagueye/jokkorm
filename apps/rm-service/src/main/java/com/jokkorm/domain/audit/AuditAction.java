@@ -16,5 +16,8 @@ public enum AuditAction {
     LEGAL_HOLD_RELEASED,
 
     /** Un dossier a été rangé dans une boîte à une position physique — phase 5C. */
-    RECORD_STORED
+    RECORD_STORED,
+
+    /** Un mouvement physique a été enregistré (6 verbes, phase 5D). */
+    MOVEMENT_RECORDED
 }
