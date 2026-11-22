@@ -16,4 +16,8 @@ dependencies {
     // Même versions que dans eversuite-modern (ADR SAE.P1.6.B QR fantômes de prêt).
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.zxing:javase:3.5.3")
+
+    // Phase 5M.2 — PDFBox pour générer les feuilles d'étiquettes Avery A4
+    // (BatchLabelsPdfGenerator : grille N étiquettes × M pages selon le template).
+    implementation("org.apache.pdfbox:pdfbox:3.0.4")
 }

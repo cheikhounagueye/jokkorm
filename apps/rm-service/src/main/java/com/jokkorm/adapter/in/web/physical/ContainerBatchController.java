@@ -1,6 +1,8 @@
 package com.jokkorm.adapter.in.web.physical;
 
-import com.jokkorm.adapter.in.web.record.RecordsPageResponse;
+import com.jokkorm.application.physical.AveryTemplate;
+import com.jokkorm.application.physical.BarcodeImageGenerator.Symbology;
+import com.jokkorm.application.physical.BatchLabelsPdfGenerator;
 import com.jokkorm.application.physical.CreateContainerBatchUseCase;
 import com.jokkorm.application.physical.GetBatchHealthUseCase;
 import com.jokkorm.application.physical.ListContainerBatchesUseCase;
@@ -11,7 +13,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,14 +38,17 @@ public class ContainerBatchController {
     private final CreateContainerBatchUseCase createUseCase;
     private final GetBatchHealthUseCase healthUseCase;
     private final ListContainerBatchesUseCase listUseCase;
+    private final BatchLabelsPdfGenerator pdfGenerator;
 
     public ContainerBatchController(
         CreateContainerBatchUseCase createUseCase,
         GetBatchHealthUseCase healthUseCase,
-        ListContainerBatchesUseCase listUseCase) {
+        ListContainerBatchesUseCase listUseCase,
+        BatchLabelsPdfGenerator pdfGenerator) {
         this.createUseCase = createUseCase;
         this.healthUseCase = healthUseCase;
         this.listUseCase = listUseCase;
+        this.pdfGenerator = pdfGenerator;
     }
 
     @PostMapping
@@ -80,6 +88,31 @@ public class ContainerBatchController {
             + "en transit. Utilisé par l'UI pour afficher une barre de progression.")
     public BatchHealthResponse health(@PathVariable UUID batchId) {
         return BatchHealthResponse.from(healthUseCase.execute(batchId));
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping(value = "/{batchId}/labels.pdf",
+        produces = MediaType.APPLICATION_PDF_VALUE)
+    @Operation(
+        summary = "PDF A4 multi-pages avec toutes les étiquettes d'un lot (phase 5M.2).",
+        description = "Génère les étiquettes selon un template Avery (L7160 = 21/A4, "
+            + "L7159 = 24/A4, L7169 = 16/A4), symbologie CODE128 ou QR, prêt à imprimer. "
+            + "Marque le lot comme PRINTED + audit CONTAINER_BATCH_PRINTED. Rejoué = "
+            + "lastPrintedAt mis à jour, pas de doublon côté containers.")
+    public ResponseEntity<byte[]> labelsPdf(
+        @PathVariable UUID batchId,
+        @Parameter(description = "Template Avery")
+        @RequestParam(defaultValue = "AVERY_L7160") AveryTemplate template,
+        @Parameter(description = "Symbologie des codes-barres")
+        @RequestParam(defaultValue = "CODE128") Symbology symbology,
+        @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        byte[] pdf = pdfGenerator.generate(batchId, template, symbology, actor);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(
+            org.springframework.http.ContentDisposition.builder("attachment")
+                .filename("labels-" + batchId + ".pdf")
+                .build());
+        return new ResponseEntity<>(pdf, headers, HttpStatus.OK);
     }
 
     public record BatchCreatedResponse(
