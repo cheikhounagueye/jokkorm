@@ -1,6 +1,7 @@
 package com.jokkorm.adapter.in.web.record;
 
 import com.jokkorm.application.record.FindRecordByCoteUseCase;
+import com.jokkorm.application.record.GetConsolidatedRecordUseCase;
 import com.jokkorm.application.record.ListRecordsUseCase;
 import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.domain.common.PageRequest;
@@ -34,10 +35,15 @@ public class RecordController {
 
     private final ListRecordsUseCase listRecords;
     private final FindRecordByCoteUseCase findByCote;
+    private final GetConsolidatedRecordUseCase getConsolidated;
 
-    public RecordController(ListRecordsUseCase listRecords, FindRecordByCoteUseCase findByCote) {
+    public RecordController(
+        ListRecordsUseCase listRecords,
+        FindRecordByCoteUseCase findByCote,
+        GetConsolidatedRecordUseCase getConsolidated) {
         this.listRecords = listRecords;
         this.findByCote = findByCote;
+        this.getConsolidated = getConsolidated;
     }
 
     @GetMapping
@@ -60,5 +66,21 @@ public class RecordController {
                    example = "DMG/MP/2024/047")
         @RequestParam String cote) {
         return RecordResponse.from(findByCote.execute(TenantContext.current(), Cote.of(cote)));
+    }
+
+    @GetMapping("/consolidated")
+    @Operation(
+        summary = "Vue consolidée « 2 gardiens » — physique local + champs maître.",
+        description = "Agrège le record JokkoRM (status, emplacement, mouvements à venir) "
+            + "et les champs détenus par la GED/SAE maître (titre, DUA, sort final, gel "
+            + "contentieux) via SaeMasterPort.fetchByCote. En cas d'indisponibilité du maître, "
+            + "la section `master.status` passe à UNAVAILABLE ou UNREACHABLE ; le frontend "
+            + "affiche alors la vue physique seule avec un bandeau d'information.")
+    public ConsolidatedRecordResponse consolidated(
+        @Parameter(description = "Cote émise par le maître (slashes OK en query param)",
+                   example = "DMG/MP/2024/047")
+        @RequestParam String cote) {
+        return ConsolidatedRecordResponse.from(
+            getConsolidated.execute(TenantContext.current(), Cote.of(cote)));
     }
 }

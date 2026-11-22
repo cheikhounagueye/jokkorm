@@ -97,6 +97,41 @@ paths:
         "401": { $ref: "#/components/responses/TenantUnresolved" }
         "404": { $ref: "#/components/responses/RecordNotFound" }
 
+  /api/v1/records/consolidated:
+    get:
+      tags: [Records]
+      summary: Vue consolidée « 2 gardiens » — physique local + champs maître.
+      description: |
+        Agrège le record JokkoRM (statut physique, emplacement à venir) et les champs
+        détenus par la GED/SAE maître (titre, DUA, sort final, gel contentieux) via
+        `SaeMasterPort.fetchByCote`.
+
+        Comportement défensif côté maître :
+        * `master.status = AVAILABLE` → le maître a répondu, les champs sont renseignés.
+        * `master.status = UNAVAILABLE` → le maître a répondu mais la cote lui est
+          inconnue (ou adapter en mode `noop`). Les champs maître sont `null`.
+        * `master.status = UNREACHABLE` → erreur réseau / auth / 5xx côté maître. La
+          vue physique reste utilisable seule. Le frontend affiche un bandeau.
+
+        Le record physique local est obligatoire : si la cote n'existe pas côté JokkoRM,
+        l'endpoint renvoie 404 sans appeler le maître.
+      operationId: consolidatedRecord
+      parameters:
+        - $ref: "#/components/parameters/TenantHeader"
+        - name: cote
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: Vue consolidée.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsolidatedRecordResponse" }
+        "400": { $ref: "#/components/responses/InvalidArgument" }
+        "401": { $ref: "#/components/responses/TenantUnresolved" }
+        "404": { $ref: "#/components/responses/RecordNotFound" }
+
   /api/v1/events/master/cote-assigned:
     post:
       tags: [Master events]
@@ -196,6 +231,31 @@ components:
         lastTransitionAt:
           type: string
           format: date-time
+
+    MasterStatus:
+      type: string
+      enum: [AVAILABLE, UNAVAILABLE, UNREACHABLE]
+      description: |
+        État de la section maître d'une vue consolidée. AVAILABLE = champs renseignés ;
+        UNAVAILABLE = maître répondu, cote inconnue ou mode standalone ; UNREACHABLE =
+        erreur réseau, timeout, auth — la vue physique reste valide seule.
+
+    ConsolidatedRecordResponse:
+      type: object
+      required: [local, master]
+      properties:
+        local:
+          $ref: "#/components/schemas/RecordResponse"
+        master:
+          type: object
+          required: [status]
+          properties:
+            status: { $ref: "#/components/schemas/MasterStatus" }
+            title: { type: string, nullable: true, example: "Marché public n° 2024-047" }
+            classificationPath: { type: string, nullable: true, example: "finances/marches/2024" }
+            duaYears: { type: integer, nullable: true, example: 10 }
+            finalFate: { type: string, nullable: true, example: "VERSEMENT_AN" }
+            legalHold: { type: boolean, nullable: true }
 
     RecordsPageResponse:
       type: object

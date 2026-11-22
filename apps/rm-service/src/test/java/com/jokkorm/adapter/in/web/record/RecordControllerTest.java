@@ -10,11 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jokkorm.adapter.in.web.common.GlobalExceptionHandler;
 import com.jokkorm.application.record.FindRecordByCoteUseCase;
+import com.jokkorm.application.record.GetConsolidatedRecordUseCase;
+import com.jokkorm.application.record.GetConsolidatedRecordUseCase.MasterStatus;
 import com.jokkorm.application.record.ListRecordsUseCase;
 import com.jokkorm.application.record.RecordNotFoundException;
 import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.common.Page;
+import com.jokkorm.domain.master.MasterArchiveView;
 import com.jokkorm.domain.record.Cote;
 import com.jokkorm.domain.record.PhysicalArchiveRecord;
 import com.jokkorm.domain.record.PhysicalArchiveStatus;
@@ -42,13 +45,14 @@ class RecordControllerTest {
 
     @Mock ListRecordsUseCase listRecords;
     @Mock FindRecordByCoteUseCase findByCote;
+    @Mock GetConsolidatedRecordUseCase getConsolidated;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setup() {
         mvc = MockMvcBuilders
-            .standaloneSetup(new RecordController(listRecords, findByCote))
+            .standaloneSetup(new RecordController(listRecords, findByCote, getConsolidated))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
         // Simule le TenantContextFilter autour de chaque requête.
@@ -133,6 +137,74 @@ class RecordControllerTest {
                 mvc.perform(get("/api/v1/records").param("page", "-1"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.type").value("https://jokkorm.io/errors/invalid-argument"));
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("GET /records/consolidated — maître AVAILABLE : champs fusionnés dans la réponse")
+    void consolidated_merges_master_fields_when_available() throws Exception {
+        PhysicalArchiveRecord local = PhysicalArchiveRecord.register(
+            TENANT, Cote.of("DMG/MP/2024/047"), Instant.parse("2026-11-22T10:00:00Z"));
+        MasterArchiveView masterView = new MasterArchiveView(
+            Cote.of("DMG/MP/2024/047"),
+            "Marché public n° 2024-047",
+            "finances/marches/2024",
+            10, "VERSEMENT_AN", false);
+        when(getConsolidated.execute(eq(TENANT), any()))
+            .thenReturn(new GetConsolidatedRecordUseCase.Result(local, masterView, MasterStatus.AVAILABLE));
+
+        TenantContext.runWith(TENANT, () -> {
+            try {
+                mvc.perform(get("/api/v1/records/consolidated").param("cote", "DMG/MP/2024/047"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.local.cote").value("DMG/MP/2024/047"))
+                    .andExpect(jsonPath("$.local.status").value("REGISTERED"))
+                    .andExpect(jsonPath("$.master.status").value("AVAILABLE"))
+                    .andExpect(jsonPath("$.master.title").value("Marché public n° 2024-047"))
+                    .andExpect(jsonPath("$.master.duaYears").value(10))
+                    .andExpect(jsonPath("$.master.finalFate").value("VERSEMENT_AN"))
+                    .andExpect(jsonPath("$.master.legalHold").value(false));
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("GET /records/consolidated — maître UNAVAILABLE : vue physique seule, master.status renseigné")
+    void consolidated_returns_physical_only_when_master_unavailable() throws Exception {
+        PhysicalArchiveRecord local = PhysicalArchiveRecord.register(
+            TENANT, Cote.of("X/1"), Instant.parse("2026-11-22T10:00:00Z"));
+        when(getConsolidated.execute(eq(TENANT), any()))
+            .thenReturn(new GetConsolidatedRecordUseCase.Result(local, null, MasterStatus.UNAVAILABLE));
+
+        TenantContext.runWith(TENANT, () -> {
+            try {
+                mvc.perform(get("/api/v1/records/consolidated").param("cote", "X/1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.local.cote").value("X/1"))
+                    .andExpect(jsonPath("$.master.status").value("UNAVAILABLE"))
+                    .andExpect(jsonPath("$.master.title").doesNotExist());
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("GET /records/consolidated — record local absent : 404 problem+json")
+    void consolidated_returns_404_when_local_missing() throws Exception {
+        when(getConsolidated.execute(eq(TENANT), any()))
+            .thenThrow(new RecordNotFoundException("missing"));
+
+        TenantContext.runWith(TENANT, () -> {
+            try {
+                mvc.perform(get("/api/v1/records/consolidated").param("cote", "UNKNOWN"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.type").value("https://jokkorm.io/errors/record-not-found"));
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }

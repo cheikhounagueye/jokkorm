@@ -84,3 +84,23 @@ export async function findRecordByCote(cote: string): Promise<RecordResponse> {
   const response = await fetch(`/api/v1/records/by-cote?${qs.toString()}`, { headers: headers() });
   return parse<RecordResponse>(response);
 }
+
+export type MasterStatus = "AVAILABLE" | "UNAVAILABLE" | "UNREACHABLE";
+
+export interface ConsolidatedRecordResponse {
+  local: RecordResponse;
+  master: {
+    status: MasterStatus;
+    title?: string | null;
+    classificationPath?: string | null;
+    duaYears?: number | null;
+    finalFate?: string | null;
+    legalHold?: boolean | null;
+  };
+}
+
+export async function getConsolidatedRecord(cote: string): Promise<ConsolidatedRecordResponse> {
+  const qs = new URLSearchParams({ cote });
+  const response = await fetch(`/api/v1/records/consolidated?${qs.toString()}`, { headers: headers() });
+  return parse<ConsolidatedRecordResponse>(response);
+}
