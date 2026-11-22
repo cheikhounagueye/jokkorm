@@ -1,0 +1,85 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0005-physical-container
+      author: jokkorm
+      comment: >
+        Phase 5B — conteneur physique (boîte d'archives). Barcode unique par tenant,
+        position optionnelle (FK vers storage_location), capacité optionnelle, état.
+      changes:
+        - createTable:
+            tableName: physical_container
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_physical_container_tenant
+                    references: tenant(id)
+              - column:
+                  name: barcode
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: label
+                  type: VARCHAR(255)
+              - column:
+                  name: position_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_physical_container_position
+                    references: storage_location(id)
+              - column:
+                  name: capacity
+                  type: INT
+              - column:
+                  name: state
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_moved_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: physical_container
+            columnNames: tenant_id, barcode
+            constraintName: uq_physical_container_tenant_barcode
+        - createIndex:
+            tableName: physical_container
+            indexName: ix_physical_container_tenant_position
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: position_id
+        - createIndex:
+            tableName: physical_container
+            indexName: ix_physical_container_tenant_state
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: state

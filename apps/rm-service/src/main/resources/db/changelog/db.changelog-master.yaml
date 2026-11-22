@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/0003-audit-event.yaml
   - include:
       file: db/changelog/0004-storage-location.yaml
+  - include:
+      file: db/changelog/0005-physical-container.yaml
