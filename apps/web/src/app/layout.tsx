@@ -46,6 +46,7 @@ function TopBar() {
       <nav style={{ display: "flex", gap: "1rem", fontSize: "0.9rem" }}>
         <a href="/records" style={{ color: "white", textDecoration: "none" }}>Archives</a>
         <a href="/magasin" style={{ color: "white", textDecoration: "none" }}>Magasin</a>
+        <a href="/magasin/lots" style={{ color: "white", textDecoration: "none" }}>Lots</a>
         <a href="https://github.com/cheikhounagueye/jokkorm" target="_blank" rel="noreferrer"
            style={{ color: "white", textDecoration: "none", opacity: 0.7 }}>GitHub</a>
       </nav>

@@ -227,3 +227,63 @@ export async function listContainersAtPosition(positionId: string): Promise<Phys
   const response = await fetch(`/api/v1/physical/containers?${qs.toString()}`, { headers: headers() });
   return parse<PhysicalContainerResponse[]>(response);
 }
+
+// ─── Container batches (phase 5M) ──────────────────────────────────────────────
+
+export type BatchStatus = "CREATED" | "PRINTED" | "FULLY_DEPLOYED" | "ARCHIVED";
+
+export interface ContainerBatchResponse {
+  id: string;
+  reference: string;
+  size: number;
+  labelPattern: string | null;
+  defaultCapacity: number | null;
+  status: BatchStatus;
+  createdAt: string;
+  createdBy: string;
+  firstPrintedAt: string | null;
+  lastPrintedAt: string | null;
+  updatedAt: string;
+}
+
+export interface BatchHealthResponse {
+  batch: ContainerBatchResponse;
+  total: number;
+  inTransit: number;
+  deployed: number;
+  deploymentPercent: number;
+  storedEmpty: number;
+  open: number;
+  sealed: number;
+  destroyed: number;
+}
+
+export async function createBatch(input: {
+  reference: string;
+  size: number;
+  labelPattern?: string;
+  defaultCapacity?: number;
+}): Promise<{ batch: ContainerBatchResponse; containers: PhysicalContainerResponse[] }> {
+  const response = await fetch(`/api/v1/physical/batches`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parse<{ batch: ContainerBatchResponse; containers: PhysicalContainerResponse[] }>(response);
+}
+
+export async function listBatches(page = 0, size = 20): Promise<ContainerBatchResponse[]> {
+  const qs = new URLSearchParams({ page: String(page), size: String(size) });
+  const response = await fetch(`/api/v1/physical/batches?${qs.toString()}`, { headers: headers() });
+  return parse<ContainerBatchResponse[]>(response);
+}
+
+export async function getBatchHealth(batchId: string): Promise<BatchHealthResponse> {
+  const response = await fetch(`/api/v1/physical/batches/${batchId}/health`, { headers: headers() });
+  return parse<BatchHealthResponse>(response);
+}
+
+export function batchLabelsPdfUrl(batchId: string, template = "AVERY_L7160", symbology = "CODE128"): string {
+  const qs = new URLSearchParams({ template, symbology });
+  return `/api/v1/physical/batches/${batchId}/labels.pdf?${qs.toString()}`;
+}
