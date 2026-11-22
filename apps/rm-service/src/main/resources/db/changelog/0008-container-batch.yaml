@@ -1,0 +1,101 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0008-container-batch
+      author: jokkorm
+      comment: >
+        Phase 5M — lot de provisionnement. Reference libre, size figé (append-only).
+        Chaque physical_container gagne batch_id (nullable) + sequence_in_batch
+        (phase 5N — pour affichage lisible N° 023/500 sur étiquette).
+      changes:
+        - createTable:
+            tableName: container_batch
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_container_batch_tenant
+                    references: tenant(id)
+              - column:
+                  name: reference
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: size
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: label_pattern
+                  type: VARCHAR(255)
+              - column:
+                  name: default_capacity
+                  type: INT
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: first_printed_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: last_printed_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: container_batch
+            indexName: ix_container_batch_tenant_status
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: status
+        - addColumn:
+            tableName: physical_container
+            columns:
+              - column:
+                  name: batch_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_physical_container_batch
+                    references: container_batch(id)
+              - column:
+                  name: sequence_in_batch
+                  type: INT
+        - createIndex:
+            tableName: physical_container
+            indexName: ix_physical_container_tenant_batch
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: batch_id

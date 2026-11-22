@@ -40,11 +40,14 @@ public final class PhysicalContainer {
     private final Instant createdAt;
     private Instant updatedAt;
     private Instant lastMovedAt;
+    private final UUID batchId;
+    private final Integer sequenceInBatch;
 
     private PhysicalContainer(
         UUID id, TenantId tenantId, String barcode, String label, UUID positionId,
         Integer capacity, ContainerState state,
-        Instant createdAt, Instant updatedAt, Instant lastMovedAt) {
+        Instant createdAt, Instant updatedAt, Instant lastMovedAt,
+        UUID batchId, Integer sequenceInBatch) {
         this.id = Objects.requireNonNull(id, "id");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         this.barcode = requireValidBarcode(barcode);
@@ -55,24 +58,43 @@ public final class PhysicalContainer {
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
         this.lastMovedAt = lastMovedAt;
+        this.batchId = batchId;
+        this.sequenceInBatch = sequenceInBatch;
+        if ((batchId == null) != (sequenceInBatch == null)) {
+            throw new IllegalArgumentException(
+                "batchId and sequenceInBatch must both be set or both be null");
+        }
+        if (sequenceInBatch != null && sequenceInBatch < 1) {
+            throw new IllegalArgumentException("sequenceInBatch must be >= 1");
+        }
     }
 
-    /** Création d'une boîte vide, non positionnée. */
+    /** Création d'une boîte vide, non positionnée, sans lot (phase 5B unitaire). */
     public static PhysicalContainer createEmpty(
         TenantId tenant, String barcode, String label, Integer capacity, Instant at) {
         return new PhysicalContainer(
             UUID.randomUUID(), tenant, normalize(barcode), label, null,
-            capacity, ContainerState.EMPTY, at, at, null);
+            capacity, ContainerState.EMPTY, at, at, null, null, null);
+    }
+
+    /** Création d'une boîte dans un lot (phase 5M bulk). */
+    public static PhysicalContainer createInBatch(
+        TenantId tenant, String barcode, String label, Integer capacity,
+        UUID batchId, int sequenceInBatch, Instant at) {
+        return new PhysicalContainer(
+            UUID.randomUUID(), tenant, normalize(barcode), label, null,
+            capacity, ContainerState.EMPTY, at, at, null, batchId, sequenceInBatch);
     }
 
     /** Rehydratation depuis la persistance. */
     public static PhysicalContainer rehydrate(
         UUID id, TenantId tenant, String barcode, String label, UUID positionId,
         Integer capacity, ContainerState state,
-        Instant createdAt, Instant updatedAt, Instant lastMovedAt) {
+        Instant createdAt, Instant updatedAt, Instant lastMovedAt,
+        UUID batchId, Integer sequenceInBatch) {
         return new PhysicalContainer(
             id, tenant, barcode, label, positionId, capacity, state,
-            createdAt, updatedAt, lastMovedAt);
+            createdAt, updatedAt, lastMovedAt, batchId, sequenceInBatch);
     }
 
     /** Range (ou déplace) la boîte sur une position donnée. */
@@ -159,4 +181,6 @@ public final class PhysicalContainer {
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
     public Optional<Instant> lastMovedAt() { return Optional.ofNullable(lastMovedAt); }
+    public Optional<UUID> batchId() { return Optional.ofNullable(batchId); }
+    public Optional<Integer> sequenceInBatch() { return Optional.ofNullable(sequenceInBatch); }
 }

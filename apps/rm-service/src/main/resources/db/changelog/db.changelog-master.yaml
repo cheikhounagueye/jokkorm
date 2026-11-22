@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/0006-archive-record-container.yaml
   - include:
       file: db/changelog/0007-physical-movement.yaml
+  - include:
+      file: db/changelog/0008-container-batch.yaml

@@ -1,6 +1,7 @@
 package com.jokkorm.adapter.in.web.common;
 
 import com.jokkorm.application.AccessGuard;
+import com.jokkorm.application.physical.BatchNotFoundException;
 import com.jokkorm.application.physical.PhysicalContainerConflictException;
 import com.jokkorm.application.physical.PhysicalContainerNotFoundException;
 import com.jokkorm.application.physical.StorageLocationConflictException;
@@ -68,6 +69,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> containerConflict(
         PhysicalContainerConflictException e, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, "container-conflict", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(BatchNotFoundException.class)
+    public ResponseEntity<ProblemDetail> batchNotFound(
+        BatchNotFoundException e, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "batch-not-found", e.getMessage(), request);
     }
 
     @ExceptionHandler(AccessGuard.TenantMismatchException.class)

@@ -11,5 +11,8 @@ public enum AuditTargetType {
     PHYSICAL_ARCHIVE_RECORD,
 
     /** Nœud de la topographie (SITE / MAGASIN / TRAVÉE / TABLETTE / POSITION) — phase 5J. */
-    STORAGE_LOCATION
+    STORAGE_LOCATION,
+
+    /** Lot de provisionnement de boîtes (phase 5M). */
+    CONTAINER_BATCH
 }

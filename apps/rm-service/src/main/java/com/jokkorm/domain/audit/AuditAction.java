@@ -25,5 +25,11 @@ public enum AuditAction {
     STORAGE_LOCATION_RENAMED,
 
     /** Admin a supprimé un nœud de la topographie — phase 5J. */
-    STORAGE_LOCATION_DELETED
+    STORAGE_LOCATION_DELETED,
+
+    /** Lot de boîtes créé en masse — phase 5M. */
+    CONTAINER_BATCH_CREATED,
+
+    /** Lot imprimé (PDF étiquettes téléchargé) — phase 5M.2. */
+    CONTAINER_BATCH_PRINTED
 }

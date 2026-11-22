@@ -49,6 +49,12 @@ public class PhysicalContainerEntity {
     @Column(name = "last_moved_at")
     private Instant lastMovedAt;
 
+    @Column(name = "batch_id")
+    private UUID batchId;
+
+    @Column(name = "sequence_in_batch")
+    private Integer sequenceInBatch;
+
     @Version
     @Column(name = "version", nullable = false)
     private long version;
@@ -67,13 +73,16 @@ public class PhysicalContainerEntity {
         e.createdAt = d.createdAt();
         e.updatedAt = d.updatedAt();
         e.lastMovedAt = d.lastMovedAt().orElse(null);
+        e.batchId = d.batchId().orElse(null);
+        e.sequenceInBatch = d.sequenceInBatch().orElse(null);
         return e;
     }
 
     public PhysicalContainer toDomain() {
         return PhysicalContainer.rehydrate(
             id, TenantId.of(tenantId), barcode, label, positionId,
-            capacity, state, createdAt, updatedAt, lastMovedAt);
+            capacity, state, createdAt, updatedAt, lastMovedAt,
+            batchId, sequenceInBatch);
     }
 
     public void copyMutableStateFrom(PhysicalContainer d) {
