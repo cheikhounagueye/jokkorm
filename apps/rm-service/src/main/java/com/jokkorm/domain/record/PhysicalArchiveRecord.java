@@ -3,6 +3,7 @@ package com.jokkorm.domain.record;
 import com.jokkorm.commons.tenancy.TenantId;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -17,6 +18,8 @@ import java.util.UUID;
  *   <li>Un record {@link PhysicalArchiveStatus#DESTROYED} ne peut plus être modifié.</li>
  *   <li>Un record {@link PhysicalArchiveStatus#FROZEN} ne peut ni être détruit ni
  *       transféré tant que le gel n'est pas levé par le maître.</li>
+ *   <li>{@link #storeInContainer} et {@link #markStored} sont le seul chemin pour passer
+ *       en {@code STORED}. {@code containerId} est obligatoirement set quand status = STORED.</li>
  * </ul>
  */
 public final class PhysicalArchiveRecord {
@@ -27,32 +30,49 @@ public final class PhysicalArchiveRecord {
     private final Instant registeredAt;
     private PhysicalArchiveStatus status;
     private Instant lastTransitionAt;
+    private UUID containerId;
 
     private PhysicalArchiveRecord(
         UUID id, TenantId tenantId, Cote cote, PhysicalArchiveStatus status,
-        Instant registeredAt, Instant lastTransitionAt) {
+        Instant registeredAt, Instant lastTransitionAt, UUID containerId) {
         this.id = Objects.requireNonNull(id, "id");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         this.cote = Objects.requireNonNull(cote, "cote");
         this.status = Objects.requireNonNull(status, "status");
         this.registeredAt = Objects.requireNonNull(registeredAt, "registeredAt");
         this.lastTransitionAt = Objects.requireNonNull(lastTransitionAt, "lastTransitionAt");
+        this.containerId = containerId;
     }
 
     /** Factory — appelée par le use case qui reçoit l'événement {@code cote-assigned} du maître. */
     public static PhysicalArchiveRecord register(TenantId tenant, Cote cote, Instant at) {
         UUID id = UUID.randomUUID();
-        return new PhysicalArchiveRecord(id, tenant, cote, PhysicalArchiveStatus.REGISTERED, at, at);
+        return new PhysicalArchiveRecord(id, tenant, cote, PhysicalArchiveStatus.REGISTERED, at, at, null);
     }
 
     /** Factory pour rehydratation depuis la persistance. */
     public static PhysicalArchiveRecord rehydrate(
         UUID id, TenantId tenant, Cote cote, PhysicalArchiveStatus status,
-        Instant registeredAt, Instant lastTransitionAt) {
-        return new PhysicalArchiveRecord(id, tenant, cote, status, registeredAt, lastTransitionAt);
+        Instant registeredAt, Instant lastTransitionAt, UUID containerId) {
+        return new PhysicalArchiveRecord(id, tenant, cote, status, registeredAt, lastTransitionAt, containerId);
     }
 
-    /** Transition {@code REGISTERED → STORED} après versement physique + attribution emplacement. */
+    /**
+     * Range le dossier dans une boîte — transition {@code REGISTERED|STORED → STORED}.
+     * Chaîne cote → container. Peut être rejoué pour changer de boîte (déplacement).
+     */
+    public void storeInContainer(UUID newContainerId, Instant at) {
+        Objects.requireNonNull(newContainerId, "containerId");
+        requireNotTerminal();
+        if (status == PhysicalArchiveStatus.FROZEN) {
+            throw new IllegalStateException("Cannot store a frozen archive: " + cote.value());
+        }
+        this.containerId = newContainerId;
+        this.status = PhysicalArchiveStatus.STORED;
+        this.lastTransitionAt = at;
+    }
+
+    /** Transition {@code REGISTERED → STORED} sans container — conservée pour compat test phase 1. */
     public void markStored(Instant at) {
         requireNotTerminal();
         if (status == PhysicalArchiveStatus.FROZEN) {
@@ -114,4 +134,5 @@ public final class PhysicalArchiveRecord {
     public PhysicalArchiveStatus status() { return status; }
     public Instant registeredAt() { return registeredAt; }
     public Instant lastTransitionAt() { return lastTransitionAt; }
+    public Optional<UUID> containerId() { return Optional.ofNullable(containerId); }
 }

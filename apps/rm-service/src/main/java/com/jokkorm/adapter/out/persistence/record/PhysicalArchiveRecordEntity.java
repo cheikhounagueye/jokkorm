@@ -46,6 +46,9 @@ public class PhysicalArchiveRecordEntity {
     @Column(name = "last_transition_at", nullable = false)
     private Instant lastTransitionAt;
 
+    @Column(name = "container_id")
+    private UUID containerId;
+
     @Version
     @Column(name = "version", nullable = false)
     private long version;
@@ -60,18 +63,21 @@ public class PhysicalArchiveRecordEntity {
         e.status = r.status();
         e.registeredAt = r.registeredAt();
         e.lastTransitionAt = r.lastTransitionAt();
+        e.containerId = r.containerId().orElse(null);
         return e;
     }
 
     public PhysicalArchiveRecord toDomain() {
         return PhysicalArchiveRecord.rehydrate(
-            id, TenantId.of(tenantId), Cote.of(cote), status, registeredAt, lastTransitionAt);
+            id, TenantId.of(tenantId), Cote.of(cote), status,
+            registeredAt, lastTransitionAt, containerId);
     }
 
     /** Pour une mise à jour sans perdre le compteur @Version. */
     public void copyMutableStateFrom(PhysicalArchiveRecord r) {
         this.status = r.status();
         this.lastTransitionAt = r.lastTransitionAt();
+        this.containerId = r.containerId().orElse(null);
     }
 
     public UUID id() { return id; }

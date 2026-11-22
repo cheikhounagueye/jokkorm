@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0006-archive-record-container
+      author: jokkorm
+      comment: >
+        Phase 5C — lie physical_archive_record à physical_container. Nullable (le record
+        existe avant d'être rangé). FK ON DELETE SET NULL : si la boîte disparaît (par ex.
+        reconstruction catalogue), les records restent visibles mais perdent leur ancre.
+      changes:
+        - addColumn:
+            tableName: physical_archive_record
+            columns:
+              - column:
+                  name: container_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_phys_archive_container
+                    references: physical_container(id)
+                    deleteCascade: false
+        - createIndex:
+            tableName: physical_archive_record
+            indexName: ix_phys_archive_tenant_container
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: container_id

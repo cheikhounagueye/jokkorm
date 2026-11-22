@@ -13,5 +13,8 @@ public enum AuditAction {
     LEGAL_HOLD_APPLIED,
 
     /** Gel contentieux levé par le maître. */
-    LEGAL_HOLD_RELEASED
+    LEGAL_HOLD_RELEASED,
+
+    /** Un dossier a été rangé dans une boîte à une position physique — phase 5C. */
+    RECORD_STORED
 }

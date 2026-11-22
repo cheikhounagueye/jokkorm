@@ -3,6 +3,7 @@ package com.jokkorm.adapter.in.web.record;
 import com.jokkorm.application.record.FindRecordByCoteUseCase;
 import com.jokkorm.application.record.GetConsolidatedRecordUseCase;
 import com.jokkorm.application.record.ListRecordsUseCase;
+import com.jokkorm.application.record.StoreRecordInContainerUseCase;
 import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.domain.common.PageRequest;
 import com.jokkorm.domain.record.Cote;
@@ -10,9 +11,14 @@ import com.jokkorm.domain.record.PhysicalArchiveStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -36,14 +42,17 @@ public class RecordController {
     private final ListRecordsUseCase listRecords;
     private final FindRecordByCoteUseCase findByCote;
     private final GetConsolidatedRecordUseCase getConsolidated;
+    private final StoreRecordInContainerUseCase storeInContainer;
 
     public RecordController(
         ListRecordsUseCase listRecords,
         FindRecordByCoteUseCase findByCote,
-        GetConsolidatedRecordUseCase getConsolidated) {
+        GetConsolidatedRecordUseCase getConsolidated,
+        StoreRecordInContainerUseCase storeInContainer) {
         this.listRecords = listRecords;
         this.findByCote = findByCote;
         this.getConsolidated = getConsolidated;
+        this.storeInContainer = storeInContainer;
     }
 
     @GetMapping
@@ -66,6 +75,23 @@ public class RecordController {
                    example = "DMG/MP/2024/047")
         @RequestParam String cote) {
         return RecordResponse.from(findByCote.execute(TenantContext.current(), Cote.of(cote)));
+    }
+
+    @PostMapping("/store")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(
+        summary = "Range un dossier dans une boîte — phase 5C.",
+        description = "Lie le record identifié par sa `cote` à la boîte identifiée par son "
+            + "`containerBarcode`. La boîte doit déjà avoir été rangée à une POSITION physique. "
+            + "Déclenche notifyPhysicalLocation vers le maître avec l'adresse 5 niveaux, "
+            + "ajoute un maillon à la chaîne d'audit HMAC. Statut record passe à STORED, "
+            + "boîte EMPTY passe à OPEN.")
+    public RecordResponse store(
+        @Parameter(description = "Cote du dossier (slashes OK en query param)")
+        @RequestParam String cote,
+        @Valid @RequestBody StoreRecordRequest request) {
+        return RecordResponse.from(
+            storeInContainer.execute(Cote.of(cote), request.containerBarcode()));
     }
 
     @GetMapping("/consolidated")
