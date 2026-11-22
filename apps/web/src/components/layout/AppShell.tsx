@@ -30,28 +30,28 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/records",      label: "Archives",        icon: <Archive size={18} />,         section: "Référence" },
 ];
 
+const SIDEBAR_WIDTH = 220;
+const TOPBAR_HEIGHT = 56;
+
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "var(--sidebar-width) 1fr",
-      gridTemplateRows: "var(--topbar-height) 1fr",
-      gridTemplateAreas: `
-        "sidebar topbar"
-        "sidebar main"
-      `,
-      minHeight: "100vh",
-    }}>
+    <div style={{ minHeight: "100vh", background: "var(--surface-page)" }}>
       <Sidebar />
-      <TopBar />
-      <main style={{
-        gridArea: "main",
-        padding: "28px 40px 48px",
-        overflow: "auto",
-        background: "var(--surface-page)",
+      <div style={{
+        marginLeft: SIDEBAR_WIDTH,
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
       }}>
-        {children}
-      </main>
+        <TopBar />
+        <main style={{
+          flex: 1,
+          padding: "28px 32px 48px",
+          background: "var(--surface-page)",
+        }}>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
@@ -62,12 +62,15 @@ function Sidebar() {
 
   return (
     <aside style={{
-      gridArea: "sidebar",
+      position: "fixed",
+      top: 0, left: 0, bottom: 0,
+      width: SIDEBAR_WIDTH,
       background: "var(--surface-card)",
       borderRight: "1px solid var(--border-subtle)",
       padding: "16px 0",
       display: "flex",
       flexDirection: "column",
+      zIndex: 10,
     }}>
       <Link href="/" style={{
         display: "flex", alignItems: "center", gap: 10,
@@ -91,7 +94,7 @@ function Sidebar() {
         </div>
       </Link>
 
-      <nav style={{ flex: 1, padding: "0 12px" }}>
+      <nav style={{ flex: 1, padding: "0 12px", overflow: "auto" }}>
         {sections.map((section) => (
           <div key={section} style={{ marginBottom: 20 }}>
             <div style={{
@@ -124,7 +127,7 @@ function Sidebar() {
         ))}
       </nav>
 
-      <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border-subtle)" }}>
+      <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border-subtle)", textAlign: "right" }}>
         <a href="https://github.com/cheikhounagueye/jokkorm" target="_blank" rel="noreferrer"
           style={{ fontSize: 11, color: "var(--text-tertiary)", textDecoration: "none" }}>
           GitHub · AGPL-3.0

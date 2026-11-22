@@ -23,11 +23,11 @@ export function Card({
       onClick={onClick}
       style={{
         background: "var(--surface-card)",
-        border: "1px solid var(--border-subtle)",
+        border: "1px solid var(--border-strong)",
         borderLeft: accent ? `3px solid ${accentColor}` : undefined,
         borderRadius: "var(--radius-lg)",
         padding,
-        boxShadow: "var(--shadow-sm)",
+        boxShadow: "var(--shadow-md)",
         cursor: interactive ? "pointer" : undefined,
         transition: interactive ? "transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease" : undefined,
         ...style,

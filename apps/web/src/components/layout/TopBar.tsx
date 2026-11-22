@@ -20,7 +20,7 @@ const ROLES: { value: UserRole; label: string; color: string; defaultActor: stri
 export function TopBar() {
   return (
     <header style={{
-      gridArea: "topbar",
+      height: 56,
       background: "var(--surface-card)",
       borderBottom: "1px solid var(--border-subtle)",
       display: "flex",
@@ -28,6 +28,7 @@ export function TopBar() {
       justifyContent: "flex-end",
       gap: 12,
       padding: "0 24px",
+      position: "sticky", top: 0, zIndex: 5,
     }}>
       <DarkModeToggle />
       <RoleDropdown />

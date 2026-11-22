@@ -27,10 +27,10 @@ export function KpiCard({
       style={{
         display: "block",
         background: "var(--surface-card)",
-        border: "1px solid var(--border-subtle)",
+        border: "1px solid var(--border-strong)",
         borderRadius: "var(--radius-lg)",
         padding: "18px 20px",
-        boxShadow: "var(--shadow-sm)",
+        boxShadow: "var(--shadow-md)",
         textDecoration: "none",
         color: "inherit",
         transition: "box-shadow 150ms ease, transform 150ms ease, border-color 150ms ease",
