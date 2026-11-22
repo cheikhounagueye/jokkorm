@@ -392,6 +392,45 @@ export const fulfillAccessRequest = (id: string, notes?: string, digitizedPdfBas
   });
 export const completeAccessRequest = (id: string) => postAction<AccessRequestResponse>(id, "complete");
 
+// ─── Recherche métier (phase 5Q, pattern 08) ────────────────────────────────
+
+export interface MasterSearchCriteria {
+  freeText?: string;
+  service?: string;
+  typologie?: string;
+  classificationPath?: string;
+  dateFrom?: string;   // ISO date YYYY-MM-DD
+  dateTo?: string;
+  cote?: string;
+  limit?: number;
+}
+
+export interface MasterSearchResult {
+  cote: string;
+  title: string;
+  service: string | null;
+  typologie: string | null;
+  classificationPath: string | null;
+  dateStart: string | null;
+  dateEnd: string | null;
+  duaRemainingYears: number | null;
+  communicable: boolean | null;
+  availableInPhysical: boolean;
+  // Masqué côté REQUESTER par le backend
+  containerId: string | null;
+  containerBarcode: string | null;
+  containerLabel: string | null;
+}
+
+export async function masterSearch(criteria: MasterSearchCriteria): Promise<MasterSearchResult[]> {
+  const response = await fetch(`/api/v1/master-search`, {
+    method: "POST",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(criteria),
+  });
+  return parse<MasterSearchResult[]>(response);
+}
+
 // ─── Import Excel topographie (phase 5I) ──────────────────────────────────────
 
 export interface ImportTopographyReport {

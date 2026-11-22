@@ -2,6 +2,7 @@ package com.jokkorm.domain.master;
 
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.record.Cote;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,6 +21,15 @@ public interface SaeMasterPort {
 
     /** Récupère la vérité maître sur une archive par sa cote. {@code empty()} si inconnue. */
     Optional<MasterArchiveView> fetchByCote(TenantId tenant, Cote cote);
+
+    /**
+     * Recherche métier (pattern 08). Retourne jusqu'à {@code criteria.limit()} résultats.
+     * Par défaut les adapters existants (noop, demo, maarch) renvoient une liste vide
+     * si la méthode n'est pas implémentée. Une implémentation réelle filtre côté maître.
+     */
+    default List<ArchiveSearchResult> search(TenantId tenant, ArchiveSearchCriteria criteria) {
+        return List.of();
+    }
 
     /** Résout l'identité d'un agent depuis le claim SSO. Repose sur l'annuaire partagé. */
     Optional<AgentIdentity> resolveAgent(TenantId tenant, String subject);
