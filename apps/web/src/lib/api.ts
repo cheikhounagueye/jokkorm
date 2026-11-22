@@ -196,6 +196,81 @@ export interface PhysicalContainerResponse {
   externalReference: string | null;
 }
 
+// ─── Prêts (phase 5E) ──────────────────────────────────────────────────────────
+
+export type LoanStatus = "REQUESTED" | "OUT" | "OVERDUE" | "RETURNED" | "CANCELLED";
+
+export interface LoanResponse {
+  id: string;
+  containerId: string;
+  borrowerName: string;
+  borrowerDept: string | null;
+  purpose: string | null;
+  status: LoanStatus;
+  overdue: boolean;
+  requestedAt: string;
+  requestedBy: string;
+  expectedReturnAt: string;
+  outAt: string | null;
+  outBy: string | null;
+  returnedAt: string | null;
+  returnedBy: string | null;
+  cancelReason: string | null;
+}
+
+export async function requestLoan(input: {
+  containerId: string;
+  borrowerName: string;
+  borrowerDept?: string;
+  purpose?: string;
+  expectedReturnAt: string;
+}): Promise<LoanResponse> {
+  const response = await fetch(`/api/v1/loans`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parse<LoanResponse>(response);
+}
+
+export async function listActiveLoans(): Promise<LoanResponse[]> {
+  const response = await fetch(`/api/v1/loans/active`, { headers: headers() });
+  return parse<LoanResponse[]>(response);
+}
+
+export async function markLoanOut(loanId: string): Promise<LoanResponse> {
+  const response = await fetch(`/api/v1/loans/${loanId}/out`, { method: "POST", headers: headers() });
+  return parse<LoanResponse>(response);
+}
+
+export async function markLoanReturned(loanId: string): Promise<LoanResponse> {
+  const response = await fetch(`/api/v1/loans/${loanId}/return`, { method: "POST", headers: headers() });
+  return parse<LoanResponse>(response);
+}
+
+export async function cancelLoan(loanId: string, reason: string): Promise<LoanResponse> {
+  const response = await fetch(`/api/v1/loans/${loanId}/cancel`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  return parse<LoanResponse>(response);
+}
+
+export async function downloadGhostCard(loanId: string): Promise<void> {
+  const response = await fetch(`/api/v1/loans/${loanId}/ghost-card.pdf`, { headers: headers() });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `fantome-${loanId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Import Excel topographie (phase 5I) ──────────────────────────────────────
 
 export interface ImportTopographyReport {
