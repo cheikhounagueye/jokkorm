@@ -485,6 +485,13 @@ function ContainerCreationCard() {
             <code style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1e2d5e", padding: "0.2rem 0.6rem", background: "white", border: "2px solid #1e2d5e", borderRadius: 3, letterSpacing: "0.05em" }}>
               {created.barcode}
             </code>
+            <a
+              href={`/magasin/etiquette?barcode=${encodeURIComponent(created.barcode)}&label=${encodeURIComponent(created.label ?? "")}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
+              🖨 Imprimer étiquette
+            </a>
             <button
               type="button"
               onClick={() => navigator.clipboard.writeText(created.barcode)}
@@ -568,6 +575,13 @@ function BarcodeScanner() {
               Pas encore positionnée dans la topographie.
             </div>
           )}
+          <a
+            href={`/magasin/etiquette?barcode=${encodeURIComponent(result.barcode)}&label=${encodeURIComponent(result.label ?? "")}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...buttonStyle, textDecoration: "none", display: "inline-block", marginTop: 8, fontSize: "0.8rem", padding: "0.3rem 0.7rem" }}>
+            🖨 Réimprimer étiquette
+          </a>
         </div>
       )}
     </aside>

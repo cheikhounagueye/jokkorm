@@ -1,5 +1,7 @@
 package com.jokkorm.adapter.in.web.physical;
 
+import com.jokkorm.application.physical.BarcodeImageGenerator;
+import com.jokkorm.application.physical.BarcodeImageGenerator.Symbology;
 import com.jokkorm.application.physical.CreatePhysicalContainerUseCase;
 import com.jokkorm.application.physical.FindContainerByBarcodeUseCase;
 import com.jokkorm.application.physical.ListContainersAtPositionUseCase;
@@ -10,7 +12,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,16 +43,19 @@ public class PhysicalContainerController {
     private final PlaceContainerUseCase place;
     private final ListContainersAtPositionUseCase listAtPosition;
     private final FindContainerByBarcodeUseCase findByBarcode;
+    private final BarcodeImageGenerator imageGenerator;
 
     public PhysicalContainerController(
         CreatePhysicalContainerUseCase create,
         PlaceContainerUseCase place,
         ListContainersAtPositionUseCase listAtPosition,
-        FindContainerByBarcodeUseCase findByBarcode) {
+        FindContainerByBarcodeUseCase findByBarcode,
+        BarcodeImageGenerator imageGenerator) {
         this.create = create;
         this.place = place;
         this.listAtPosition = listAtPosition;
         this.findByBarcode = findByBarcode;
+        this.imageGenerator = imageGenerator;
     }
 
     @PostMapping
@@ -90,5 +98,32 @@ public class PhysicalContainerController {
         @Parameter(description = "Code-barres lu par la douchette")
         @RequestParam String barcode) {
         return PhysicalContainerResponse.from(findByBarcode.execute(barcode));
+    }
+
+    @GetMapping(value = "/barcode-image", produces = MediaType.IMAGE_PNG_VALUE)
+    @Operation(
+        summary = "Rendu PNG d'un code-barres pour impression sur étiquette (phase 5L).",
+        description = "Le contenu du barcode (BOX-YYMMDD-xxxxxx) est immuable, seul le "
+            + "rendu visuel est configurable : symbologie CODE128 (universel 1D douchette) "
+            + "ou QR (2D smartphone), dimensions en pixels, texte humain visible. Vérifie "
+            + "d'abord que la boîte existe pour ne pas générer d'étiquette fantôme.")
+    public ResponseEntity<byte[]> barcodeImage(
+        @Parameter(description = "Code-barres de la boîte (doit exister en base)")
+        @RequestParam String barcode,
+        @Parameter(description = "Symbologie : CODE128 (recommandé douchette 1D) ou QR (smartphone)")
+        @RequestParam(defaultValue = "CODE128") Symbology symbology,
+        @Parameter(description = "Largeur en pixels [100, 2000]")
+        @RequestParam(defaultValue = "600") int widthPx,
+        @Parameter(description = "Hauteur en pixels [100, 2000] — ignoré pour QR (carré)")
+        @RequestParam(defaultValue = "180") int heightPx,
+        @Parameter(description = "Afficher le contenu en texte humain sous le barcode")
+        @RequestParam(defaultValue = "true") boolean showLabel) {
+        // Vérifie l'existence pour éviter de rendre des étiquettes de barcodes inexistants
+        findByBarcode.execute(barcode);
+        byte[] png = imageGenerator.render(barcode, symbology, widthPx, heightPx, showLabel);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.IMAGE_PNG);
+        headers.setCacheControl("public, max-age=3600");
+        return new ResponseEntity<>(png, headers, HttpStatus.OK);
     }
 }

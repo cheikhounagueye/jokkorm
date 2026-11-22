@@ -10,4 +10,10 @@ dependencies {
 
     // Phase 3B — WireMock pour les tests d'adapter HTTP (Maarch).
     testImplementation("org.wiremock:wiremock-standalone:3.9.1")
+
+    // Phase 5L — Génération d'étiquettes code-barres (Code128, QR) rendues en PNG.
+    // ZXing core = encodage, javase = rendu BufferedImage via java.awt (headless OK).
+    // Même versions que dans eversuite-modern (ADR SAE.P1.6.B QR fantômes de prêt).
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:javase:3.5.3")
 }
