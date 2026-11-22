@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/0002-physical-archive-record.yaml
   - include:
       file: db/changelog/0003-audit-event.yaml
+  - include:
+      file: db/changelog/0004-storage-location.yaml

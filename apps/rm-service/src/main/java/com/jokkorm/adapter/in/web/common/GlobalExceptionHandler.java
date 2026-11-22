@@ -1,6 +1,8 @@
 package com.jokkorm.adapter.in.web.common;
 
 import com.jokkorm.application.AccessGuard;
+import com.jokkorm.application.physical.StorageLocationConflictException;
+import com.jokkorm.application.physical.StorageLocationNotFoundException;
 import com.jokkorm.application.record.RecordNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -33,6 +35,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RecordNotFoundException.class)
     public ResponseEntity<ProblemDetail> notFound(RecordNotFoundException e, HttpServletRequest request) {
         return problem(HttpStatus.NOT_FOUND, "record-not-found", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(StorageLocationNotFoundException.class)
+    public ResponseEntity<ProblemDetail> storageLocationNotFound(
+        StorageLocationNotFoundException e, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "storage-location-not-found", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(StorageLocationConflictException.class)
+    public ResponseEntity<ProblemDetail> storageLocationConflict(
+        StorageLocationConflictException e, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "storage-location-conflict", e.getMessage(), request);
     }
 
     @ExceptionHandler(AccessGuard.TenantMismatchException.class)
