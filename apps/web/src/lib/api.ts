@@ -22,6 +22,7 @@ export interface RecordResponse {
   status: PhysicalArchiveStatus;
   registeredAt: string;
   lastTransitionAt: string;
+  containerId: string | null;
 }
 
 export interface RecordsPageResponse {
