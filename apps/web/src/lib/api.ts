@@ -104,3 +104,96 @@ export async function getConsolidatedRecord(cote: string): Promise<ConsolidatedR
   const response = await fetch(`/api/v1/records/consolidated?${qs.toString()}`, { headers: headers() });
   return parse<ConsolidatedRecordResponse>(response);
 }
+
+export async function storeRecord(cote: string, containerBarcode: string): Promise<RecordResponse> {
+  const qs = new URLSearchParams({ cote });
+  const response = await fetch(`/api/v1/records/store?${qs.toString()}`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ containerBarcode }),
+  });
+  return parse<RecordResponse>(response);
+}
+
+// ─── Physical topography (phase 5A) ────────────────────────────────────────────
+
+export type StorageLocationKind = "SITE" | "STOREHOUSE" | "SHELF" | "RACK" | "POSITION";
+
+export interface StorageLocationResponse {
+  id: string;
+  kind: StorageLocationKind;
+  code: string;
+  label: string | null;
+  parentId: string | null;
+  path: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StorageLocationTreeResponse {
+  node: StorageLocationResponse;
+  children: StorageLocationTreeResponse[];
+}
+
+export async function listStorageTree(): Promise<StorageLocationTreeResponse[]> {
+  const response = await fetch(`/api/v1/physical/locations/tree`, { headers: headers() });
+  return parse<StorageLocationTreeResponse[]>(response);
+}
+
+export async function createStorageLocation(input: {
+  kind: StorageLocationKind;
+  code: string;
+  label?: string;
+  parentId?: string | null;
+}): Promise<StorageLocationResponse> {
+  const response = await fetch(`/api/v1/physical/locations`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parse<StorageLocationResponse>(response);
+}
+
+// ─── Physical containers (phase 5B) ────────────────────────────────────────────
+
+export type ContainerState = "EMPTY" | "OPEN" | "SEALED" | "DESTROYED";
+
+export interface PhysicalContainerResponse {
+  id: string;
+  barcode: string;
+  label: string | null;
+  positionId: string | null;
+  capacity: number | null;
+  state: ContainerState;
+  createdAt: string;
+  updatedAt: string;
+  lastMovedAt: string | null;
+}
+
+export async function createContainer(input: {
+  barcode: string;
+  label?: string;
+  capacity?: number;
+}): Promise<PhysicalContainerResponse> {
+  const response = await fetch(`/api/v1/physical/containers`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parse<PhysicalContainerResponse>(response);
+}
+
+export async function placeContainer(containerId: string, positionId: string): Promise<PhysicalContainerResponse> {
+  const response = await fetch(`/api/v1/physical/containers/${containerId}/position`, {
+    method: "PUT",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ positionId }),
+  });
+  return parse<PhysicalContainerResponse>(response);
+}
+
+export async function listContainersAtPosition(positionId: string): Promise<PhysicalContainerResponse[]> {
+  const qs = new URLSearchParams({ positionId });
+  const response = await fetch(`/api/v1/physical/containers?${qs.toString()}`, { headers: headers() });
+  return parse<PhysicalContainerResponse[]>(response);
+}
