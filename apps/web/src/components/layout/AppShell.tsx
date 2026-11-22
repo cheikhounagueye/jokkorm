@@ -1,34 +1,33 @@
 "use client";
 
-import {
-  Archive,
-  Boxes,
-  FileText,
-  LayoutDashboard,
-  Package2,
-  Send,
-  Warehouse,
-} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { IconTile } from "@/components/ui/IconTile";
+import { Icons, type IconName } from "@/lib/icons";
 import { TopBar } from "./TopBar";
 
 type NavItem = {
   href: string;
   label: string;
-  icon: ReactNode;
-  section?: string;
+  icon: IconName;
+  section: string;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/",             label: "Tableau de bord", icon: <LayoutDashboard size={18} />, section: "Accueil" },
-  { href: "/demandes",     label: "Demandes",        icon: <Send size={18} />,            section: "Travail" },
-  { href: "/prets",        label: "Prêts",           icon: <FileText size={18} />,        section: "Travail" },
-  { href: "/magasin",      label: "Salle d'archives",icon: <Warehouse size={18} />,       section: "Gestion" },
-  { href: "/magasin/lots", label: "Lots de boîtes",  icon: <Package2 size={18} />,        section: "Gestion" },
-  { href: "/records",      label: "Archives",        icon: <Archive size={18} />,         section: "Référence" },
+  { href: "/",             label: "Tableau de bord",  icon: "dashboard",   section: "Accueil" },
+  { href: "/demandes",     label: "Demandes",         icon: "requests",    section: "Travail" },
+  { href: "/prets",        label: "Prêts",            icon: "loans",       section: "Travail" },
+  { href: "/magasin",      label: "Salle d'archives", icon: "archiveRoom", section: "Gestion" },
+  { href: "/magasin/lots", label: "Lots de boîtes",   icon: "batches",     section: "Gestion" },
+  { href: "/records",      label: "Archives",         icon: "archives",    section: "Référence" },
 ];
+
+function isActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  if (href === "/magasin") return pathname === "/magasin" || pathname.startsWith("/magasin/etiquette");
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
 const SIDEBAR_WIDTH = 220;
 const TOPBAR_HEIGHT = 56;
@@ -58,7 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function Sidebar() {
   const pathname = usePathname();
-  const sections = Array.from(new Set(NAV_ITEMS.map((i) => i.section).filter(Boolean))) as string[];
+  const sections = Array.from(new Set(NAV_ITEMS.map((i) => i.section)));
 
   return (
     <aside style={{
@@ -77,15 +76,7 @@ function Sidebar() {
         padding: "8px 20px 20px",
         textDecoration: "none", color: "var(--text-primary)",
       }}>
-        <div style={{
-          width: 32, height: 32,
-          borderRadius: "var(--radius-md)",
-          background: "linear-gradient(135deg, var(--brand-500), var(--brand-700))",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "white",
-        }}>
-          <Boxes size={18} />
-        </div>
+        <IconTile name="box" tone="kraft" size={34} />
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.015em" }}>JokkoRM</div>
           <div style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -104,7 +95,8 @@ function Sidebar() {
               {section}
             </div>
             {NAV_ITEMS.filter((i) => i.section === section).map((item) => {
-              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+              const active = isActive(pathname, item.href);
+              const NavIcon = Icons[item.icon];
               return (
                 <Link key={item.href} href={item.href}
                   style={{
@@ -118,7 +110,7 @@ function Sidebar() {
                     textDecoration: "none",
                     transition: "background 150ms ease, color 150ms ease",
                   }}>
-                  {item.icon}
+                  <NavIcon size={20} weight={active ? "fill" : "duotone"} />
                   {item.label}
                 </Link>
               );

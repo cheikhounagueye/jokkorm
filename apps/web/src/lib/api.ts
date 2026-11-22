@@ -309,9 +309,27 @@ export interface QualificationCheck {
 
 const ROLE_KEY = "jokkorm.role";
 const ACTOR_KEY = "jokkorm.actor";
+const ROLES: UserRole[] = ["REQUESTER", "ARCHIVIST", "ARCHIVES_HEAD", "AUDITOR"];
+const DEFAULT_ACTOR: Record<UserRole, string> = {
+  REQUESTER: "awa.diop",
+  ARCHIVIST: "archiviste",
+  ARCHIVES_HEAD: "resp-archives",
+  AUDITOR: "auditeur",
+};
+
+/** Dev uniquement (rôle simulé) : `?as=ARCHIVIST&actor=x` fixe le rôle avant le premier appel API. */
+function applyRoleFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const as = params.get("as") as UserRole | null;
+  if (as && ROLES.includes(as)) {
+    localStorage.setItem(ROLE_KEY, as);
+    localStorage.setItem(ACTOR_KEY, params.get("actor") || DEFAULT_ACTOR[as]);
+  }
+}
 
 export function getCurrentRole(): UserRole {
   if (typeof window === "undefined") return "REQUESTER";
+  applyRoleFromUrl();
   return (localStorage.getItem(ROLE_KEY) as UserRole) || "REQUESTER";
 }
 export function setCurrentRole(role: UserRole) {
@@ -319,6 +337,7 @@ export function setCurrentRole(role: UserRole) {
 }
 export function getCurrentActor(): string {
   if (typeof window === "undefined") return "requester";
+  applyRoleFromUrl();
   return localStorage.getItem(ACTOR_KEY) || "requester";
 }
 export function setCurrentActor(actor: string) {

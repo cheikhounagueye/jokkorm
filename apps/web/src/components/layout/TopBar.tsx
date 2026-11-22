@@ -1,7 +1,9 @@
 "use client";
 
-import { ChevronDown, Moon, Sun, User2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Icons } from "@/lib/icons";
+
+const { chevronDown: ChevronDown, moon: Moon, sun: Sun, user: User2 } = Icons;
 import {
   getCurrentActor,
   getCurrentRole,
