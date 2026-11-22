@@ -1,9 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useState } from "react";
-import RoleSwitcher from "@/components/RoleSwitcher";
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  PageHeader,
+  Textarea,
+} from "@/components/ui";
 import {
   approveAccessRequest,
   listToApprove,
@@ -11,99 +18,130 @@ import {
   type AccessRequestResponse,
 } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
+import { Icons } from "@/lib/icons";
+import {
+  DetailGrid,
+  DetailHeader,
+  MasterDetail,
+  QueueCard,
+  RejectForm,
+  requestDetailRows,
+  useQueueSelection,
+} from "../_components/RequestBits";
 
 export default function ApprouverPage() {
   const query = useQuery({ queryKey: ["toApprove"], queryFn: listToApprove });
-  const [selected, setSelected] = useState<AccessRequestResponse | null>(null);
-  const [notes, setNotes] = useState("");
+  const queue = useQueueSelection(query.data);
+  const [done, setDone] = useState<string | null>(null);
   const qc = useQueryClient();
 
+  function onDone(id: string, message: string) {
+    queue.markHandled(id);
+    setDone(message);
+    qc.invalidateQueries({ queryKey: ["toApprove"] });
+  }
+
+  return (
+    <section className="fade-up">
+      <PageHeader
+        icon="approve"
+        tone="success"
+        title="À approuver"
+        subtitle="Validation hiérarchique des demandes qualifiées par l'archiviste."
+        crumbs={[{ label: "Accueil", href: "/" }, { label: "Demandes", href: "/demandes" }, { label: "Approbation" }]}
+      />
+
+      {done && <div style={{ marginBottom: 16 }}><Alert tone="success" title={done} /></div>}
+
+      <MasterDetail
+        master={
+          <QueueCard title="File d'attente" isLoading={query.isLoading} error={query.error}
+            pending={queue.pending} selectedId={queue.selected?.id} onSelect={queue.select}
+            emptyTitle="Rien à approuver" />
+        }
+        detail={
+          queue.selected ? (
+            <ApprovePanel key={queue.selected.id} r={queue.selected} onDone={onDone} />
+          ) : (
+            <Card>
+              <EmptyState icon={<Icons.approve size={28} />} title="Aucune demande à approuver"
+                description="Les demandes qualifiées par l'archiviste apparaîtront ici." />
+            </Card>
+          )
+        }
+      />
+    </section>
+  );
+}
+
+function ApprovePanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: string, message: string) => void }) {
+  const [notes, setNotes] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+
   const approveMut = useMutation({
-    mutationFn: () => approveAccessRequest(selected!.id, notes),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["toApprove"] });
-      setSelected(null); setNotes("");
-    },
+    mutationFn: () => approveAccessRequest(r.id, notes),
+    onSuccess: () => onDone(r.id, `Demande de ${r.requesterName} approuvée — prête à exécuter.`),
   });
   const rejectMut = useMutation({
-    mutationFn: ({ reason }: { reason: string }) => rejectAccessRequest(selected!.id, reason),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["toApprove"] }); setSelected(null); },
+    mutationFn: (reason: string) => rejectAccessRequest(r.id, reason),
+    onSuccess: () => onDone(r.id, `Demande de ${r.requesterName} rejetée.`),
   });
 
   return (
-    <section>
-      <RoleSwitcher />
-      <Link href="/demandes">← Retour</Link>
-      <h1 style={{ margin: "0.5rem 0 1rem" }}>À approuver (responsable des archives)</h1>
-      <p style={{ color: "#666", fontSize: "0.9rem", marginBottom: "1rem" }}>
-        4-eyes strict : tu ne peux pas approuver une demande que tu as toi-même qualifiée.
-      </p>
+    <Card>
+      <DetailHeader r={r} />
+      <DetailGrid rows={requestDetailRows(r)} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: "1rem" }}>
-        <section style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, padding: "0.75rem", maxHeight: "72vh", overflow: "auto" }}>
-          <h2 style={{ marginTop: 0, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>File d'attente</h2>
-          {query.data?.length === 0 && <p style={{ color: "#999" }}>Rien à approuver.</p>}
-          {query.data?.map((r) => (
-            <button key={r.id} type="button" onClick={() => { setSelected(r); setNotes(""); }}
-              style={{
-                display: "block", width: "100%", textAlign: "left", padding: "0.6rem 0.8rem",
-                marginBottom: 6, border: `1px solid ${selected?.id === r.id ? "#8a4b00" : "#e3e5ea"}`,
-                background: selected?.id === r.id ? "#fff8e1" : "white", borderRadius: 4, cursor: "pointer",
-              }}>
-              <div style={{ fontWeight: 600 }}>{r.requesterName}</div>
-              <div style={{ fontSize: "0.85rem", color: "#555" }}>{r.purpose}</div>
-              <div style={{ fontSize: "0.75rem", color: "#999" }}>
-                Qualifié par <code>{r.qualifiedBy}</code>
-              </div>
-            </button>
-          ))}
-        </section>
+      <section style={{
+        marginTop: 16, padding: "12px 14px",
+        background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)",
+        borderLeft: "3px solid var(--warning-500)", borderRadius: "var(--radius-md)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, flexWrap: "wrap" }}>
+          <Icons.shield size={18} style={{ color: "var(--warning-500)" }} />
+          <span>Qualifiée par <code>{r.qualifiedBy}</code></span>
+          {r.qualifiedAt && <span style={{ color: "var(--text-tertiary)" }}>le {formatInstant(r.qualifiedAt)}</span>}
+          <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-tertiary)" }}>
+            Contrôle 4 yeux : l'approbateur doit être différent du qualificateur.
+          </span>
+        </div>
+        {r.qualificationNotes && (
+          <p style={{ marginTop: 8, fontSize: 13, color: "var(--text-secondary)", fontStyle: "italic" }}>
+            « {r.qualificationNotes} »
+          </p>
+        )}
+      </section>
 
-        <section>
-          {!selected && <p style={{ color: "#999" }}>Sélectionne une demande.</p>}
-          {selected && (
-            <div style={{ background: "white", border: "1px solid #e3e5ea", borderLeft: "4px solid #8a4b00", borderRadius: 6, padding: "1.25rem" }}>
-              <h2 style={{ marginTop: 0 }}>{selected.requesterName}</h2>
-              <dl style={{ fontSize: "0.9rem" }}>
-                <dt style={{ fontWeight: 600 }}>Service</dt><dd style={{ margin: "0 0 0.5rem" }}>{selected.requesterDept ?? "—"}</dd>
-                <dt style={{ fontWeight: 600 }}>Type</dt><dd style={{ margin: "0 0 0.5rem" }}>{selected.type}</dd>
-                <dt style={{ fontWeight: 600 }}>Motif</dt><dd style={{ margin: "0 0 0.5rem" }}>{selected.purpose}</dd>
-                {selected.piecesDescription && <>
-                  <dt style={{ fontWeight: 600 }}>Pièces</dt><dd style={{ margin: "0 0 0.5rem", whiteSpace: "pre-wrap" }}>{selected.piecesDescription}</dd>
-                </>}
-                <dt style={{ fontWeight: 600 }}>Qualification</dt>
-                <dd style={{ margin: "0 0 0.5rem" }}>
-                  Par <code>{selected.qualifiedBy}</code> le {formatInstant(selected.qualifiedAt!)}
-                  {selected.qualificationNotes && <> · <em>{selected.qualificationNotes}</em></>}
-                </dd>
-              </dl>
-
-              <section style={{ marginTop: 16 }}>
-                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: 4 }}>
-                  Notes d'approbation (optionnel)
-                </label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-                  style={{ width: "100%", minHeight: 60, padding: "0.4rem 0.6rem", border: "1px solid #c8cbd4", borderRadius: 3, fontFamily: "inherit", fontSize: "0.9rem", boxSizing: "border-box" }} />
-              </section>
-
-              <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
-                <button type="button" onClick={() => approveMut.mutate()} disabled={approveMut.isPending}
-                  style={{ padding: "0.5rem 1.1rem", background: "#2e7d32", color: "white", border: "none", borderRadius: 3, fontWeight: 600, cursor: "pointer" }}>
-                  {approveMut.isPending ? "⏳…" : "✅ Approuver"}
-                </button>
-                <button type="button" onClick={() => {
-                  const reason = prompt("Motif de rejet :");
-                  if (reason) rejectMut.mutate({ reason });
-                }} disabled={rejectMut.isPending}
-                  style={{ padding: "0.5rem 1.1rem", background: "white", color: "#b71c1c", border: "1px solid #b71c1c", borderRadius: 3, fontWeight: 600, cursor: "pointer" }}>
-                  🚫 Rejeter
-                </button>
-              </div>
-              {approveMut.isError && <div style={{ color: "#a00", marginTop: 8, fontSize: "0.85rem" }}>{(approveMut.error as Error).message}</div>}
-            </div>
-          )}
-        </section>
+      <div style={{ marginTop: 20 }}>
+        <Field label="Notes d'approbation">
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+            placeholder="ex. Accord, retour impératif avant la clôture comptable" />
+        </Field>
       </div>
-    </section>
+
+      {approveMut.isError && (
+        <div style={{ marginBottom: 12 }}>
+          <Alert tone="danger" title="Approbation refusée">{(approveMut.error as Error).message}</Alert>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <Button onClick={() => approveMut.mutate()} loading={approveMut.isPending} icon={<Icons.approve size={16} />}>
+          Approuver
+        </Button>
+        <Button variant="secondary" onClick={() => setRejecting(true)} disabled={rejecting}
+          icon={<Icons.error size={16} style={{ color: "var(--danger-500)" }} />}>
+          Rejeter
+        </Button>
+      </div>
+
+      {rejecting && (
+        <RejectForm pending={rejectMut.isPending} onSubmit={(reason) => rejectMut.mutate(reason)}
+          onCancel={() => setRejecting(false)} />
+      )}
+      {rejectMut.isError && (
+        <div style={{ marginTop: 12 }}><Alert tone="danger">{(rejectMut.error as Error).message}</Alert></div>
+      )}
+    </Card>
   );
 }

@@ -1,136 +1,215 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useState } from "react";
-import RoleSwitcher from "@/components/RoleSwitcher";
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  IconTile,
+  PageHeader,
+  Textarea,
+} from "@/components/ui";
 import {
   downloadGhostCard,
   fulfillAccessRequest,
   listToFulfill,
   type AccessRequestResponse,
+  type RequestType,
 } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
+import { Icons } from "@/lib/icons";
+import {
+  DetailGrid,
+  DetailHeader,
+  MasterDetail,
+  QueueCard,
+  requestDetailRows,
+  useQueueSelection,
+} from "../_components/RequestBits";
+
+const INSTRUCTIONS: Record<RequestType, { title: string; text: string }> = {
+  BORROW_BOX: {
+    title: "Sortir la boîte entière",
+    text: "Scanne la boîte, sors-la du magasin et remets-la à l'emprunteur. Le fantôme PDF+QR se télécharge automatiquement : imprime-le et glisse-le à la place de la boîte.",
+  },
+  EXTRACT_PIECES: {
+    title: "Extraire les pièces listées",
+    text: "Sors temporairement la boîte, extrais les pièces demandées, remets la boîte en place avec un fantôme interne, puis remets les pièces à l'emprunteur.",
+  },
+  DIGITIZE_EXTRACT: {
+    title: "Numériser les pièces listées",
+    text: "Sors la boîte, numérise les pièces demandées et remets-la en place. Dépose le PDF ci-dessous : JokkoRM le transmet à Maarch RM et ne garde que le lien.",
+  },
+};
+
+/** Base64 par blocs (évite le dépassement de pile sur les gros PDF). */
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
 
 export default function ExecuterPage() {
   const query = useQuery({ queryKey: ["toFulfill"], queryFn: listToFulfill });
-  const [selected, setSelected] = useState<AccessRequestResponse | null>(null);
+  const queue = useQueueSelection(query.data);
+  const [done, setDone] = useState<string | null>(null);
+  const qc = useQueryClient();
+
+  function onDone(id: string, message: string) {
+    queue.markHandled(id);
+    setDone(message);
+    qc.invalidateQueries({ queryKey: ["toFulfill"] });
+  }
+
+  return (
+    <section className="fade-up">
+      <PageHeader
+        icon="fulfill"
+        tone="brand"
+        title="À exécuter"
+        subtitle="Demandes approuvées : sortie de boîte, extraction ou numérisation."
+        crumbs={[{ label: "Accueil", href: "/" }, { label: "Demandes", href: "/demandes" }, { label: "Exécution" }]}
+      />
+
+      {done && <div style={{ marginBottom: 16 }}><Alert tone="success" title={done} /></div>}
+
+      <MasterDetail
+        master={
+          <QueueCard title="Demandes approuvées" isLoading={query.isLoading} error={query.error}
+            pending={queue.pending} selectedId={queue.selected?.id} onSelect={queue.select}
+            emptyTitle="Rien à exécuter" />
+        }
+        detail={
+          queue.selected ? (
+            <FulfillPanel key={queue.selected.id} r={queue.selected} onDone={onDone} />
+          ) : (
+            <Card>
+              <EmptyState icon={<Icons.fulfill size={28} />} title="Aucune demande à exécuter"
+                description="Les demandes approuvées par le responsable des archives apparaîtront ici." />
+            </Card>
+          )
+        }
+      />
+    </section>
+  );
+}
+
+function FulfillPanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: string, message: string) => void }) {
   const [notes, setNotes] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const qc = useQueryClient();
 
   const fulfillMut = useMutation({
     mutationFn: async () => {
       let base64: string | undefined;
-      if (selected!.type === "DIGITIZE_EXTRACT") {
-        if (!pdfFile) throw new Error("Upload le PDF numérisé avant d'exécuter");
-        const buf = await pdfFile.arrayBuffer();
-        base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      if (r.type === "DIGITIZE_EXTRACT") {
+        if (!pdfFile) throw new Error("Dépose le PDF numérisé avant d'exécuter.");
+        base64 = await fileToBase64(pdfFile);
       }
-      return fulfillAccessRequest(selected!.id, notes || undefined, base64);
+      return fulfillAccessRequest(r.id, notes || undefined, base64);
     },
-    onSuccess: async (r) => {
-      // Pour BORROW_BOX, télécharge le fantôme automatiquement
-      if (selected?.type === "BORROW_BOX" && r.createdLoanId) {
-        await downloadGhostCard(r.createdLoanId);
+    onSuccess: async (res) => {
+      if (r.type === "BORROW_BOX" && res.createdLoanId) {
+        await downloadGhostCard(res.createdLoanId);
       }
-      qc.invalidateQueries({ queryKey: ["toFulfill"] });
-      setSelected(null); setNotes(""); setPdfFile(null);
+      onDone(r.id, r.type === "BORROW_BOX"
+        ? `Prêt de ${r.requesterName} exécuté — fantôme téléchargé, à imprimer.`
+        : `Demande de ${r.requesterName} exécutée.`);
     },
   });
 
   return (
-    <section>
-      <RoleSwitcher />
-      <Link href="/demandes">← Retour</Link>
-      <h1 style={{ margin: "0.5rem 0 1rem" }}>À exécuter (archiviste)</h1>
+    <Card>
+      <DetailHeader r={r} />
+      <DetailGrid rows={[
+        ...requestDetailRows(r),
+        {
+          label: "Approuvée par", icon: "approve",
+          value: <><code>{r.approvedBy}</code>{r.approvedAt && ` · ${formatInstant(r.approvedAt)}`}</>,
+        },
+      ]} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: "1rem" }}>
-        <section style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, padding: "0.75rem", maxHeight: "72vh", overflow: "auto" }}>
-          <h2 style={{ marginTop: 0, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>Demandes approuvées</h2>
-          {query.data?.length === 0 && <p style={{ color: "#999" }}>Rien à exécuter.</p>}
-          {query.data?.map((r) => (
-            <button key={r.id} type="button" onClick={() => { setSelected(r); setNotes(""); setPdfFile(null); }}
-              style={{
-                display: "block", width: "100%", textAlign: "left", padding: "0.6rem 0.8rem",
-                marginBottom: 6, border: `1px solid ${selected?.id === r.id ? "#2e7d32" : "#e3e5ea"}`,
-                background: selected?.id === r.id ? "#e8f5e9" : "white", borderRadius: 4, cursor: "pointer",
-              }}>
-              <div style={{ fontWeight: 600 }}>{r.requesterName}</div>
-              <div style={{ fontSize: "0.85rem", color: "#555" }}>{r.type} · {r.purpose}</div>
-            </button>
-          ))}
-        </section>
-
-        <section>
-          {!selected && <p style={{ color: "#999" }}>Sélectionne une demande.</p>}
-          {selected && (
-            <div style={{ background: "white", border: "1px solid #e3e5ea", borderLeft: "4px solid #2e7d32", borderRadius: 6, padding: "1.25rem" }}>
-              <h2 style={{ marginTop: 0 }}>{selected.requesterName} — {selected.type}</h2>
-              <dl style={{ fontSize: "0.9rem" }}>
-                <dt style={{ fontWeight: 600 }}>Motif</dt><dd style={{ margin: "0 0 0.5rem" }}>{selected.purpose}</dd>
-                {selected.piecesDescription && <>
-                  <dt style={{ fontWeight: 600 }}>Pièces</dt><dd style={{ margin: "0 0 0.5rem", whiteSpace: "pre-wrap" }}>{selected.piecesDescription}</dd>
-                </>}
-                <dt style={{ fontWeight: 600 }}>Approuvé par</dt>
-                <dd style={{ margin: "0 0 0.5rem" }}><code>{selected.approvedBy}</code> le {formatInstant(selected.approvedAt!)}</dd>
-              </dl>
-
-              <section style={{ marginTop: 16, background: "#f8f9fb", padding: "0.75rem 1rem", borderRadius: 4, fontSize: "0.85rem" }}>
-                {selected.type === "BORROW_BOX" && (
-                  <p style={{ margin: 0 }}>
-                    <strong>Action :</strong> Scanne la boîte, sors-la du magasin, remets-la à l'emprunteur.
-                    Le fantôme PDF+QR sera téléchargé automatiquement pour impression.
-                  </p>
-                )}
-                {selected.type === "EXTRACT_PIECES" && (
-                  <p style={{ margin: 0 }}>
-                    <strong>Action :</strong> Sors temporairement la boîte, extrais les pièces listées,
-                    remets la boîte en place avec un fantôme interne, remets les pièces à l'emprunteur.
-                  </p>
-                )}
-                {selected.type === "DIGITIZE_EXTRACT" && (
-                  <p style={{ margin: 0 }}>
-                    <strong>Action :</strong> Sors la boîte, numérise les pièces listées, remets la boîte.
-                    Upload le PDF ici — JokkoRM l'envoie à Maarch RM (actuellement <em>staging</em>).
-                  </p>
-                )}
-              </section>
-
-              {selected.type === "DIGITIZE_EXTRACT" && (
-                <section style={{ marginTop: 12 }}>
-                  <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: 4 }}>
-                    PDF numérisé *
-                  </label>
-                  <input type="file" accept="application/pdf"
-                    onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
-                    style={{ fontSize: "0.9rem" }} />
-                  {pdfFile && <div style={{ fontSize: "0.8rem", color: "#555", marginTop: 4 }}>
-                    📎 {pdfFile.name} ({Math.round(pdfFile.size / 1024)} KB)
-                  </div>}
-                </section>
-              )}
-
-              <section style={{ marginTop: 12 }}>
-                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: 4 }}>
-                  Notes d'exécution (optionnel)
-                </label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-                  style={{ width: "100%", minHeight: 50, padding: "0.4rem 0.6rem", border: "1px solid #c8cbd4", borderRadius: 3, fontFamily: "inherit", fontSize: "0.9rem", boxSizing: "border-box" }} />
-              </section>
-
-              <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
-                <button type="button" onClick={() => fulfillMut.mutate()}
-                  disabled={fulfillMut.isPending || (selected.type === "DIGITIZE_EXTRACT" && !pdfFile)}
-                  style={{ padding: "0.5rem 1.1rem", background: "#2e7d32", color: "white", border: "none", borderRadius: 3, fontWeight: 600, cursor: "pointer" }}>
-                  {fulfillMut.isPending ? "⏳ Exécution…" : "⚡ Exécuter"}
-                </button>
-              </div>
-              {fulfillMut.isError && <div style={{ color: "#a00", marginTop: 8, fontSize: "0.85rem" }}>{(fulfillMut.error as Error).message}</div>}
-            </div>
-          )}
-        </section>
+      <div style={{ marginTop: 16 }}>
+        <Alert tone="info" title={INSTRUCTIONS[r.type].title}>{INSTRUCTIONS[r.type].text}</Alert>
       </div>
-    </section>
+
+      {r.type === "DIGITIZE_EXTRACT" && (
+        <div style={{ marginTop: 16 }}>
+          <PdfDropzone file={pdfFile} onChange={setPdfFile} />
+        </div>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <Field label="Notes d'exécution">
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+            placeholder="ex. 4 pièces numérisées, boîte remise en place" style={{ minHeight: 64 }} />
+        </Field>
+      </div>
+
+      {fulfillMut.isError && (
+        <div style={{ marginBottom: 12 }}>
+          <Alert tone="danger" title="Exécution impossible">{(fulfillMut.error as Error).message}</Alert>
+        </div>
+      )}
+
+      <Button size="lg" onClick={() => fulfillMut.mutate()} loading={fulfillMut.isPending}
+        disabled={r.type === "DIGITIZE_EXTRACT" && !pdfFile} icon={<Icons.fulfill size={16} />}>
+        {r.type === "BORROW_BOX" ? "Exécuter et télécharger le fantôme" : "Exécuter"}
+      </Button>
+    </Card>
+  );
+}
+
+function PdfDropzone({ file, onChange }: { file: File | null; onChange: (f: File | null) => void }) {
+  const [over, setOver] = useState(false);
+
+  if (file) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+        background: "var(--success-50)", borderRadius: "var(--radius-md)",
+        border: "1px solid color-mix(in srgb, var(--success-500) 30%, transparent)",
+      }}>
+        <IconTile name="pdf" tone="danger" size={40} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{Math.max(1, Math.round(file.size / 1024))} Ko · prêt à transmettre</div>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => onChange(null)} icon={<Icons.close size={14} weight="bold" />}>
+          Retirer
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <label
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault(); setOver(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f && f.type === "application/pdf") onChange(f);
+      }}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+        padding: "28px 20px", cursor: "pointer", textAlign: "center",
+        background: over ? "var(--brand-50)" : "var(--surface-sunken)",
+        border: `2px dashed ${over ? "var(--brand-500)" : "var(--border-strong)"}`,
+        borderRadius: "var(--radius-lg)",
+        transition: "all 150ms ease",
+      }}>
+      <IconTile name="cloudUpload" tone="violet" size={48} />
+      <div style={{ fontSize: 14, fontWeight: 600 }}>Dépose le PDF numérisé ici</div>
+      <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>ou clique pour choisir un fichier · PDF uniquement</div>
+      <input type="file" accept="application/pdf" style={{ display: "none" }}
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)} />
+    </label>
   );
 }

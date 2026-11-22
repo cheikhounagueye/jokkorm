@@ -55,6 +55,16 @@ function headers(extra: Record<string, string> = {}): HeadersInit {
   };
 }
 
+/**
+ * Récupère un binaire (image, PDF) avec l'en-tête tenant. Une balise <img src> ou un
+ * lien <a href> ne peuvent pas porter X-Tenant-Id : passer par ici puis un blob.
+ */
+export async function fetchTenantBlob(url: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(url, { headers: { "X-Tenant-Id": DEFAULT_TENANT }, signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.blob();
+}
+
 async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as ProblemDetail;

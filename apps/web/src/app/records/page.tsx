@@ -2,81 +2,155 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  IconTile,
+  Input,
+  PageHeader,
+  Segmented,
+  StatusBadge,
+} from "@/components/ui";
 import { listRecords, type PhysicalArchiveStatus } from "@/lib/api";
-import { formatInstant, statusColor, statusLabel } from "@/lib/format";
+import { formatInstant } from "@/lib/format";
+import { Icons } from "@/lib/icons";
+import { ARCHIVE_STATUS, ARCHIVE_STATUSES } from "./_components/archiveStatus";
 
-const STATUSES: PhysicalArchiveStatus[] = [
-  "REGISTERED", "STORED", "FROZEN", "DESTROYED", "TRANSFERRED",
-];
+type Filter = PhysicalArchiveStatus | "ALL";
 
 export default function RecordsPage() {
+  const router = useRouter();
   const [page, setPage] = useState(0);
   const [size] = useState(20);
   const [statusFilter, setStatusFilter] = useState<PhysicalArchiveStatus | undefined>();
+  const [search, setSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["records", page, size, statusFilter ?? "all"],
     queryFn: () => listRecords({ page, size, status: statusFilter }),
   });
 
-  return (
-    <section>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
-        <div>
-          <h1 style={{ margin: "0 0 0.25rem" }}>Enveloppes physiques</h1>
-          <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-            Tenant courant : <code>demo</code>
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-          <Pill active={!statusFilter} onClick={() => { setStatusFilter(undefined); setPage(0); }}>
-            Tous
-          </Pill>
-          {STATUSES.map((s) => (
-            <Pill key={s} active={statusFilter === s} onClick={() => { setStatusFilter(s); setPage(0); }} color={statusColor(s)}>
-              {statusLabel(s)}
-            </Pill>
-          ))}
-        </div>
-      </header>
+  const needle = search.trim().toLowerCase();
+  const rows = (query.data?.content ?? []).filter((r) => !needle || r.cote.toLowerCase().includes(needle));
 
-      {query.isLoading && <p>Chargement…</p>}
-      {query.isError && <ErrorBanner error={query.error as Error} />}
+  function openCote(e: React.FormEvent) {
+    e.preventDefault();
+    const cote = search.trim();
+    if (cote) router.push(`/records/detail?cote=${encodeURIComponent(cote)}`);
+  }
+
+  return (
+    <section className="fade-up">
+      <PageHeader
+        icon="archives"
+        tone="brand"
+        title="Archives physiques"
+        subtitle={query.data
+          ? `${query.data.totalElements} enveloppe${query.data.totalElements > 1 ? "s" : ""} suivie${query.data.totalElements > 1 ? "s" : ""} par JokkoRM`
+          : "Enveloppes physiques suivies par JokkoRM"}
+        crumbs={[{ label: "Accueil", href: "/" }, { label: "Archives" }]}
+      />
+
+      <Card padding={14} style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <form onSubmit={openCote} style={{ display: "flex", gap: 8, flex: "1 1 320px", minWidth: 260 }}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <Icons.search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }} />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Rechercher une cote… (Entrée pour ouvrir)"
+                aria-label="Rechercher une cote"
+                style={{ paddingLeft: 36, fontFamily: search ? "var(--font-mono)" : undefined }} />
+            </div>
+            <Button type="submit" variant="secondary" icon={<Icons.view size={16} />} disabled={!search.trim()}>
+              Ouvrir
+            </Button>
+          </form>
+          <Segmented<Filter>
+            value={statusFilter ?? "ALL"}
+            onChange={(v) => { setStatusFilter(v === "ALL" ? undefined : v); setPage(0); }}
+            options={[
+              { value: "ALL", label: "Toutes" },
+              ...ARCHIVE_STATUSES.map((s) => {
+                const I = Icons[ARCHIVE_STATUS[s].icon];
+                return { value: s as Filter, label: ARCHIVE_STATUS[s].label, icon: <I size={14} /> };
+              }),
+            ]}
+          />
+        </div>
+      </Card>
+
+      {query.isError && (
+        <div style={{ marginBottom: 16 }}>
+          <Alert tone="danger" title="Impossible de charger les archives">{(query.error as Error).message}</Alert>
+        </div>
+      )}
+
+      {query.isLoading && (
+        <Card><div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Chargement des archives…</div></Card>
+      )}
 
       {query.data && (
         <>
-          <div style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, overflow: "hidden" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Cote</th>
-                  <th>Statut</th>
-                  <th>Enregistrée le</th>
-                  <th>Dernière transition</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {query.data.content.length === 0 && (
-                  <tr><td colSpan={5} style={{ textAlign: "center", color: "#999", padding: "2rem" }}>
-                    Aucune enveloppe pour les filtres actuels.
-                  </td></tr>
-                )}
-                {query.data.content.map((r) => (
-                  <tr key={r.id}>
-                    <td><code>{r.cote}</code></td>
-                    <td><StatusBadge status={r.status} /></td>
-                    <td>{formatInstant(r.registeredAt)}</td>
-                    <td>{formatInstant(r.lastTransitionAt)}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <Link href={`/records/detail?cote=${encodeURIComponent(r.cote)}`}>Détail →</Link>
-                    </td>
+          {rows.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<Icons.archives size={32} />}
+                title="Aucune enveloppe"
+                description={needle ? "Aucune cote de cette page ne correspond à la recherche." : "Aucune enveloppe pour ce filtre."}
+              />
+            </Card>
+          ) : (
+            <Card padding={0} style={{ overflow: "hidden" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cote</th>
+                    <th>Statut</th>
+                    <th>Rangement</th>
+                    <th>Enregistrée le</th>
+                    <th>Dernière transition</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const meta = ARCHIVE_STATUS[r.status];
+                    return (
+                      <tr key={r.id} style={{ cursor: "pointer" }}
+                        onClick={() => router.push(`/records/detail?cote=${encodeURIComponent(r.cote)}`)}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <IconTile name={meta.icon} tone={meta.tone === "neutral" ? "slate" : meta.tone} size={30} variant="soft" />
+                            <code>{r.cote}</code>
+                          </div>
+                        </td>
+                        <td><StatusBadge meta={meta} /></td>
+                        <td>
+                          {r.containerId
+                            ? <Badge tone="brand" icon={<Icons.box size={12} weight="bold" />}>En boîte</Badge>
+                            : <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Non rangée</span>}
+                        </td>
+                        <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatInstant(r.registeredAt)}</td>
+                        <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatInstant(r.lastTransitionAt)}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <Link href={`/records/detail?cote=${encodeURIComponent(r.cote)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, fontWeight: 600 }}>
+                            Détail <Icons.chevronRight size={14} weight="bold" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </Card>
+          )}
 
           <Pagination
             page={query.data.page}
@@ -90,46 +164,6 @@ export default function RecordsPage() {
   );
 }
 
-function Pill(props: {
-  active: boolean;
-  onClick: () => void;
-  color?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={props.onClick}
-      style={{
-        padding: "0.35rem 0.75rem",
-        borderRadius: 999,
-        border: "1px solid " + (props.active ? "#1e2d5e" : "#d8dae0"),
-        background: props.active ? "#1e2d5e" : "white",
-        color: props.active ? "white" : (props.color ?? "#555"),
-        fontSize: "0.85rem",
-        fontWeight: 500,
-      }}
-    >
-      {props.children}
-    </button>
-  );
-}
-
-function StatusBadge({ status }: { status: PhysicalArchiveStatus }) {
-  return (
-    <span style={{
-      display: "inline-block",
-      padding: "0.2rem 0.55rem",
-      borderRadius: 4,
-      background: statusColor(status) + "22",
-      color: statusColor(status),
-      fontSize: "0.8rem",
-      fontWeight: 600,
-    }}>
-      {statusLabel(status)}
-    </span>
-  );
-}
-
 function Pagination(props: {
   page: number;
   totalPages: number;
@@ -139,32 +173,19 @@ function Pagination(props: {
   if (props.totalElements === 0) return null;
   return (
     <footer style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginTop: "0.75rem",
-      color: "#666",
-      fontSize: "0.9rem",
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      marginTop: 14, color: "var(--text-secondary)", fontSize: 13,
     }}>
-      <span>{props.totalElements} enveloppe(s) · page {props.page + 1} / {Math.max(props.totalPages, 1)}</span>
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <button disabled={props.page === 0} onClick={() => props.onChange(props.page - 1)}>← Précédent</button>
-        <button disabled={props.page >= props.totalPages - 1} onClick={() => props.onChange(props.page + 1)}>Suivant →</button>
+      <span>
+        {props.totalElements} enveloppe{props.totalElements > 1 ? "s" : ""} · page {props.page + 1} / {Math.max(props.totalPages, 1)}
+      </span>
+      <div style={{ display: "flex", gap: 8 }}>
+        <Button variant="secondary" size="sm" disabled={props.page === 0}
+          onClick={() => props.onChange(props.page - 1)}>Précédent</Button>
+        <Button variant="secondary" size="sm" disabled={props.page >= props.totalPages - 1}
+          iconRight={<Icons.chevronRight size={12} weight="bold" />}
+          onClick={() => props.onChange(props.page + 1)}>Suivant</Button>
       </div>
     </footer>
-  );
-}
-
-function ErrorBanner({ error }: { error: Error }) {
-  return (
-    <div style={{
-      background: "#fff3f3",
-      border: "1px solid #ffbaba",
-      padding: "0.75rem 1rem",
-      borderRadius: 4,
-      color: "#a00",
-    }}>
-      <strong>Erreur :</strong> {error.message}
-    </div>
   );
 }

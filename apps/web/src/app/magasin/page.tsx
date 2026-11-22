@@ -1,736 +1,137 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import {
-  createContainer,
-  createStorageLocation,
-  deleteStorageLocation,
-  downloadTopographyTemplate,
-  findContainerByBarcode,
-  importTopographyExcel,
-  listContainersAtPosition,
-  listStorageTree,
-  placeContainer,
-  storeRecord,
-  updateStorageLocation,
-  type ContainerState,
-  type ImportTopographyReport,
-  type PhysicalContainerResponse,
-  type StorageLocationKind,
-  type StorageLocationResponse,
-  type StorageLocationTreeResponse,
-} from "@/lib/api";
-
-const KIND_LABELS: Record<StorageLocationKind, string> = {
-  SITE: "Site",
-  STOREHOUSE: "Magasin",
-  SHELF: "Travée",
-  RACK: "Tablette",
-  POSITION: "Position",
-};
-
-const KIND_COLORS: Record<StorageLocationKind, string> = {
-  SITE: "#1e2d5e",
-  STOREHOUSE: "#2e7d32",
-  SHELF: "#5b7cb3",
-  RACK: "#a07b00",
-  POSITION: "#b71c1c",
-};
-
-const CHILD_OF: Record<StorageLocationKind, StorageLocationKind | null> = {
-  SITE: "STOREHOUSE",
-  STOREHOUSE: "SHELF",
-  SHELF: "RACK",
-  RACK: "POSITION",
-  POSITION: null,
-};
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { Button, Card, EmptyState, IconTile, PageHeader } from "@/components/ui";
+import { listStorageTree } from "@/lib/api";
+import { Icons } from "@/lib/icons";
+import { BarcodeScanner } from "./_components/BarcodeScanner";
+import { ContainerCreationCard } from "./_components/ContainerCreationCard";
+import { useTopographyImport } from "./_components/ImportTopography";
+import { countByKind, findPath, KIND_META, KIND_ORDER } from "./_components/kinds";
+import { NodePanel } from "./_components/NodePanel";
+import { TopologyTree } from "./_components/TopologyTree";
 
 export default function MagasinPage() {
-  const [selected, setSelected] = useState<StorageLocationResponse | null>(null);
+  return (
+    <Suspense fallback={null}>
+      <MagasinContent />
+    </Suspense>
+  );
+}
+
+function MagasinContent() {
+  const params = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(() => params.get("node"));
   const treeQuery = useQuery({ queryKey: ["storage-tree"], queryFn: listStorageTree });
   const qc = useQueryClient();
+  const scannerRef = useRef<HTMLDivElement>(null);
 
-  const refreshTreeAndClear = () => {
-    qc.invalidateQueries({ queryKey: ["storage-tree"] });
-    setSelected(null);
+  const refreshTree = useCallback(() => qc.invalidateQueries({ queryKey: ["storage-tree"] }), [qc]);
+  const { actions: importActions, feedback: importFeedback } = useTopographyImport(() => treeQuery.refetch());
+
+  /** Sélection + lien partageable ?node=<id> (sans navigation). */
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("node", id); else url.searchParams.delete("node");
+    window.history.replaceState(null, "", url.toString());
+  }, []);
+
+  const roots = treeQuery.data;
+  const path = useMemo(
+    () => (roots && selectedId ? findPath(roots, selectedId) : null),
+    [roots, selectedId],
+  );
+  const ancestorIds = useMemo(
+    () => new Set((path ?? []).slice(0, -1).map((p) => p.node.id)),
+    [path],
+  );
+  const counts = useMemo(() => (roots ? countByKind(roots) : null), [roots]);
+
+  const focusScanner = () => {
+    scannerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    scannerRef.current?.querySelector("input")?.focus();
   };
 
-  const refreshTreeAndKeep = (updated?: StorageLocationResponse) => {
-    qc.invalidateQueries({ queryKey: ["storage-tree"] });
-    if (updated) setSelected(updated);
-  };
-
   return (
-    <section>
-      <header style={{ marginBottom: "1rem" }}>
-        <h1 style={{ margin: "0 0 0.25rem" }}>Magasin</h1>
-        <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-          Topographie physique sur 5 niveaux (SITE → MAGASIN → TRAVÉE → TABLETTE → POSITION) et
-          les boîtes qui y sont rangées. Pattern <strong>2 gardiens</strong> : tout ici est détenu
-          par JokkoRM.
-        </p>
-      </header>
-
-      <ImportTopographyBar onImported={() => treeQuery.refetch()} />
-
-      <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: "1rem" }}>
-        <section style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, padding: "1rem", maxHeight: "72vh", overflow: "auto" }}>
-          <h2 style={{ marginTop: 0, fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>
-            Topographie
-          </h2>
-          {treeQuery.isLoading && <p>Chargement…</p>}
-          {treeQuery.isError && <ErrorBanner error={treeQuery.error as Error} />}
-          {treeQuery.data && (
-            <>
-              {treeQuery.data.length === 0 && (
-                <p style={{ color: "#999", fontSize: "0.85rem" }}>
-                  Aucun site. Créer un premier site ci-dessous.
-                </p>
-              )}
-              {treeQuery.data.map((n) => (
-                <TreeNode key={n.node.id} node={n} depth={0} selected={selected} onSelect={setSelected} />
-              ))}
-              <CreateChildForm parent={null} onCreated={() => treeQuery.refetch()} />
-            </>
-          )}
-        </section>
-
-        <section>
-          {!selected && (
-            <EmptyRightPane />
-          )}
-          {selected && (
-            <>
-              <SelectedHeader location={selected} />
-              <AdminActions
-                location={selected}
-                onRenamed={refreshTreeAndKeep}
-                onDeleted={refreshTreeAndClear}
-              />
-              {CHILD_OF[selected.kind] && (
-                <CreateChildForm parent={selected} onCreated={() => treeQuery.refetch()} />
-              )}
-              {selected.kind === "POSITION" && (
-                <PositionContents position={selected} />
-              )}
-            </>
-          )}
-
-          <ContainerCreationCard />
-          <BarcodeScanner />
-        </section>
-      </div>
-    </section>
-  );
-}
-
-function TreeNode({
-  node, depth, selected, onSelect,
-}: {
-  node: StorageLocationTreeResponse;
-  depth: number;
-  selected: StorageLocationResponse | null;
-  onSelect: (l: StorageLocationResponse) => void;
-}) {
-  const isSelected = selected?.id === node.node.id;
-  return (
-    <div style={{ marginLeft: depth * 12 }}>
-      <button
-        onClick={() => onSelect(node.node)}
-        style={{
-          display: "block",
-          width: "100%",
-          textAlign: "left",
-          padding: "0.3rem 0.5rem",
-          border: "none",
-          background: isSelected ? "#e8ecf7" : "transparent",
-          borderLeft: `3px solid ${KIND_COLORS[node.node.kind]}`,
-          borderRadius: 3,
-          cursor: "pointer",
-          fontSize: "0.9rem",
-          marginBottom: 2,
-        }}
-      >
-        <span style={{ color: KIND_COLORS[node.node.kind], fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase" }}>
-          {KIND_LABELS[node.node.kind]}
-        </span>
-        {" "}
-        <code>{node.node.code}</code>
-        {node.node.label && <span style={{ color: "#666", marginLeft: 6 }}>· {node.node.label}</span>}
-      </button>
-      {node.children.map((c) => (
-        <TreeNode key={c.node.id} node={c} depth={depth + 1} selected={selected} onSelect={onSelect} />
-      ))}
-    </div>
-  );
-}
-
-function AdminActions({
-  location, onRenamed, onDeleted,
-}: {
-  location: StorageLocationResponse;
-  onRenamed: (updated: StorageLocationResponse) => void;
-  onDeleted: () => void;
-}) {
-  const [renaming, setRenaming] = useState(false);
-  const [newLabel, setNewLabel] = useState(location.label ?? "");
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [typedCode, setTypedCode] = useState("");
-
-  const renameMutation = useMutation({
-    mutationFn: () => updateStorageLocation(location.id, newLabel || null),
-    onSuccess: (updated) => { setRenaming(false); onRenamed(updated); },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteStorageLocation(location.id),
-    onSuccess: () => { setConfirmDeleteOpen(false); setTypedCode(""); onDeleted(); },
-  });
-
-  const canConfirmDelete = typedCode.toUpperCase() === location.code;
-
-  return (
-    <div style={{ background: "#fafbfc", border: "1px dashed #d8dae0", borderRadius: 4, padding: "0.6rem 0.75rem", marginBottom: "0.75rem" }}>
-      <div style={{ fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 700, color: "#555", letterSpacing: "0.03em", marginBottom: 6 }}>
-        Actions administrateur
-      </div>
-      {!renaming && !confirmDeleteOpen && (
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => { setNewLabel(location.label ?? ""); setRenaming(true); }} style={buttonSecondaryStyle}>
-            Renommer
-          </button>
-          <button onClick={() => setConfirmDeleteOpen(true)} style={buttonDangerStyle}>
-            Supprimer
-          </button>
-        </div>
-      )}
-      {renaming && (
-        <form onSubmit={(e) => { e.preventDefault(); renameMutation.mutate(); }} style={{ display: "flex", gap: 6 }}>
-          <input
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="nouveau libellé (vide pour effacer)"
-            autoFocus
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          <button type="submit" disabled={renameMutation.isPending} style={buttonStyle}>
-            {renameMutation.isPending ? "…" : "Enregistrer"}
-          </button>
-          <button type="button" onClick={() => setRenaming(false)} style={buttonSecondaryStyle}>
-            Annuler
-          </button>
-          {renameMutation.isError && <ErrorInline error={renameMutation.error as Error} />}
-        </form>
-      )}
-      {confirmDeleteOpen && (
-        <div style={{ background: "#fff3f3", border: "1px solid #ffbaba", borderRadius: 4, padding: "0.75rem" }}>
-          <div style={{ fontSize: "0.85rem", color: "#a00", fontWeight: 600, marginBottom: 6 }}>
-            Suppression destructive
-          </div>
-          <p style={{ margin: "0 0 0.5rem", fontSize: "0.85rem", color: "#555" }}>
-            Tape le code <code>{location.code}</code> pour confirmer la suppression de <code>{location.path}</code>.
-            L&apos;opération échoue si le nœud contient des enfants ou des boîtes.
-          </p>
-          <div style={{ display: "flex", gap: 6 }}>
-            <input
-              value={typedCode}
-              onChange={(e) => setTypedCode(e.target.value)}
-              placeholder={`retape « ${location.code} »`}
-              autoFocus
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <button
-              onClick={() => deleteMutation.mutate()}
-              disabled={!canConfirmDelete || deleteMutation.isPending}
-              style={buttonDangerStyle}>
-              {deleteMutation.isPending ? "…" : "Supprimer définitivement"}
-            </button>
-            <button onClick={() => { setConfirmDeleteOpen(false); setTypedCode(""); }} style={buttonSecondaryStyle}>
-              Annuler
-            </button>
-          </div>
-          {deleteMutation.isError && <div style={{ color: "#a00", marginTop: 6, fontSize: "0.85rem" }}>{(deleteMutation.error as Error).message}</div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SelectedHeader({ location }: { location: StorageLocationResponse }) {
-  return (
-    <div style={{ background: "white", border: "1px solid #e3e5ea", borderTop: `4px solid ${KIND_COLORS[location.kind]}`, borderRadius: 6, padding: "1rem", marginBottom: "0.75rem" }}>
-      <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: KIND_COLORS[location.kind], fontWeight: 700, letterSpacing: "0.03em" }}>
-        {KIND_LABELS[location.kind]} sélectionné
-      </div>
-      <h2 style={{ margin: "0.25rem 0 0" }}>
-        <code>{location.path}</code>
-      </h2>
-      {location.label && <p style={{ margin: "0.25rem 0 0", color: "#666" }}>{location.label}</p>}
-    </div>
-  );
-}
-
-function CreateChildForm({
-  parent,
-  onCreated,
-}: {
-  parent: StorageLocationResponse | null;
-  onCreated: () => void;
-}) {
-  const kind: StorageLocationKind = parent ? CHILD_OF[parent.kind]! : "SITE";
-  const [code, setCode] = useState("");
-  const [label, setLabel] = useState("");
-
-  const mutation = useMutation({
-    mutationFn: () => createStorageLocation({
-      kind, code, label: label || undefined, parentId: parent?.id ?? null,
-    }),
-    onSuccess: () => { setCode(""); setLabel(""); onCreated(); },
-  });
-
-  return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}
-      style={{ marginTop: "1rem", padding: "0.75rem", background: "#fafbfc", border: "1px dashed #d8dae0", borderRadius: 4 }}
-    >
-      <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#555", textTransform: "uppercase", marginBottom: 6 }}>
-        Créer un(e) {KIND_LABELS[kind]}
-        {parent && <span style={{ color: "#888", textTransform: "none", fontWeight: 400 }}> sous <code>{parent.path}</code></span>}
-      </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="code (A-Z0-9_-)"
-          required
-          style={inputStyle}
-        />
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="libellé (optionnel)"
-          style={{ ...inputStyle, flex: 1 }}
-        />
-        <button type="submit" disabled={mutation.isPending || !code} style={buttonStyle}>
-          {mutation.isPending ? "…" : "Créer"}
-        </button>
-      </div>
-      {mutation.isError && <ErrorInline error={mutation.error as Error} />}
-    </form>
-  );
-}
-
-function PositionContents({ position }: { position: StorageLocationResponse }) {
-  const qc = useQueryClient();
-  const query = useQuery({
-    queryKey: ["containers-at", position.id],
-    queryFn: () => listContainersAtPosition(position.id),
-  });
-
-  return (
-    <section style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, padding: "1rem", marginTop: "0.75rem" }}>
-      <h2 style={{ marginTop: 0, fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>
-        Boîtes à cette position
-      </h2>
-
-      {query.isLoading && <p>Chargement…</p>}
-      {query.isError && <ErrorBanner error={query.error as Error} />}
-      {query.data && query.data.length === 0 && (
-        <p style={{ color: "#999", fontSize: "0.9rem" }}>
-          Aucune boîte ici. Ranger une boîte existante avec le formulaire ci-dessous, ou créer
-          une nouvelle boîte puis la ranger.
-        </p>
-      )}
-      {query.data && query.data.map((c) => (
-        <ContainerCard key={c.id} container={c} onRecordStored={() => qc.invalidateQueries({ queryKey: ["containers-at", position.id] })} />
-      ))}
-
-      <PlaceExistingContainerForm position={position} onPlaced={() => qc.invalidateQueries({ queryKey: ["containers-at", position.id] })} />
-    </section>
-  );
-}
-
-function ContainerCard({
-  container, onRecordStored,
-}: {
-  container: PhysicalContainerResponse;
-  onRecordStored: () => void;
-}) {
-  return (
-    <article style={{ border: "1px solid #e3e5ea", borderLeft: `4px solid ${stateColor(container.state)}`, borderRadius: 4, padding: "0.75rem", marginBottom: "0.6rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <code style={{ fontSize: "0.95rem" }}>{container.barcode}</code>
-          {container.label && <span style={{ color: "#666", marginLeft: 8 }}>· {container.label}</span>}
-        </div>
-        <span style={{ display: "inline-block", padding: "0.15rem 0.5rem", borderRadius: 3, background: stateColor(container.state) + "22", color: stateColor(container.state), fontSize: "0.75rem", fontWeight: 600 }}>
-          {stateLabel(container.state)}
-        </span>
-      </div>
-      <StoreRecordInline container={container} onDone={onRecordStored} />
-    </article>
-  );
-}
-
-function StoreRecordInline({ container, onDone }: { container: PhysicalContainerResponse; onDone: () => void }) {
-  const [cote, setCote] = useState("");
-  const mutation = useMutation({
-    mutationFn: () => storeRecord(cote, container.barcode),
-    onSuccess: () => { setCote(""); onDone(); },
-  });
-  const disabled = container.state === "SEALED" || container.state === "DESTROYED";
-
-  return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}
-      style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center", fontSize: "0.85rem" }}
-    >
-      <input
-        value={cote}
-        onChange={(e) => setCote(e.target.value)}
-        placeholder="cote (ex. DMG/MP/2024/047)"
-        disabled={disabled}
-        style={{ ...inputStyle, flex: 1 }}
+    <section className="fade-up">
+      <PageHeader
+        icon="archiveRoom"
+        tone="kraft"
+        title="Salle d'archives"
+        subtitle="Topographie physique et boîtes rangées : site, magasin, travée, tablette, position."
+        crumbs={[{ label: "Gestion" }, { label: "Salle d'archives" }]}
+        actions={
+          <>
+            {importActions}
+            <Button icon={<Icons.scan size={15} />} onClick={focusScanner}>Scanner</Button>
+          </>
+        }
       />
-      <button type="submit" disabled={disabled || mutation.isPending || !cote} style={buttonStyle}>
-        {mutation.isPending ? "…" : "Ranger ici"}
-      </button>
-      {mutation.isSuccess && <span style={{ color: "#2e7d32", fontSize: "0.8rem" }}>✓</span>}
-      {mutation.isError && <ErrorInline error={mutation.error as Error} />}
-    </form>
-  );
-}
 
-function PlaceExistingContainerForm({ position, onPlaced }: { position: StorageLocationResponse; onPlaced: () => void }) {
-  const [containerId, setContainerId] = useState("");
-  const mutation = useMutation({
-    mutationFn: () => placeContainer(containerId, position.id),
-    onSuccess: () => { setContainerId(""); onPlaced(); },
-  });
+      {importFeedback}
 
-  return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}
-      style={{ marginTop: "0.75rem", padding: "0.6rem", background: "#fafbfc", border: "1px dashed #d8dae0", borderRadius: 4 }}
-    >
-      <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#555", textTransform: "uppercase", marginBottom: 6 }}>
-        Ranger une boîte existante ici
-      </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <input
-          value={containerId}
-          onChange={(e) => setContainerId(e.target.value)}
-          placeholder="UUID de la boîte (voir ci-contre après création)"
-          required
-          style={{ ...inputStyle, flex: 1, fontFamily: "monospace", fontSize: "0.75rem" }}
-        />
-        <button type="submit" disabled={mutation.isPending || !containerId} style={buttonStyle}>
-          {mutation.isPending ? "…" : "Ranger"}
-        </button>
-      </div>
-      {mutation.isError && <ErrorInline error={mutation.error as Error} />}
-      {mutation.isSuccess && <span style={{ color: "#2e7d32", fontSize: "0.8rem" }}>Boîte rangée ici.</span>}
-    </form>
-  );
-}
-
-function ContainerCreationCard() {
-  const [label, setLabel] = useState("");
-  const [capacity, setCapacity] = useState("");
-  const [created, setCreated] = useState<PhysicalContainerResponse | null>(null);
-
-  const mutation = useMutation({
-    mutationFn: () => createContainer({
-      label: label || undefined,
-      capacity: capacity ? parseInt(capacity, 10) : undefined,
-    }),
-    onSuccess: (c) => { setCreated(c); setLabel(""); setCapacity(""); },
-  });
-
-  return (
-    <aside style={{ background: "white", border: "1px solid #e3e5ea", borderTop: "4px solid #5b7cb3", borderRadius: 6, padding: "1rem", marginTop: "0.75rem" }}>
-      <h2 style={{ marginTop: 0, fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>
-        Créer une nouvelle boîte
-      </h2>
-      <p style={{ margin: "0 0 0.5rem", color: "#666", fontSize: "0.85rem" }}>
-        Le code-barres est généré automatiquement au format <code>BOX-YYMMDD-xxxxxx</code>
-        (Crockford base32, triable chronologiquement, unique par tenant). Imprime-le, colle-le
-        sur la boîte, scanne-le avec la douchette dès que tu veux la retrouver.
-      </p>
-      <form
-        onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}
-        style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
-      >
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="libellé (ex. Marchés publics 2024)"
-          style={{ ...inputStyle, flex: "1 1 220px" }}
-        />
-        <input
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
-          placeholder="capacité (nb max de dossiers)"
-          type="number"
-          min={1}
-          style={{ ...inputStyle, width: 170 }}
-        />
-        <button type="submit" disabled={mutation.isPending} style={buttonStyle}>
-          {mutation.isPending ? "…" : "Créer boîte"}
-        </button>
-      </form>
-      {mutation.isError && <ErrorInline error={mutation.error as Error} />}
-      {created && (
-        <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "#f0f6ef", border: "1px solid #c8e3c0", borderRadius: 4 }}>
-          <div style={{ fontSize: "0.8rem", color: "#555", marginBottom: 4 }}>
-            Boîte créée · code-barres à imprimer sur l&apos;étiquette :
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <code style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1e2d5e", padding: "0.2rem 0.6rem", background: "white", border: "2px solid #1e2d5e", borderRadius: 3, letterSpacing: "0.05em" }}>
-              {created.barcode}
-            </code>
-            <a
-              href={`/magasin/etiquette?barcode=${encodeURIComponent(created.barcode)}&label=${encodeURIComponent(created.label ?? "")}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
-              🖨 Imprimer étiquette
-            </a>
-            <button
-              type="button"
-              onClick={() => navigator.clipboard.writeText(created.barcode)}
-              style={buttonSecondaryStyle}>
-              Copier
-            </button>
-            <button
-              type="button"
-              onClick={() => navigator.clipboard.writeText(created.id)}
-              style={{ ...buttonSecondaryStyle, fontSize: "0.75rem" }}>
-              Copier UUID (pour ranger)
-            </button>
-          </div>
-          <div style={{ marginTop: 6, fontSize: "0.75rem", color: "#888" }}>
-            UUID interne : <code style={{ fontSize: "0.7rem" }}>{created.id}</code>
-          </div>
+      {counts && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+          {KIND_ORDER.map((k) => {
+            const m = KIND_META[k];
+            return (
+              <div key={k} style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "6px 12px 6px 6px",
+                background: "var(--surface-card)", border: "1px solid var(--border-subtle)",
+                borderRadius: "var(--radius-full)", boxShadow: "var(--shadow-sm)",
+              }}>
+                <IconTile name={m.icon} tone={m.tone} size={24} variant="soft" />
+                <span style={{ fontSize: 15, fontWeight: 700 }}>{counts[k]}</span>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                  {counts[k] > 1 ? m.plural : m.label.toLowerCase()}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
-    </aside>
-  );
-}
 
-function BarcodeScanner() {
-  const [scanned, setScanned] = useState("");
-  const [result, setResult] = useState<PhysicalContainerResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const scan = async (barcode: string) => {
-    setResult(null); setError(null);
-    try {
-      const r = await findContainerByBarcode(barcode);
-      setResult(r);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  return (
-    <aside style={{ background: "white", border: "1px solid #e3e5ea", borderTop: "4px solid #a07b00", borderRadius: 6, padding: "1rem", marginTop: "0.75rem" }}>
-      <h2 style={{ marginTop: 0, fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>
-        Scanner un code-barres (douchette)
-      </h2>
-      <p style={{ margin: "0 0 0.5rem", color: "#666", fontSize: "0.85rem" }}>
-        Positionne le curseur dans le champ ci-dessous et scanne avec la douchette.
-        La plupart envoient un <kbd>Entrée</kbd> en fin de lecture — le lookup partira automatiquement.
-      </p>
-      <form
-        onSubmit={(e) => { e.preventDefault(); scan(scanned); }}
-        style={{ display: "flex", gap: 6 }}
-      >
-        <input
-          value={scanned}
-          onChange={(e) => setScanned(e.target.value)}
-          placeholder="ex. BOX-261122-A3F2K9"
-          autoFocus
-          style={{ ...inputStyle, flex: 1, fontFamily: "monospace", fontSize: "0.95rem", letterSpacing: "0.05em" }}
+      <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+        <TopologyTree
+          roots={roots}
+          loading={treeQuery.isLoading}
+          error={treeQuery.isError ? (treeQuery.error as Error) : null}
+          selectedId={selectedId}
+          ancestorIds={ancestorIds}
+          onSelect={select}
+          onCreated={() => treeQuery.refetch()}
         />
-        <button type="submit" style={buttonStyle}>
-          Chercher
-        </button>
-      </form>
-      {error && (
-        <div style={{ marginTop: 8, color: "#a00", fontSize: "0.85rem" }}>
-          {error}
-        </div>
-      )}
-      {result && (
-        <div style={{ marginTop: 8, padding: "0.75rem", background: "#fafbfc", border: "1px solid #d8dae0", borderRadius: 4 }}>
-          <div><strong>Boîte :</strong> <code>{result.barcode}</code></div>
-          {result.label && <div style={{ color: "#555", fontSize: "0.85rem" }}>{result.label}</div>}
-          <div style={{ marginTop: 4, fontSize: "0.85rem" }}>
-            <strong>État :</strong> <span style={{ color: stateColor(result.state), fontWeight: 600 }}>{stateLabel(result.state)}</span>
-            {result.capacity != null && <> · Capacité {result.capacity}</>}
-          </div>
-          {result.positionId ? (
-            <div style={{ marginTop: 4, fontSize: "0.85rem", color: "#555" }}>
-              Rangée à la position UUID <code style={{ fontSize: "0.7rem" }}>{result.positionId}</code>
-            </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          {path ? (
+            <NodePanel
+              key={selectedId}
+              path={path}
+              onSelect={select}
+              onRenamed={refreshTree}
+              onDeleted={() => { refreshTree(); select(null); }}
+              onCreated={() => treeQuery.refetch()}
+            />
           ) : (
-            <div style={{ marginTop: 4, color: "#a07b00", fontSize: "0.85rem" }}>
-              Pas encore positionnée dans la topographie.
-            </div>
+            <Card>
+              <EmptyState
+                icon={<Icons.archiveRoom size={30} />}
+                title="Choisis un emplacement"
+                description="Sélectionne un nœud dans l'arbre pour voir son contenu. Sur une position, les boîtes apparaissent rangées sur la tablette."
+              />
+            </Card>
           )}
-          <a
-            href={`/magasin/etiquette?barcode=${encodeURIComponent(result.barcode)}&label=${encodeURIComponent(result.label ?? "")}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ ...buttonStyle, textDecoration: "none", display: "inline-block", marginTop: 8, fontSize: "0.8rem", padding: "0.3rem 0.7rem" }}>
-            🖨 Réimprimer étiquette
-          </a>
-        </div>
-      )}
-    </aside>
-  );
-}
 
-function EmptyRightPane() {
-  return (
-    <div style={{ background: "white", border: "1px dashed #d8dae0", borderRadius: 6, padding: "2rem", textAlign: "center", color: "#888" }}>
-      <p style={{ margin: 0 }}>Sélectionne un nœud dans l&apos;arbre à gauche pour voir ses détails et y créer des enfants.</p>
-      <p style={{ margin: "0.5rem 0 0", fontSize: "0.85rem" }}>
-        Commence par créer un <strong>SITE</strong> depuis le formulaire tout en bas à gauche,
-        puis descend vers MAGASIN → TRAVÉE → TABLETTE → POSITION.
-      </p>
-    </div>
-  );
-}
-
-function ErrorBanner({ error }: { error: Error }) {
-  return (
-    <div style={{ background: "#fff3f3", border: "1px solid #ffbaba", padding: "0.5rem 0.75rem", borderRadius: 4, color: "#a00", marginTop: 4, fontSize: "0.85rem" }}>
-      {error.message}
-    </div>
-  );
-}
-
-function ErrorInline({ error }: { error: Error }) {
-  return <span style={{ color: "#a00", fontSize: "0.8rem", marginLeft: 8 }}>{error.message}</span>;
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: "0.35rem 0.55rem",
-  border: "1px solid #c8cbd4",
-  borderRadius: 3,
-  fontSize: "0.85rem",
-  fontFamily: "inherit",
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: "0.35rem 0.85rem",
-  background: "#1e2d5e",
-  color: "white",
-  border: "none",
-  borderRadius: 3,
-  fontSize: "0.85rem",
-  fontWeight: 500,
-};
-
-const buttonSecondaryStyle: React.CSSProperties = {
-  ...buttonStyle,
-  background: "white",
-  color: "#1e2d5e",
-  border: "1px solid #1e2d5e",
-};
-
-const buttonDangerStyle: React.CSSProperties = {
-  ...buttonStyle,
-  background: "#b71c1c",
-};
-
-function stateLabel(s: ContainerState): string {
-  return s === "EMPTY" ? "Vide" : s === "OPEN" ? "Ouverte" : s === "SEALED" ? "Scellée" : "Détruite";
-}
-function stateColor(s: ContainerState): string {
-  return s === "EMPTY" ? "#5b7cb3" : s === "OPEN" ? "#2e7d32" : s === "SEALED" ? "#a07b00" : "#b71c1c";
-}
-
-function ImportTopographyBar({ onImported }: { onImported: () => void }) {
-  const [report, setReport] = useState<ImportTopographyReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-
-  async function handleDownload() {
-    setDownloading(true);
-    try { await downloadTopographyTemplate(); }
-    catch (e) { setError((e as Error).message); }
-    finally { setDownloading(false); }
-  }
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true); setError(null); setReport(null);
-    try {
-      const r = await importTopographyExcel(file);
-      setReport(r);
-      onImported();
-    } catch (err) { setError((err as Error).message); }
-    finally {
-      setUploading(false);
-      e.target.value = ""; // reset input
-    }
-  }
-
-  return (
-    <section style={{
-      background: "white", border: "1px solid #e3e5ea", borderLeft: "4px solid #2e7d32",
-      borderRadius: 6, padding: "0.75rem 1rem", marginBottom: "1rem",
-      display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-    }}>
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#333" }}>
-          Import en masse (phase 5I)
-        </div>
-        <div style={{ fontSize: "0.8rem", color: "#666" }}>
-          Télécharge le modèle, remplis-le dans Excel, puis uploade-le ici — SITE/MAGASIN/TRAVÉE/TABLETTE/POSITION créés en 1 transaction.
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 20 }}>
+            <ContainerCreationCard />
+            <BarcodeScanner ref={scannerRef} onLocate={(positionId) => { select(positionId); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+          </div>
         </div>
       </div>
-      <button type="button" onClick={handleDownload} disabled={downloading} style={{
-        padding: "0.4rem 0.9rem", background: "white", color: "#1e2d5e",
-        border: "1px solid #1e2d5e", borderRadius: 3, fontSize: "0.85rem", cursor: "pointer",
-      }}>
-        {downloading ? "…" : "📥 Modèle .xlsx"}
-      </button>
-      <label style={{
-        padding: "0.4rem 0.9rem", background: "#2e7d32", color: "white",
-        borderRadius: 3, fontSize: "0.85rem", cursor: uploading ? "wait" : "pointer", fontWeight: 600,
-      }}>
-        {uploading ? "⏳ Import…" : "📤 Uploader .xlsx"}
-        <input type="file" accept=".xlsx" onChange={handleUpload} disabled={uploading} style={{ display: "none" }} />
-      </label>
-      {report && (
-        <div style={{
-          flexBasis: "100%", marginTop: 8,
-          background: report.errors.length ? "#fff8e1" : "#e8f5e9",
-          border: `1px solid ${report.errors.length ? "#ffb300" : "#2e7d32"}`,
-          borderRadius: 4, padding: "0.5rem 0.75rem", fontSize: "0.85rem",
-        }}>
-          <strong>Résultat :</strong> {report.created} créés, {report.skippedExisting} ignorés (déjà présents)
-          {report.errors.length > 0 && (
-            <>
-              , <span style={{ color: "#a00" }}>{report.errors.length} erreur{report.errors.length > 1 ? "s" : ""}</span>
-              <ul style={{ margin: "0.3rem 0 0 1.2rem", fontSize: "0.8rem" }}>
-                {report.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
-                {report.errors.length > 5 && <li>… et {report.errors.length - 5} autres</li>}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-      {error && (
-        <div style={{ flexBasis: "100%", color: "#a00", fontSize: "0.85rem", marginTop: 6 }}>{error}</div>
-      )}
     </section>
   );
 }

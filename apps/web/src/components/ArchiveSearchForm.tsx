@@ -1,12 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  IconTile,
+  Input,
+  Select,
+} from "@/components/ui";
 import { getCurrentRole, masterSearch, type MasterSearchResult } from "@/lib/api";
+import { Icons } from "@/lib/icons";
 
 const TYPOLOGIES = [
-  { value: "", label: "— Toutes typologies —" },
+  { value: "", label: "Toutes typologies" },
   { value: "RH", label: "Dossier RH / Contrat RH" },
-  { value: "DMG", label: "Marché public / Direction moyens généraux" },
+  { value: "DMG", label: "Marché public / Moyens généraux" },
   { value: "FIN", label: "Dossier financier" },
   { value: "FACT", label: "Facture fournisseur" },
   { value: "EC", label: "Acte d'état civil" },
@@ -16,8 +28,7 @@ const TYPOLOGIES = [
 
 /**
  * Formulaire de recherche métier (pattern 08).
- * Remplace le scan barcode pour les REQUESTER : le user cherche par critères,
- * le système fait le matching avec la boîte physique en coulisse.
+ * Le demandeur cherche par critères ; le code-barres n'est jamais affiché côté REQUESTER.
  */
 export default function ArchiveSearchForm({
   onSelect,
@@ -32,13 +43,17 @@ export default function ArchiveSearchForm({
   const [results, setResults] = useState<MasterSearchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const role = typeof window !== "undefined" ? getCurrentRole() : "REQUESTER";
-  const isArchivist = role === "ARCHIVIST" || role === "ARCHIVES_HEAD";
+  const [isArchivist, setIsArchivist] = useState(false);
+
+  useEffect(() => {
+    const role = getCurrentRole();
+    setIsArchivist(role === "ARCHIVIST" || role === "ARCHIVES_HEAD");
+  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!freeText && !service && !typologie && !dateFrom && !dateTo) {
-      setError("Au moins un critère de recherche est requis");
+      setError("Renseigne au moins un critère de recherche.");
       return;
     }
     setLoading(true); setError(null); setResults(null);
@@ -60,118 +75,112 @@ export default function ArchiveSearchForm({
 
   return (
     <div>
-      <form onSubmit={handleSearch} style={{ background: "#f8f9fb", padding: "1rem", borderRadius: 6, marginBottom: "1rem" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <div>
-            <label style={labelStyle}>Recherche libre</label>
-            <input value={freeText} onChange={(e) => setFreeText(e.target.value)}
-              placeholder="Nom, mots-clés, numéro…" style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Service producteur</label>
-            <input value={service} onChange={(e) => setService(e.target.value)}
-              placeholder="DRH, Juridique, Finances…" style={inputStyle} />
-          </div>
+      <form onSubmit={handleSearch} style={{
+        padding: "18px 18px 2px",
+        background: "var(--surface-sunken)",
+        border: "1px solid var(--border-subtle)",
+        borderRadius: "var(--radius-md)",
+      }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 12 }}>
+          <Field label="Recherche libre">
+            <div style={{ position: "relative" }}>
+              <Icons.search size={16} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }} />
+              <Input value={freeText} onChange={(e) => setFreeText(e.target.value)}
+                placeholder="Nom, mots-clés, numéro…" style={{ paddingLeft: 34 }} />
+            </div>
+          </Field>
+          <Field label="Service producteur">
+            <Input value={service} onChange={(e) => setService(e.target.value)} placeholder="DRH, Juridique, Finances…" />
+          </Field>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <div>
-            <label style={labelStyle}>Typologie</label>
-            <select value={typologie} onChange={(e) => setTypologie(e.target.value)} style={inputStyle}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto", gap: 12, alignItems: "end" }}>
+          <Field label="Typologie">
+            <Select value={typologie} onChange={(e) => setTypologie(e.target.value)}>
               {TYPOLOGIES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Période du</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>au</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={inputStyle} />
+            </Select>
+          </Field>
+          <Field label="Période du">
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </Field>
+          <Field label="au">
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </Field>
+          <div style={{ marginBottom: 16 }}>
+            <Button type="submit" loading={loading} icon={<Icons.search size={16} weight="bold" />} style={{ height: 38 }}>
+              Rechercher
+            </Button>
           </div>
         </div>
-        <button type="submit" disabled={loading} style={{
-          padding: "0.5rem 1.25rem", background: "#1e2d5e", color: "white",
-          border: "none", borderRadius: 3, fontWeight: 600, cursor: loading ? "wait" : "pointer",
-        }}>
-          {loading ? "⏳ Recherche…" : "🔍 Rechercher"}
-        </button>
-        {error && <div style={{ color: "#a00", fontSize: "0.85rem", marginTop: 8 }}>{error}</div>}
       </form>
 
+      {error && <div style={{ marginTop: 16 }}><Alert tone="danger" title="Recherche impossible">{error}</Alert></div>}
+
       {results && (
-        <div>
-          <h3 style={{ fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555", marginBottom: 8 }}>
-            {results.length} résultat{results.length > 1 ? "s" : ""}
-          </h3>
-          {results.length === 0 && (
-            <p style={{ color: "#999", padding: "1rem", background: "white", border: "1px dashed #ccc", borderRadius: 4 }}>
-              Aucun dossier ne correspond à ces critères.
-            </p>
-          )}
-          {results.length > 0 && (
-            <div style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, overflow: "hidden" }}>
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 10px" }}>
+            <h3>Résultats</h3>
+            <Badge tone={results.length > 0 ? "brand" : "neutral"}>{results.length}</Badge>
+          </div>
+          {results.length === 0 ? (
+            <EmptyState icon={<Icons.search size={28} />} title="Aucun dossier trouvé"
+              description="Élargis la période ou retire un critère." />
+          ) : (
+            <Card padding={0} style={{ overflow: "hidden" }}>
               <table>
-                <thead><tr>
-                  <th>Dossier</th><th>Service</th><th>Période</th><th>Disponibilité</th><th />
-                </tr></thead>
+                <thead>
+                  <tr><th>Dossier</th><th>Service</th><th>Période</th><th>Disponibilité</th><th /></tr>
+                </thead>
                 <tbody>
                   {results.map((r) => (
                     <tr key={r.cote}>
                       <td>
-                        <div style={{ fontWeight: 500 }}>{r.title}</div>
-                        <div style={{ fontSize: "0.75rem", color: "#999" }}>
-                          {r.classificationPath ?? r.cote}
-                          {isArchivist && r.containerBarcode && (
-                            <> · <code style={{ fontSize: "0.9em" }}>{r.containerBarcode}</code></>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <IconTile name="record" tone="kraft" size={32} variant="soft" />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600 }}>{r.title}</div>
+                            <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                              {r.classificationPath ?? r.cote}
+                              {isArchivist && r.containerBarcode && <> · <code>{r.containerBarcode}</code></>}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ color: "var(--text-secondary)" }}>{r.service ?? "—"}</td>
+                      <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatPeriod(r)}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {r.availableInPhysical
+                            ? <Badge tone="success" icon={<Icons.box size={12} weight="bold" />}>En magasin</Badge>
+                            : <Badge tone="neutral" icon={<Icons.document size={12} weight="bold" />}>Numérique seul</Badge>}
+                          {r.communicable === false && (
+                            <Badge tone="danger" icon={<Icons.locked size={12} weight="bold" />}>Restreint</Badge>
                           )}
                         </div>
                       </td>
-                      <td style={{ fontSize: "0.85rem" }}>{r.service ?? "—"}</td>
-                      <td style={{ fontSize: "0.85rem" }}>
-                        {r.dateStart && r.dateEnd
-                          ? `${r.dateStart.substring(0, 4)} – ${r.dateEnd.substring(0, 4)}`
-                          : r.dateStart?.substring(0, 4) ?? "—"}
-                      </td>
-                      <td>
-                        {r.availableInPhysical ? (
-                          <span style={{ color: "#2e7d32", fontSize: "0.85rem", fontWeight: 500 }}>📦 En magasin</span>
-                        ) : (
-                          <span style={{ color: "#999", fontSize: "0.85rem" }}>Numérique seul</span>
-                        )}
-                        {r.communicable === false && (
-                          <span style={{ color: "#b71c1c", fontSize: "0.75rem", marginLeft: 6 }}>⚠ restreint</span>
-                        )}
-                      </td>
                       <td style={{ textAlign: "right" }}>
-                        <button type="button" onClick={() => onSelect(r)}
+                        <Button size="sm" variant={r.availableInPhysical ? "primary" : "secondary"}
                           disabled={!r.availableInPhysical}
-                          title={!r.availableInPhysical ? "Pas de boîte physique associée" : ""}
-                          style={{
-                            padding: "0.3rem 0.8rem",
-                            background: r.availableInPhysical ? "#1e2d5e" : "#ccc",
-                            color: "white", border: "none", borderRadius: 3,
-                            cursor: r.availableInPhysical ? "pointer" : "not-allowed",
-                            fontSize: "0.8rem", fontWeight: 600,
-                          }}>
-                          Demander →
-                        </button>
+                          title={!r.availableInPhysical ? "Pas de boîte physique associée" : undefined}
+                          onClick={() => onSelect(r)}
+                          iconRight={<Icons.next size={12} weight="bold" />}>
+                          Demander
+                        </Button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )}
-        </div>
+        </>
       )}
     </div>
   );
 }
 
-const labelStyle: React.CSSProperties = {
-  display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#333", marginBottom: 3,
-};
-const inputStyle: React.CSSProperties = {
-  padding: "0.4rem 0.6rem", border: "1px solid #c8cbd4", borderRadius: 3,
-  fontSize: "0.9rem", fontFamily: "inherit", width: "100%", boxSizing: "border-box",
-};
+function formatPeriod(r: MasterSearchResult): string {
+  const start = r.dateStart?.substring(0, 4);
+  const end = r.dateEnd?.substring(0, 4);
+  if (start && end) return start === end ? start : `${start} – ${end}`;
+  return start ?? "—";
+}

@@ -3,9 +3,27 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-import { getConsolidatedRecord, type MasterStatus } from "@/lib/api";
-import { formatInstant, statusColor, statusLabel } from "@/lib/format";
+import { Suspense, type ReactNode } from "react";
+import { ArchiveBoxIso } from "@/components/illustrations/ArchiveBoxIso";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  IconTile,
+  PageHeader,
+  StatusBadge,
+} from "@/components/ui";
+import {
+  getConsolidatedRecord,
+  type ConsolidatedRecordResponse,
+  type MasterStatus,
+  type RecordResponse,
+} from "@/lib/api";
+import { formatInstant } from "@/lib/format";
+import { Icons } from "@/lib/icons";
+import { ARCHIVE_STATUS } from "../_components/archiveStatus";
 
 /**
  * useSearchParams() doit être wrappé dans un boundary Suspense en Next 15 pour
@@ -13,7 +31,7 @@ import { formatInstant, statusColor, statusLabel } from "@/lib/format";
  */
 export default function RecordDetailPage() {
   return (
-    <Suspense fallback={<p>Chargement…</p>}>
+    <Suspense fallback={<p style={{ color: "var(--text-tertiary)" }}>Chargement…</p>}>
       <RecordDetail />
     </Suspense>
   );
@@ -29,179 +47,170 @@ function RecordDetail() {
     queryFn: () => getConsolidatedRecord(cote),
   });
 
+  const crumbs = [{ label: "Accueil", href: "/" }, { label: "Archives", href: "/records" }, { label: cote || "—" }];
+
   if (!cote) {
-    return <p>Aucune cote fournie. <Link href="/records">← Retour à la liste</Link></p>;
+    return (
+      <section className="fade-up">
+        <PageHeader icon="record" tone="brand" title="Fiche d'archive" crumbs={crumbs} />
+        <Card>
+          <EmptyState icon={<Icons.record size={32} />} title="Aucune cote fournie"
+            action={<Link href="/records"><Button variant="secondary">Retour à la liste</Button></Link>} />
+        </Card>
+      </section>
+    );
   }
 
   return (
-    <section>
-      <Link href="/records">← Retour à la liste</Link>
-      <h1 style={{ margin: "0.5rem 0 0.25rem" }}>
-        <code style={{ fontSize: "1.3rem" }}>{cote}</code>
-      </h1>
+    <section className="fade-up">
+      <PageHeader
+        icon="record"
+        tone="brand"
+        title={<span style={{ fontFamily: "var(--font-mono)", letterSpacing: 0 }}>{cote}</span>}
+        subtitle="Une seule archive, deux gardiens : le physique chez JokkoRM, le numérique chez la GED maître."
+        crumbs={crumbs}
+        actions={
+          <Link href="/records">
+            <Button variant="secondary" icon={<Icons.returned size={16} />}>Retour à la liste</Button>
+          </Link>
+        }
+      />
 
-      {query.isLoading && <p>Chargement…</p>}
+      {query.isLoading && (
+        <Card><div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Chargement de la fiche…</div></Card>
+      )}
       {query.isError && (
-        <div style={{ background: "#fff3f3", border: "1px solid #ffbaba", padding: "0.75rem 1rem", borderRadius: 4, marginTop: "1rem", color: "#a00" }}>
-          <strong>Erreur :</strong> {(query.error as Error).message}
-        </div>
+        <Alert tone="danger" title="Fiche introuvable">{(query.error as Error).message}</Alert>
       )}
 
       {query.data && (
         <>
-          <PhysicalPanel data={query.data.local} />
-          <MasterPanel data={query.data.master} />
-          <HybridExplanation />
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 16, alignItems: "stretch" }}>
+            <PhysicalPanel data={query.data.local} />
+            <MasterPanel data={query.data.master} />
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <Alert tone="info" title="Pattern « une seule archive, deux gardiens »">
+              Chaque dossier a deux supports et deux responsables : le physique est détenu par JokkoRM,
+              le numérique par la GED/SAE maître.{" "}
+              <a href="https://github.com/cheikhounagueye/jokkorm/tree/main/docs/pattern"
+                target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>Lire la spécification</a>.
+            </Alert>
+          </div>
         </>
       )}
     </section>
   );
 }
 
-function PhysicalPanel({ data }: { data: import("@/lib/api").RecordResponse }) {
+function PanelHeader({ icon, tone, title, owner }: {
+  icon: Parameters<typeof IconTile>[0]["name"];
+  tone: Parameters<typeof IconTile>[0]["tone"];
+  title: string;
+  owner: string;
+}) {
   return (
-    <section style={{
-      background: "white",
-      border: "1px solid #e3e5ea",
-      borderTop: "4px solid #2e7d32",
-      borderRadius: 6,
-      padding: "1.25rem",
-      marginTop: "1rem",
-    }}>
-      <h2 style={{ marginTop: 0, fontSize: "1rem", color: "#2e7d32", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-        Partie physique · détenue par JokkoRM
-      </h2>
-      <dl style={{ display: "grid", gridTemplateColumns: "180px 1fr", rowGap: "0.75rem", margin: 0 }}>
-        <dt style={{ color: "#666" }}>Identifiant interne</dt>
-        <dd style={{ margin: 0 }}><code>{data.id}</code></dd>
-
-        <dt style={{ color: "#666" }}>Statut</dt>
-        <dd style={{ margin: 0 }}>
-          <span style={{
-            display: "inline-block",
-            padding: "0.3rem 0.75rem",
-            borderRadius: 4,
-            background: statusColor(data.status) + "22",
-            color: statusColor(data.status),
-            fontWeight: 600,
-          }}>
-            {statusLabel(data.status)}
-          </span>
-        </dd>
-
-        <dt style={{ color: "#666" }}>Enregistrée le</dt>
-        <dd style={{ margin: 0 }}>{formatInstant(data.registeredAt)}</dd>
-
-        <dt style={{ color: "#666" }}>Dernière transition</dt>
-        <dd style={{ margin: 0 }}>{formatInstant(data.lastTransitionAt)}</dd>
-      </dl>
-    </section>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+      <IconTile name={icon} tone={tone} size={40} />
+      <div>
+        <h2>{title}</h2>
+        <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{owner}</div>
+      </div>
+    </div>
   );
 }
 
-function MasterPanel({ data }: { data: import("@/lib/api").ConsolidatedRecordResponse["master"] }) {
-  const status = data.status;
+function InfoRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 12, padding: "10px 0", borderTop: "1px solid var(--border-subtle)", alignItems: "center" }}>
+      <dt style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</dt>
+      <dd style={{ margin: 0, fontSize: 14, color: "var(--text-primary)", minWidth: 0 }}>{children}</dd>
+    </div>
+  );
+}
 
-  if (status !== "AVAILABLE") {
+function PhysicalPanel({ data }: { data: RecordResponse }) {
+  const meta = ARCHIVE_STATUS[data.status];
+  const finish = data.status === "DESTROYED" ? "destroyed" : data.status === "FROZEN" ? "sealed" : data.containerId ? "kraft" : "empty";
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <PanelHeader icon="box" tone="kraft" title="Partie physique" owner="Détenue par JokkoRM" />
+        <ArchiveBoxIso size={72} finish={finish} title={meta.label} />
+      </div>
+      <dl style={{ margin: 0 }}>
+        <InfoRow label="Statut"><StatusBadge meta={meta} /></InfoRow>
+        <InfoRow label="Rangement">
+          {data.containerId
+            ? <Badge tone="brand" icon={<Icons.box size={12} weight="bold" />}>Dans une boîte</Badge>
+            : <span style={{ color: "var(--text-tertiary)" }}>Pas encore rangée</span>}
+        </InfoRow>
+        <InfoRow label="Enregistrée le">{formatInstant(data.registeredAt)}</InfoRow>
+        <InfoRow label="Dernière transition">{formatInstant(data.lastTransitionAt)}</InfoRow>
+        <InfoRow label="Identifiant"><code style={{ fontSize: 12, wordBreak: "break-all" }}>{data.id}</code></InfoRow>
+      </dl>
+    </Card>
+  );
+}
+
+function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
+  if (data.status !== "AVAILABLE") {
     return (
-      <section style={{
-        background: "#fffbea",
-        border: "1px solid #f0d26c",
-        borderTop: "4px solid #a07b00",
-        borderRadius: 6,
-        padding: "1.25rem",
-        marginTop: "1rem",
-      }}>
-        <h2 style={{ marginTop: 0, fontSize: "1rem", color: "#7a5c00", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-          Partie numérique · détenue par la GED maître
-        </h2>
-        <p style={{ margin: 0 }}>
-          <MasterStatusBanner status={status} />
+      <Card>
+        <PanelHeader icon="cloudUpload" tone="slate" title="Partie numérique" owner="Détenue par la GED maître" />
+        <MasterStatusBanner status={data.status} />
+        <p style={{ marginTop: 14, color: "var(--text-secondary)", fontSize: 13 }}>
+          Titre, plan de classement, DUA, sort final et gel contentieux sont <strong>détenus par la
+          GED/SAE maître</strong>. La partie physique reste valide et utilisable seule.
         </p>
-        <p style={{ margin: "0.5rem 0 0", color: "#666", fontSize: "0.9rem" }}>
-          Titre, plan de classement, DUA, sort final et gel contentieux sont{" "}
-          <strong>détenus par la GED/SAE maître</strong> (pattern 2 gardiens). La vue physique
-          ci-dessus reste valide et utilisable seule.
-        </p>
-      </section>
+      </Card>
     );
   }
 
   return (
-    <section style={{
-      background: "white",
-      border: "1px solid #e3e5ea",
-      borderTop: "4px solid #1e2d5e",
-      borderRadius: 6,
-      padding: "1.25rem",
-      marginTop: "1rem",
-    }}>
-      <h2 style={{ marginTop: 0, fontSize: "1rem", color: "#1e2d5e", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-        Partie numérique · détenue par la GED maître
-      </h2>
-      <dl style={{ display: "grid", gridTemplateColumns: "180px 1fr", rowGap: "0.75rem", margin: 0 }}>
-        {data.title && (<>
-          <dt style={{ color: "#666" }}>Titre</dt>
-          <dd style={{ margin: 0 }}>{data.title}</dd>
-        </>)}
-        {data.classificationPath && (<>
-          <dt style={{ color: "#666" }}>Plan de classement</dt>
-          <dd style={{ margin: 0 }}><code>{data.classificationPath}</code></dd>
-        </>)}
-        {data.duaYears != null && (<>
-          <dt style={{ color: "#666" }}>DUA</dt>
-          <dd style={{ margin: 0 }}>{data.duaYears} an{data.duaYears > 1 ? "s" : ""}</dd>
-        </>)}
-        {data.finalFate && (<>
-          <dt style={{ color: "#666" }}>Sort final</dt>
-          <dd style={{ margin: 0 }}>{data.finalFate}</dd>
-        </>)}
-        <dt style={{ color: "#666" }}>Gel contentieux</dt>
-        <dd style={{ margin: 0 }}>
+    <Card>
+      <PanelHeader icon="cloudUpload" tone="brand" title="Partie numérique" owner="Détenue par la GED maître (Maarch RM)" />
+      <dl style={{ margin: 0 }}>
+        {data.title && <InfoRow label="Titre"><span style={{ fontWeight: 600 }}>{data.title}</span></InfoRow>}
+        {data.classificationPath && (
+          <InfoRow label="Plan de classement">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icons.topology size={14} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
+              <code style={{ fontSize: 12 }}>{data.classificationPath}</code>
+            </span>
+          </InfoRow>
+        )}
+        {data.duaYears != null && (
+          <InfoRow label="DUA">
+            <Badge tone="info" icon={<Icons.pending size={12} weight="bold" />}>
+              {data.duaYears} an{data.duaYears > 1 ? "s" : ""}
+            </Badge>
+          </InfoRow>
+        )}
+        {data.finalFate && <InfoRow label="Sort final">{data.finalFate}</InfoRow>}
+        <InfoRow label="Gel contentieux">
           {data.legalHold
-            ? <span style={{ color: "#b71c1c", fontWeight: 600 }}>Actif — toute sortie bloquée</span>
-            : <span style={{ color: "#2e7d32" }}>Non</span>}
-        </dd>
+            ? <Badge tone="danger" icon={<Icons.locked size={12} weight="bold" />}>Actif · sortie bloquée</Badge>
+            : <Badge tone="success" icon={<Icons.success size={12} weight="bold" />}>Aucun</Badge>}
+        </InfoRow>
       </dl>
-    </section>
+    </Card>
   );
 }
 
 function MasterStatusBanner({ status }: { status: MasterStatus }) {
   if (status === "UNAVAILABLE") {
     return (
-      <>
-        <strong>Information maître indisponible.</strong> Soit la cote n&apos;existe pas (encore)
-        côté GED maître, soit le déploiement est en mode <em>standalone</em> (sans maître
-        branché — adapter <code>noop</code>).
-      </>
+      <Alert tone="warning" title="Information maître indisponible">
+        Soit la cote n&apos;existe pas (encore) côté GED maître, soit le déploiement est en mode
+        {" "}<em>standalone</em> (adapter <code>noop</code>).
+      </Alert>
     );
   }
-  // UNREACHABLE
   return (
-    <>
-      <strong>GED maître injoignable.</strong> Erreur réseau, timeout ou authentification —
-      les détails sont dans les logs backend. Réessayer dans quelques instants.
-    </>
-  );
-}
-
-function HybridExplanation() {
-  return (
-    <aside style={{
-      marginTop: "1rem",
-      padding: "0.75rem 1rem",
-      background: "#f0f2f8",
-      border: "1px solid #d4daee",
-      borderRadius: 4,
-      fontSize: "0.85rem",
-      color: "#555",
-    }}>
-      Pattern <strong>« une seule archive, deux gardiens »</strong> — chaque dossier a deux
-      supports et deux responsables. Le physique est détenu par JokkoRM, le numérique par la
-      GED/SAE maître.{" "}
-      <a href="https://github.com/cheikhounagueye/jokkorm/tree/main/docs/pattern"
-         target="_blank" rel="noreferrer">Lire la spec complète.</a>
-    </aside>
+    <Alert tone="danger" title="GED maître injoignable">
+      Erreur réseau, délai dépassé ou authentification : détails dans les logs backend.
+      Réessayer dans quelques instants.
+    </Alert>
   );
 }

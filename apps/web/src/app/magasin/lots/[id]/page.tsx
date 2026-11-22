@@ -4,31 +4,45 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { downloadBatchLabelsPdf, getBatchHealth, type BatchStatus } from "@/lib/api";
+import { ArchiveBoxIso, type BoxFinish } from "@/components/illustrations/ArchiveBoxIso";
+import {
+  Alert,
+  BATCH_STATUS,
+  Button,
+  CONTAINER_STATE,
+  Card,
+  CardHeader,
+  PageHeader,
+  Segmented,
+  StatusBadge,
+} from "@/components/ui";
+import { downloadBatchLabelsPdf, getBatchHealth } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
+import { Icons } from "@/lib/icons";
+import { BoxPile } from "../_components/BoxPile";
+import { AVERY_TEMPLATES, SheetPreview, type AveryTemplate } from "../_components/LabelSheet";
 
-const STATUS_LABEL: Record<BatchStatus, string> = {
-  CREATED: "Créé",
-  PRINTED: "Imprimé",
-  FULLY_DEPLOYED: "Déployé",
-  ARCHIVED: "Archivé",
-};
+type Symbology = "CODE128" | "QR";
 
-const STATUS_COLOR: Record<BatchStatus, string> = {
-  CREATED: "#5b7cb3",
-  PRINTED: "#a07b00",
-  FULLY_DEPLOYED: "#2e7d32",
-  ARCHIVED: "#777",
-};
+const CRUMBS_BASE = [
+  { label: "Salle d'archives", href: "/magasin" },
+  { label: "Lots de boîtes", href: "/magasin/lots" },
+];
 
 export default function LotDetailPage() {
   const params = useParams<{ id: string }>();
   const batchId = params.id;
 
-  const [template, setTemplate] = useState<"AVERY_L7160" | "AVERY_L7159" | "AVERY_L7169">("AVERY_L7160");
-  const [symbology, setSymbology] = useState<"CODE128" | "QR">("CODE128");
+  const [template, setTemplate] = useState<AveryTemplate>("AVERY_L7160");
+  const [symbology, setSymbology] = useState<Symbology>("CODE128");
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const query = useQuery({
+    queryKey: ["batch-health", batchId],
+    queryFn: () => getBatchHealth(batchId),
+    refetchInterval: 15_000,
+  });
 
   async function handleDownload() {
     setDownloading(true);
@@ -44,136 +58,163 @@ export default function LotDetailPage() {
     }
   }
 
-  const query = useQuery({
-    queryKey: ["batch-health", batchId],
-    queryFn: () => getBatchHealth(batchId),
-    refetchInterval: 15_000,
-  });
-
-  if (query.isLoading) return <p>Chargement…</p>;
-  if (query.isError) return (
-    <div>
-      <Link href="/magasin/lots">← Retour aux lots</Link>
-      <p style={{ color: "#a00", marginTop: "1rem" }}>{(query.error as Error).message}</p>
-    </div>
-  );
-  if (!query.data) return null;
+  if (query.isLoading || query.isError || !query.data) {
+    return (
+      <section>
+        <PageHeader icon="batches" tone="kraft" title="Lot de boîtes" crumbs={[...CRUMBS_BASE, { label: "Lot" }]} />
+        {query.isError ? (
+          <Alert tone="danger" title="Lot introuvable"
+            action={<Link href="/magasin/lots"><Button variant="secondary" size="sm">Retour aux lots</Button></Link>}>
+            {(query.error as Error).message}
+          </Alert>
+        ) : (
+          <Card><p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Chargement du lot…</p></Card>
+        )}
+      </section>
+    );
+  }
 
   const h = query.data;
   const b = h.batch;
+  const t = AVERY_TEMPLATES[template];
+  const pages = Math.ceil(b.size / t.perPage);
+  const done = h.deploymentPercent === 100;
+
+  const states: { key: string; label: string; value: number; finish: BoxFinish; color: string }[] = [
+    { key: "transit", label: "En transit", value: h.inTransit, finish: "stale", color: "var(--warning-500)" },
+    { key: "empty", label: "Vides rangées", value: h.storedEmpty, finish: "empty", color: toneColor(CONTAINER_STATE.EMPTY.tone) },
+    { key: "open", label: "Ouvertes", value: h.open, finish: "kraft", color: toneColor(CONTAINER_STATE.OPEN.tone) },
+    { key: "sealed", label: "Scellées", value: h.sealed, finish: "sealed", color: toneColor(CONTAINER_STATE.SEALED.tone) },
+    { key: "destroyed", label: "Détruites", value: h.destroyed, finish: "destroyed", color: toneColor(CONTAINER_STATE.DESTROYED.tone) },
+  ];
 
   return (
-    <section>
-      <Link href="/magasin/lots">← Retour aux lots</Link>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: "0.5rem", marginBottom: "1rem" }}>
-        <div>
-          <h1 style={{ margin: "0 0 0.25rem" }}>{b.reference}</h1>
-          <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-            <strong>{b.size}</strong> boîte{b.size > 1 ? "s" : ""} · créé le {formatInstant(b.createdAt)} par <code>{b.createdBy}</code>
-          </p>
-        </div>
-        <span style={{
-          display: "inline-block", padding: "0.3rem 0.75rem", borderRadius: 4,
-          background: STATUS_COLOR[b.status] + "22", color: STATUS_COLOR[b.status], fontWeight: 600,
-        }}>
-          {STATUS_LABEL[b.status]}
-        </span>
-      </header>
+    <section className="fade-up">
+      <PageHeader
+        icon="batches"
+        tone="kraft"
+        title={b.reference}
+        subtitle={<>{b.size} boîte{b.size > 1 ? "s" : ""} · créé le {formatInstant(b.createdAt)} par <code>{b.createdBy}</code></>}
+        crumbs={[...CRUMBS_BASE, { label: b.reference }]}
+        actions={<StatusBadge meta={BATCH_STATUS[b.status]} />}
+      />
 
-      {/* Progress bar */}
-      <section style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, padding: "1.25rem", marginBottom: "0.75rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: "0.85rem", color: "#555" }}>
-          <span>Déploiement : <strong>{h.deployed}/{h.total}</strong> boîtes rangées</span>
-          <span style={{ fontWeight: 600 }}>{h.deploymentPercent}%</span>
+      {/* Déploiement */}
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 32, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 360px", minWidth: 0 }}>
+            <CardHeader
+              title="Déploiement en magasin"
+              subtitle={<><strong style={{ color: "var(--text-primary)" }}>{h.deployed}</strong> sur {h.total} boîtes rangées à une position</>}
+              action={
+                <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em", color: done ? "var(--success-500)" : "var(--brand-500)" }}>
+                  {h.deploymentPercent}%
+                </span>
+              }
+            />
+            <div role="progressbar" aria-valuenow={h.deploymentPercent} aria-valuemin={0} aria-valuemax={100}
+              style={{ height: 10, background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+              <div style={{
+                width: `${h.deploymentPercent}%`, height: "100%",
+                background: done ? "var(--success-500)" : "linear-gradient(90deg, var(--brand-300), var(--brand-500))",
+                borderRadius: "var(--radius-full)",
+                transition: "width 300ms ease",
+              }} />
+            </div>
+            {h.inTransit > 0 && (
+              <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <Icons.warning size={14} style={{ color: "var(--warning-500)" }} />
+                {h.inTransit} boîte{h.inTransit > 1 ? "s" : ""} encore en zone tampon : scanne-les à leur position pour les ranger.
+              </p>
+            )}
+          </div>
+          <div style={{ flex: "0 1 auto" }}>
+            <BoxPile
+              count={h.total}
+              max={24}
+              perRow={8}
+              size={34}
+              finishAt={(i) => (i < h.deployed ? "kraft" : "stale")}
+            />
+          </div>
         </div>
-        <div style={{ width: "100%", height: 10, background: "#eef0f5", borderRadius: 5, overflow: "hidden" }}>
-          <div style={{
-            width: `${h.deploymentPercent}%`, height: "100%",
-            background: h.deploymentPercent === 100 ? "#2e7d32" : "#1e2d5e",
-            transition: "width 0.3s",
-          }} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginTop: "1rem" }}>
-          <StatCard label="En transit" value={h.inTransit} color="#a07b00" />
-          <StatCard label="Vides rangées" value={h.storedEmpty} color="#5b7cb3" />
-          <StatCard label="Ouvertes" value={h.open} color="#2e7d32" />
-          <StatCard label="Scellées" value={h.sealed} color="#a07b00" />
-          <StatCard label="Détruites" value={h.destroyed} color="#b71c1c" />
-        </div>
-      </section>
+      </Card>
 
-      {/* Impression PDF */}
-      <section style={{ background: "white", border: "1px solid #e3e5ea", borderTop: "4px solid #1e2d5e", borderRadius: 6, padding: "1.25rem" }}>
-        <h2 style={{ marginTop: 0, fontSize: "1rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>
-          Imprimer les étiquettes (PDF A4)
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: "0.75rem" }}>
-          <div>
-            <div style={{ fontSize: "0.8rem", color: "#666", marginBottom: 3 }}>Template Avery</div>
-            <select value={template} onChange={(e) => setTemplate(e.target.value as typeof template)} style={inputStyle}>
-              <option value="AVERY_L7160">L7160 · 21 étiq/A4 (63.5 × 38.1 mm)</option>
-              <option value="AVERY_L7159">L7159 · 24 étiq/A4 (63.5 × 33.9 mm)</option>
-              <option value="AVERY_L7169">L7169 · 16 étiq/A4 (99.1 × 33.9 mm — allongé)</option>
-            </select>
+      {/* États des conteneurs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
+        {states.map((s) => (
+          <Card key={s.key} padding={16} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <ArchiveBoxIso size={46} finish={s.finish} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: s.value > 0 ? s.color : "var(--text-tertiary)" }}>
+                {s.value}
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-secondary)" }}>
+                {s.label}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Impression */}
+      <Card>
+        <div style={{ display: "flex", gap: 32, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 420px", minWidth: 0 }}>
+            <CardHeader title="Impression des étiquettes" subtitle="PDF A4 prêt à imprimer sur planches autocollantes Avery." />
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Planche</div>
+            <Segmented<AveryTemplate>
+              value={template}
+              onChange={setTemplate}
+              options={(Object.keys(AVERY_TEMPLATES) as AveryTemplate[]).map((k) => ({
+                value: k,
+                label: `${AVERY_TEMPLATES[k].code} · ${AVERY_TEMPLATES[k].perPage}/A4`,
+              }))}
+            />
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "6px 0 16px" }}>
+              Étiquettes de {t.dims} · {t.cols} colonnes × {t.rows} lignes
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Symbologie</div>
+            <Segmented<Symbology>
+              value={symbology}
+              onChange={setSymbology}
+              options={[
+                { value: "CODE128", label: "Code128 · douchette", icon: <Icons.barcode size={16} /> },
+                { value: "QR", label: "QR · smartphone", icon: <Icons.qr size={16} /> },
+              ]}
+            />
+
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 22, flexWrap: "wrap" }}>
+              <Button size="lg" onClick={handleDownload} loading={downloading} icon={<Icons.download size={16} weight="bold" />}>
+                Télécharger le PDF · {pages} page{pages > 1 ? "s" : ""} A4
+              </Button>
+              {b.firstPrintedAt && (
+                <span style={{ fontSize: 12, color: "var(--text-tertiary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Icons.history size={14} />
+                  Imprimé le {formatInstant(b.firstPrintedAt)}
+                  {b.lastPrintedAt && b.lastPrintedAt !== b.firstPrintedAt && <> · dernière fois le {formatInstant(b.lastPrintedAt)}</>}
+                </span>
+              )}
+            </div>
+            {downloadError && (
+              <div style={{ marginTop: 14 }}>
+                <Alert tone="danger" title="Génération du PDF impossible">{downloadError}</Alert>
+              </div>
+            )}
           </div>
-          <div>
-            <div style={{ fontSize: "0.8rem", color: "#666", marginBottom: 3 }}>Symbologie</div>
-            <select value={symbology} onChange={(e) => setSymbology(e.target.value as typeof symbology)} style={inputStyle}>
-              <option value="CODE128">Code128 (douchette 1D)</option>
-              <option value="QR">QR (smartphone 2D)</option>
-            </select>
+
+          <div style={{ flex: "0 0 auto", textAlign: "center" }}>
+            <SheetPreview template={template} filled={b.size} width={150} />
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>Page 1 sur {pages}</div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleDownload}
-          disabled={downloading}
-          style={{
-            display: "inline-block", padding: "0.6rem 1.25rem",
-            background: downloading ? "#8591b3" : "#1e2d5e",
-            color: "white", border: "none", borderRadius: 4,
-            fontWeight: 600, fontSize: "0.95rem",
-            cursor: downloading ? "wait" : "pointer",
-          }}>
-          {downloading
-            ? "⏳ Génération…"
-            : `📥 Télécharger PDF (${Math.ceil(b.size / templatePerPage(template))} page${Math.ceil(b.size / templatePerPage(template)) > 1 ? "s" : ""} A4)`}
-        </button>
-        {downloadError && (
-          <div style={{ marginTop: 10, background: "#fff3f3", border: "1px solid #ffbaba", padding: "0.5rem 0.75rem", borderRadius: 4, color: "#a00", fontSize: "0.85rem" }}>
-            {downloadError}
-          </div>
-        )}
-        {b.firstPrintedAt && (
-          <p style={{ margin: "0.5rem 0 0", color: "#666", fontSize: "0.85rem" }}>
-            Première impression : {formatInstant(b.firstPrintedAt)}
-            {b.lastPrintedAt !== b.firstPrintedAt && <> · dernière : {formatInstant(b.lastPrintedAt!)}</>}
-          </p>
-        )}
-      </section>
+      </Card>
     </section>
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div style={{ padding: "0.5rem 0.75rem", background: color + "11", border: `1px solid ${color}44`, borderRadius: 4 }}>
-      <div style={{ fontSize: "0.75rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
-      <div style={{ fontSize: "1.4rem", fontWeight: 700, color }}>{value}</div>
-    </div>
-  );
+function toneColor(tone: string): string {
+  return tone === "neutral" ? "var(--text-primary)" : `var(--${tone}-500)`;
 }
-
-function templatePerPage(t: string): number {
-  return t === "AVERY_L7159" ? 24 : t === "AVERY_L7169" ? 16 : 21;
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: "0.4rem 0.6rem",
-  border: "1px solid #c8cbd4",
-  borderRadius: 3,
-  fontSize: "0.9rem",
-  fontFamily: "inherit",
-  width: "100%",
-  boxSizing: "border-box",
-};

@@ -2,30 +2,25 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { ArchiveBoxIso } from "@/components/illustrations/ArchiveBoxIso";
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  KpiCard,
+  LOAN_STATUS,
+  PageHeader,
+  StatusBadge,
+} from "@/components/ui";
 import {
   downloadGhostCard,
   listActiveLoans,
   markLoanReturned,
   type LoanResponse,
-  type LoanStatus,
 } from "@/lib/api";
-import { formatInstant } from "@/lib/format";
-
-const STATUS_LABEL: Record<LoanStatus, string> = {
-  REQUESTED: "Demandé",
-  OUT: "Sorti",
-  OVERDUE: "En retard",
-  RETURNED: "Retourné",
-  CANCELLED: "Annulé",
-};
-
-const STATUS_COLOR: Record<LoanStatus, string> = {
-  REQUESTED: "#5b7cb3",
-  OUT: "#2e7d32",
-  OVERDUE: "#b71c1c",
-  RETURNED: "#777",
-  CANCELLED: "#999",
-};
+import { Icons } from "@/lib/icons";
+import { daysUntil, relativeDue, shortDate } from "./_components/dates";
 
 export default function PretsPage() {
   const query = useQuery({
@@ -40,52 +35,76 @@ export default function PretsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["loans-active"] }),
   });
 
+  const loans = query.data ?? [];
+  const overdue = loans.filter((l) => l.overdue).length;
+  const dueSoon = loans.filter((l) => !l.overdue && daysUntil(l.expectedReturnAt) <= 7).length;
+
   return (
-    <section>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <div>
-          <h1 style={{ margin: "0 0 0.25rem" }}>Prêts physiques</h1>
-          <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-            Boîtes actuellement sorties du magasin — fantôme PDF+QR laissé à la place.
-          </p>
-        </div>
-        <Link href="/prets/new" style={{
-          background: "#1e2d5e", color: "white", padding: "0.5rem 1rem",
-          borderRadius: 4, textDecoration: "none", fontWeight: 500,
-        }}>
-          + Nouvelle demande
-        </Link>
-      </header>
+    <section className="fade-up">
+      <PageHeader
+        icon="loans"
+        tone="info"
+        title="Prêts physiques"
+        subtitle="Boîtes sorties du magasin. Un fantôme PDF+QR occupe leur emplacement."
+        crumbs={[{ label: "Accueil", href: "/" }, { label: "Prêts" }]}
+        actions={
+          <Link href="/prets/new">
+            <Button icon={<Icons.add size={16} weight="bold" />}>Nouveau prêt</Button>
+          </Link>
+        }
+      />
 
-      {query.isLoading && <p>Chargement…</p>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16, marginBottom: 20 }}>
+        <KpiCard label="Prêts actifs" value={loans.length} icon="loans" tone="info" />
+        <KpiCard label="En retard" value={overdue} icon="alert" tone={overdue > 0 ? "danger" : "neutral"} />
+        <KpiCard label="Retour sous 7 jours" value={dueSoon} icon="calendar" tone={dueSoon > 0 ? "warning" : "neutral"} />
+      </div>
+
       {query.isError && (
-        <div style={{ background: "#fff3f3", border: "1px solid #ffbaba", padding: "0.75rem", borderRadius: 4, color: "#a00" }}>
-          {(query.error as Error).message}
+        <div style={{ marginBottom: 16 }}>
+          <Alert tone="danger" title="Impossible de charger les prêts">{(query.error as Error).message}</Alert>
+        </div>
+      )}
+      {returnMutation.isError && (
+        <div style={{ marginBottom: 16 }}>
+          <Alert tone="danger" title="Retour non enregistré">{(returnMutation.error as Error).message}</Alert>
         </div>
       )}
 
-      {query.data && query.data.length === 0 && (
-        <div style={{ background: "#e8f5e9", border: "1px solid #a5d6a7", padding: "1rem", borderRadius: 6, color: "#2e7d32" }}>
-          ✅ Aucun prêt actif. Toutes les boîtes sont en magasin.
-        </div>
+      {query.isLoading && (
+        <Card><div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Chargement des prêts…</div></Card>
       )}
 
-      {query.data && query.data.length > 0 && (
-        <div style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, overflow: "hidden" }}>
+      {query.data && loans.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={<ArchiveBoxIso size={64} finish="kraft" />}
+            title="Aucun prêt actif"
+            description="Toutes les boîtes sont rangées en magasin."
+            action={
+              <Link href="/prets/new">
+                <Button variant="secondary" icon={<Icons.add size={16} weight="bold" />}>Enregistrer un prêt</Button>
+              </Link>
+            }
+          />
+        </Card>
+      )}
+
+      {loans.length > 0 && (
+        <Card padding={0} style={{ overflow: "hidden" }}>
           <table>
             <thead>
               <tr>
                 <th>Statut</th>
                 <th>Emprunteur</th>
-                <th>Service</th>
                 <th>Motif</th>
                 <th>Sortie</th>
                 <th>Retour prévu</th>
-                <th />
+                <th style={{ textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {query.data.map((l) => (
+              {loans.map((l) => (
                 <LoanRow
                   key={l.id}
                   loan={l}
@@ -95,7 +114,7 @@ export default function PretsPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </section>
   );
@@ -107,33 +126,52 @@ function LoanRow({ loan, onReturn, disabled }: {
   disabled: boolean;
 }) {
   const displayStatus = loan.overdue && loan.status === "OUT" ? "OVERDUE" : loan.status;
+  const late = loan.overdue;
+  const soon = !late && daysUntil(loan.expectedReturnAt) <= 7;
+  const dueColor = late ? "var(--danger-500)" : soon ? "var(--warning-700)" : "var(--text-tertiary)";
+  const initials = loan.borrowerName.split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+
   return (
-    <tr style={{ background: loan.overdue ? "#fff4e5" : undefined }}>
-      <td>
-        <span style={{
-          display: "inline-block", padding: "0.15rem 0.55rem", borderRadius: 3,
-          background: STATUS_COLOR[displayStatus] + "22",
-          color: STATUS_COLOR[displayStatus], fontSize: "0.8rem", fontWeight: 600,
-        }}>
-          {STATUS_LABEL[displayStatus]}
-        </span>
+    <tr style={{ background: late ? "var(--danger-50)" : undefined }}>
+      <td style={{ boxShadow: late ? "inset 3px 0 0 var(--danger-500)" : undefined }}>
+        <StatusBadge meta={LOAN_STATUS[displayStatus]} />
       </td>
-      <td style={{ fontWeight: 500 }}>{loan.borrowerName}</td>
-      <td style={{ color: "#555", fontSize: "0.9rem" }}>{loan.borrowerDept ?? "—"}</td>
-      <td style={{ color: "#555", fontSize: "0.85rem" }}>{loan.purpose ?? "—"}</td>
-      <td style={{ fontSize: "0.85rem" }}>{loan.outAt ? formatInstant(loan.outAt) : "—"}</td>
-      <td style={{ fontSize: "0.85rem", color: loan.overdue ? "#b71c1c" : undefined, fontWeight: loan.overdue ? 600 : undefined }}>
-        {formatInstant(loan.expectedReturnAt)}
+      <td>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{
+            width: 32, height: 32, borderRadius: "var(--radius-full)", flexShrink: 0,
+            background: "var(--brand-50)", color: "var(--brand-500)",
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            fontSize: 12, fontWeight: 700,
+          }}>{initials}</span>
+          <div>
+            <div style={{ fontWeight: 600 }}>{loan.borrowerName}</div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{loan.borrowerDept ?? "Service non précisé"}</div>
+          </div>
+        </div>
+      </td>
+      <td style={{ color: "var(--text-secondary)", maxWidth: 260 }}>{loan.purpose ?? "—"}</td>
+      <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{loan.outAt ? shortDate(loan.outAt) : "—"}</td>
+      <td style={{ whiteSpace: "nowrap" }}>
+        <div style={{ fontWeight: late ? 700 : 500, color: late ? "var(--danger-700)" : "var(--text-primary)" }}>
+          {shortDate(loan.expectedReturnAt)}
+        </div>
+        <div style={{ fontSize: 12, fontWeight: soon || late ? 600 : 400, color: dueColor, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {late ? <Icons.alert size={12} weight="fill" /> : <Icons.pending size={12} />}
+          {relativeDue(loan.expectedReturnAt)}
+        </div>
       </td>
       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-        <button type="button" onClick={() => downloadGhostCard(loan.id)}
-          style={{ marginRight: 6, padding: "0.3rem 0.6rem", background: "white", border: "1px solid #1e2d5e", borderRadius: 3, color: "#1e2d5e", fontSize: "0.8rem", cursor: "pointer" }}>
-          📄 Fantôme
-        </button>
-        <button type="button" onClick={onReturn} disabled={disabled}
-          style={{ padding: "0.3rem 0.6rem", background: "#2e7d32", color: "white", border: "none", borderRadius: 3, fontSize: "0.8rem", fontWeight: 600, cursor: disabled ? "wait" : "pointer" }}>
-          ↩ Retour
-        </button>
+        <div style={{ display: "inline-flex", gap: 6 }}>
+          <Button variant="secondary" size="sm" icon={<Icons.ghost size={14} />}
+            onClick={() => downloadGhostCard(loan.id)} title="Télécharger le fantôme PDF+QR">
+            Fantôme
+          </Button>
+          <Button size="sm" icon={<Icons.returned size={14} weight="bold" />}
+            onClick={onReturn} disabled={disabled} title="Enregistrer le retour de la boîte">
+            Retour
+          </Button>
+        </div>
       </td>
     </tr>
   );

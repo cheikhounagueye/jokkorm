@@ -2,22 +2,31 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { ArchiveBoxIso, type BoxFinish } from "@/components/illustrations/ArchiveBoxIso";
+import {
+  Alert,
+  BATCH_STATUS,
+  Button,
+  Card,
+  EmptyState,
+  KpiCard,
+  PageHeader,
+  StatusBadge,
+} from "@/components/ui";
 import { getBufferZoneAlerts, listBatches, type BatchStatus } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
+import { Icons } from "@/lib/icons";
 
-const STATUS_LABEL: Record<BatchStatus, string> = {
-  CREATED: "Créé",
-  PRINTED: "Imprimé",
-  FULLY_DEPLOYED: "Déployé",
-  ARCHIVED: "Archivé",
+/** Rendu de la boîte d'illustration selon l'avancement du lot (pas un libellé de statut). */
+const BOX_FINISH: Record<BatchStatus, BoxFinish> = {
+  CREATED: "empty",
+  PRINTED: "kraft",
+  FULLY_DEPLOYED: "kraft",
+  ARCHIVED: "empty",
 };
 
-const STATUS_COLOR: Record<BatchStatus, string> = {
-  CREATED: "#5b7cb3",
-  PRINTED: "#a07b00",
-  FULLY_DEPLOYED: "#2e7d32",
-  ARCHIVED: "#777",
-};
+const PATTERN_06_URL =
+  "https://github.com/cheikhounagueye/jokkorm/blob/main/docs/pattern/06-provisioning-masse-boites.md";
 
 export default function LotsPage() {
   const query = useQuery({ queryKey: ["batches"], queryFn: () => listBatches() });
@@ -27,117 +36,145 @@ export default function LotsPage() {
     refetchInterval: 60_000,
   });
 
+  const batches = query.data ?? [];
+  const alerts = alertsQuery.data;
+  const staleBatchIds = new Set(alerts?.byBatch.map((e) => e.batchId) ?? []);
+  const totalBoxes = batches.reduce((sum, b) => sum + b.size, 0);
+  const deployed = batches.filter((b) => b.status === "FULLY_DEPLOYED").length;
+  const stale = alerts?.totalStaleContainers ?? 0;
+
   return (
-    <section>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <div>
-          <h1 style={{ margin: "0 0 0.25rem" }}>Lots de boîtes</h1>
-          <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-            Provisionnement en masse. Voir{" "}
-            <a href="https://github.com/cheikhounagueye/jokkorm/blob/main/docs/pattern/06-provisioning-masse-boites.md"
-               target="_blank" rel="noreferrer">pattern 06</a>.
-          </p>
-        </div>
-        <Link href="/magasin/lots/new" style={{
-          background: "#1e2d5e", color: "white", padding: "0.5rem 1rem",
-          borderRadius: 4, textDecoration: "none", fontWeight: 500,
-        }}>
-          + Nouveau lot
-        </Link>
-      </header>
+    <section className="fade-up">
+      <PageHeader
+        icon="batches"
+        tone="kraft"
+        title="Lots de boîtes"
+        subtitle="Provisionnement en masse, impression des étiquettes et suivi du rangement."
+        crumbs={[{ label: "Salle d'archives", href: "/magasin" }, { label: "Lots de boîtes" }]}
+        actions={
+          <>
+            <a href={PATTERN_06_URL} target="_blank" rel="noreferrer">
+              <Button variant="ghost" icon={<Icons.link size={16} />}>Pattern 06</Button>
+            </a>
+            <Link href="/magasin/lots/new">
+              <Button icon={<Icons.add size={16} weight="bold" />}>Nouveau lot</Button>
+            </Link>
+          </>
+        }
+      />
 
-      {alertsQuery.data && alertsQuery.data.totalStaleContainers > 0 && (
-        <section style={{
-          background: "#fff4e5", border: "1px solid #ffb300", borderLeft: "4px solid #ed6c02",
-          borderRadius: 6, padding: "0.75rem 1rem", marginBottom: "1rem",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <span style={{ fontSize: "1.25rem" }}>⚠️</span>
-            <strong style={{ color: "#8a4b00" }}>
-              {alertsQuery.data.totalStaleContainers} boîte{alertsQuery.data.totalStaleContainers > 1 ? "s" : ""}
-              {" "}en zone tampon depuis plus de {alertsQuery.data.thresholdDays} jours
-            </strong>
-          </div>
-          <div style={{ fontSize: "0.85rem", color: "#555", marginBottom: 6 }}>
-            Ces boîtes ont été provisionnées mais jamais rangées à une position physique.
-            Il faut soit les ranger, soit prendre une décision (ex. retour prestataire).
-          </div>
-          <ul style={{ margin: "0.25rem 0 0 1.2rem", fontSize: "0.85rem" }}>
-            {alertsQuery.data.byBatch.slice(0, 5).map((e) => (
-              <li key={e.batchId}>
-                <Link href={`/magasin/lots/${e.batchId}`} style={{ color: "#8a4b00", fontWeight: 500 }}>
-                  {e.batchReference}
-                </Link>
-                {" — "}
-                <span style={{ color: "#555" }}>
-                  {e.staleCount} boîte{e.staleCount > 1 ? "s" : ""} · plus ancienne : {formatInstant(e.oldestCreatedAt)}
-                </span>
-              </li>
-            ))}
-            {alertsQuery.data.byBatch.length > 5 && (
-              <li style={{ color: "#555" }}>… et {alertsQuery.data.byBatch.length - 5} lot{alertsQuery.data.byBatch.length - 5 > 1 ? "s" : ""} de plus</li>
-            )}
-          </ul>
-        </section>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 16, marginBottom: 20 }}>
+        <KpiCard label="Lots" value={batches.length} icon="batches" tone="brand" />
+        <KpiCard label="Boîtes provisionnées" value={totalBoxes} icon="box" tone="info" />
+        <KpiCard label="En zone tampon" value={stale} icon="warning" tone={stale > 0 ? "warning" : "neutral"} />
+        <KpiCard label="Lots déployés" value={deployed} icon="success" tone={deployed > 0 ? "success" : "neutral"} />
+      </div>
+
+      {alerts && alerts.totalStaleContainers > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <Alert
+            tone="warning"
+            title={`${alerts.totalStaleContainers} boîte${alerts.totalStaleContainers > 1 ? "s" : ""} en zone tampon depuis plus de ${alerts.thresholdDays} jour${alerts.thresholdDays > 1 ? "s" : ""}`}
+          >
+            Provisionnées mais jamais rangées à une position physique : range-les, ou décide d&apos;un retour prestataire.
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+              {alerts.byBatch.slice(0, 5).map((e) => (
+                <li key={e.batchId} style={{ marginBottom: 2 }}>
+                  <Link href={`/magasin/lots/${e.batchId}`} style={{ fontWeight: 600, color: "var(--warning-700)" }}>
+                    {e.batchReference}
+                  </Link>
+                  {" — "}
+                  {e.staleCount} boîte{e.staleCount > 1 ? "s" : ""} · la plus ancienne depuis le {formatInstant(e.oldestCreatedAt)}
+                </li>
+              ))}
+              {alerts.byBatch.length > 5 && (
+                <li>… et {alerts.byBatch.length - 5} lot{alerts.byBatch.length - 5 > 1 ? "s" : ""} de plus</li>
+              )}
+            </ul>
+          </Alert>
+        </div>
       )}
 
-      {query.isLoading && <p>Chargement…</p>}
       {query.isError && (
-        <div style={{ background: "#fff3f3", border: "1px solid #ffbaba", padding: "0.75rem", borderRadius: 4, color: "#a00" }}>
-          {(query.error as Error).message}
+        <div style={{ marginBottom: 20 }}>
+          <Alert tone="danger" title="Impossible de charger les lots">{(query.error as Error).message}</Alert>
         </div>
       )}
 
-      {query.data && (
-        <div style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, overflow: "hidden" }}>
+      {query.isLoading && (
+        <Card><p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Chargement des lots…</p></Card>
+      )}
+
+      {query.data && batches.length === 0 && (
+        <Card>
+          <EmptyState
+            icon={<ArchiveBoxIso size={64} finish="empty" />}
+            title="Aucun lot pour l'instant"
+            description="Provisionne un premier lot : chaque boîte reçoit son code-barres, puis tu imprimes toutes les étiquettes d'un coup."
+            action={
+              <Link href="/magasin/lots/new">
+                <Button icon={<Icons.add size={16} weight="bold" />}>Créer un lot</Button>
+              </Link>
+            }
+          />
+        </Card>
+      )}
+
+      {batches.length > 0 && (
+        <Card padding={0} style={{ overflow: "hidden" }}>
           <table>
             <thead>
               <tr>
-                <th>Référence</th>
-                <th>Taille</th>
+                <th>Lot</th>
+                <th>Boîtes</th>
                 <th>Statut</th>
                 <th>Créé le</th>
-                <th>Créé par</th>
-                <th>Imprimé</th>
-                <th />
+                <th>Dernière impression</th>
+                <th aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
-              {query.data.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: "center", color: "#999", padding: "2rem" }}>
-                  Aucun lot. Crée le premier avec le bouton en haut à droite.
-                </td></tr>
-              )}
-              {query.data.map((b) => (
-                <tr key={b.id}>
-                  <td>
-                    <Link href={`/magasin/lots/${b.id}`} style={{ color: "#1e2d5e", fontWeight: 500 }}>
-                      {b.reference}
-                    </Link>
-                  </td>
-                  <td>{b.size}</td>
-                  <td>
-                    <span style={{
-                      display: "inline-block", padding: "0.15rem 0.55rem", borderRadius: 3,
-                      background: STATUS_COLOR[b.status] + "22",
-                      color: STATUS_COLOR[b.status], fontSize: "0.8rem", fontWeight: 600,
-                    }}>
-                      {STATUS_LABEL[b.status]}
-                    </span>
-                  </td>
-                  <td>{formatInstant(b.createdAt)}</td>
-                  <td style={{ color: "#555", fontSize: "0.85rem" }}>{b.createdBy}</td>
-                  <td style={{ color: "#555", fontSize: "0.85rem" }}>
-                    {b.lastPrintedAt ? formatInstant(b.lastPrintedAt) : <span style={{ color: "#aaa" }}>—</span>}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <Link href={`/magasin/lots/${b.id}`}>Détail →</Link>
-                  </td>
-                </tr>
-              ))}
+              {batches.map((b) => {
+                const isStale = staleBatchIds.has(b.id);
+                return (
+                  <tr key={b.id}>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <ArchiveBoxIso size={42} finish={isStale ? "stale" : BOX_FINISH[b.status]}
+                          title={isStale ? "Boîtes en zone tampon" : undefined} />
+                        <div style={{ minWidth: 0 }}>
+                          <Link href={`/magasin/lots/${b.id}`} style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                            {b.reference}
+                          </Link>
+                          <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                            par {b.createdBy}
+                            {b.labelPattern && <> · « {b.labelPattern} »</>}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontWeight: 600 }}>{b.size}</span>
+                      <span style={{ color: "var(--text-tertiary)" }}> boîte{b.size > 1 ? "s" : ""}</span>
+                    </td>
+                    <td><StatusBadge meta={BATCH_STATUS[b.status]} /></td>
+                    <td style={{ color: "var(--text-secondary)" }}>{formatInstant(b.createdAt)}</td>
+                    <td style={{ color: b.lastPrintedAt ? "var(--text-secondary)" : "var(--text-tertiary)" }}>
+                      {b.lastPrintedAt ? formatInstant(b.lastPrintedAt) : "Jamais"}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <Link href={`/magasin/lots/${b.id}`} aria-label={`Ouvrir le lot ${b.reference}`}>
+                        <Button variant="secondary" size="sm" iconRight={<Icons.chevronRight size={12} weight="bold" />}>
+                          Ouvrir
+                        </Button>
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </section>
   );
