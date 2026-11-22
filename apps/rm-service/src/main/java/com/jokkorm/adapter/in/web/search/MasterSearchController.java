@@ -61,11 +61,13 @@ public class MasterSearchController {
 
         static SearchResponseItem from(EnrichedResult e, boolean maskPhysical) {
             var m = e.master();
+            // containerId est un UUID opaque — pas confidentiel, requis pour créer la demande
+            // barcode et label sont lisibles humain → masqués côté REQUESTER
             return new SearchResponseItem(
                 m.cote(), m.title(), m.service(), m.typologie(), m.classificationPath(),
                 m.dateStart(), m.dateEnd(), m.duaRemainingYears(), m.communicable(),
                 e.availableInPhysical(),
-                maskPhysical ? null : e.containerId(),
+                e.containerId(),
                 maskPhysical ? null : e.containerBarcode(),
                 maskPhysical ? null : e.containerLabel());
         }
