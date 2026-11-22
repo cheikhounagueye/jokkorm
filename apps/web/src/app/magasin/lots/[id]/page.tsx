@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { batchLabelsPdfUrl, getBatchHealth, type BatchStatus } from "@/lib/api";
+import { downloadBatchLabelsPdf, getBatchHealth, type BatchStatus } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
 
 const STATUS_LABEL: Record<BatchStatus, string> = {
@@ -27,6 +27,22 @@ export default function LotDetailPage() {
 
   const [template, setTemplate] = useState<"AVERY_L7160" | "AVERY_L7159" | "AVERY_L7169">("AVERY_L7160");
   const [symbology, setSymbology] = useState<"CODE128" | "QR">("CODE128");
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function handleDownload() {
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadBatchLabelsPdf(batchId, template, symbology);
+      // Après succès, re-fetch health pour afficher firstPrintedAt
+      query.refetch();
+    } catch (e) {
+      setDownloadError((e as Error).message);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const query = useQuery({
     queryKey: ["batch-health", batchId],
@@ -108,17 +124,26 @@ export default function LotDetailPage() {
             </select>
           </div>
         </div>
-        <a
-          href={batchLabelsPdfUrl(batchId, template, symbology)}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={downloading}
           style={{
             display: "inline-block", padding: "0.6rem 1.25rem",
-            background: "#1e2d5e", color: "white", borderRadius: 4,
-            textDecoration: "none", fontWeight: 600,
+            background: downloading ? "#8591b3" : "#1e2d5e",
+            color: "white", border: "none", borderRadius: 4,
+            fontWeight: 600, fontSize: "0.95rem",
+            cursor: downloading ? "wait" : "pointer",
           }}>
-          📥 Télécharger PDF ({Math.ceil(b.size / templatePerPage(template))} page{Math.ceil(b.size / templatePerPage(template)) > 1 ? "s" : ""} A4)
-        </a>
+          {downloading
+            ? "⏳ Génération…"
+            : `📥 Télécharger PDF (${Math.ceil(b.size / templatePerPage(template))} page${Math.ceil(b.size / templatePerPage(template)) > 1 ? "s" : ""} A4)`}
+        </button>
+        {downloadError && (
+          <div style={{ marginTop: 10, background: "#fff3f3", border: "1px solid #ffbaba", padding: "0.5rem 0.75rem", borderRadius: 4, color: "#a00", fontSize: "0.85rem" }}>
+            {downloadError}
+          </div>
+        )}
         {b.firstPrintedAt && (
           <p style={{ margin: "0.5rem 0 0", color: "#666", fontSize: "0.85rem" }}>
             Première impression : {formatInstant(b.firstPrintedAt)}

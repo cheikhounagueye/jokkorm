@@ -302,3 +302,31 @@ export function batchLabelsPdfUrl(batchId: string, template = "AVERY_L7160", sym
   const qs = new URLSearchParams({ template, symbology });
   return `/api/v1/physical/batches/${batchId}/labels.pdf?${qs.toString()}`;
 }
+
+/**
+ * Télécharge le PDF via fetch (avec header X-Tenant-Id) puis déclenche un save
+ * navigateur par blob + object URL. Pattern obligatoire pour downloads
+ * authentifiés : un <a href> natif ne porte aucun header custom.
+ */
+export async function downloadBatchLabelsPdf(
+  batchId: string,
+  template = "AVERY_L7160",
+  symbology = "CODE128",
+): Promise<void> {
+  const response = await fetch(batchLabelsPdfUrl(batchId, template, symbology), {
+    headers: headers(),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as ProblemDetail;
+    throw new Error(body.detail || body.title || `HTTP ${response.status}`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `etiquettes-${batchId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
