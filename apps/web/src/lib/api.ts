@@ -336,6 +336,25 @@ export async function getBatchHealth(batchId: string): Promise<BatchHealthRespon
   return parse<BatchHealthResponse>(response);
 }
 
+export interface StaleBufferEntry {
+  batchId: string;
+  batchReference: string;
+  staleCount: number;
+  oldestCreatedAt: string;
+}
+
+export interface BufferZoneAlert {
+  thresholdDays: number;
+  totalStaleContainers: number;
+  byBatch: StaleBufferEntry[];
+  hasAlerts: boolean;
+}
+
+export async function getBufferZoneAlerts(): Promise<BufferZoneAlert> {
+  const response = await fetch(`/api/v1/physical/batches/alerts/buffer-zone`, { headers: headers() });
+  return parse<BufferZoneAlert>(response);
+}
+
 export function batchLabelsPdfUrl(batchId: string, template = "AVERY_L7160", symbology = "CODE128"): string {
   const qs = new URLSearchParams({ template, symbology });
   return `/api/v1/physical/batches/${batchId}/labels.pdf?${qs.toString()}`;

@@ -3,6 +3,7 @@ package com.jokkorm.adapter.in.web.physical;
 import com.jokkorm.application.physical.AveryTemplate;
 import com.jokkorm.application.physical.BarcodeImageGenerator.Symbology;
 import com.jokkorm.application.physical.BatchLabelsPdfGenerator;
+import com.jokkorm.application.physical.BufferZoneAlertUseCase;
 import com.jokkorm.application.physical.CreateContainerBatchUseCase;
 import com.jokkorm.application.physical.GetBatchHealthUseCase;
 import com.jokkorm.application.physical.ListContainerBatchesUseCase;
@@ -39,16 +40,29 @@ public class ContainerBatchController {
     private final GetBatchHealthUseCase healthUseCase;
     private final ListContainerBatchesUseCase listUseCase;
     private final BatchLabelsPdfGenerator pdfGenerator;
+    private final BufferZoneAlertUseCase bufferAlert;
 
     public ContainerBatchController(
         CreateContainerBatchUseCase createUseCase,
         GetBatchHealthUseCase healthUseCase,
         ListContainerBatchesUseCase listUseCase,
-        BatchLabelsPdfGenerator pdfGenerator) {
+        BatchLabelsPdfGenerator pdfGenerator,
+        BufferZoneAlertUseCase bufferAlert) {
         this.createUseCase = createUseCase;
         this.healthUseCase = healthUseCase;
         this.listUseCase = listUseCase;
         this.pdfGenerator = pdfGenerator;
+        this.bufferAlert = bufferAlert;
+    }
+
+    @GetMapping("/alerts/buffer-zone")
+    @Operation(
+        summary = "Alertes zone tampon : boîtes jamais rangées depuis > N jours (phase 5O).",
+        description = "Seuil paramétrable via jokkorm.physical.buffer-zone-alert-days "
+            + "(défaut 14). Retourne par lot le nombre de boîtes stale et la plus "
+            + "ancienne. hasAlerts=false si rien à signaler.")
+    public BufferZoneAlertUseCase.Alert bufferZoneAlerts() {
+        return bufferAlert.execute();
     }
 
     @PostMapping

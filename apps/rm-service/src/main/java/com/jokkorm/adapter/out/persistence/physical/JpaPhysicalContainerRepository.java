@@ -5,6 +5,8 @@ import com.jokkorm.domain.common.Page;
 import com.jokkorm.domain.common.PageRequest;
 import com.jokkorm.domain.physical.PhysicalContainer;
 import com.jokkorm.domain.physical.PhysicalContainerRepository;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -71,5 +73,23 @@ public class JpaPhysicalContainerRepository implements PhysicalContainerReposito
 
     private static Pageable toPageable(PageRequest r) {
         return org.springframework.data.domain.PageRequest.of(r.page(), r.size());
+    }
+
+    @Override
+    public List<StaleBufferEntry> findStaleBufferByBatch(TenantId tenant, Instant threshold) {
+        return jpa.findStaleBufferGroupedByBatch(tenant.value(), threshold).stream()
+            .map(row -> {
+                UUID batchId = (UUID) row[0];
+                String reference = (String) row[1];
+                long count = ((Number) row[2]).longValue();
+                Object oldestRaw = row[3];
+                Instant oldest = oldestRaw instanceof Timestamp ts
+                    ? ts.toInstant()
+                    : oldestRaw instanceof Instant i
+                        ? i
+                        : Instant.parse(String.valueOf(oldestRaw));
+                return new StaleBufferEntry(batchId, reference, count, oldest);
+            })
+            .toList();
     }
 }

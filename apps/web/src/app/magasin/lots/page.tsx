@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { listBatches, type BatchStatus } from "@/lib/api";
+import { getBufferZoneAlerts, listBatches, type BatchStatus } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
 
 const STATUS_LABEL: Record<BatchStatus, string> = {
@@ -21,6 +21,11 @@ const STATUS_COLOR: Record<BatchStatus, string> = {
 
 export default function LotsPage() {
   const query = useQuery({ queryKey: ["batches"], queryFn: () => listBatches() });
+  const alertsQuery = useQuery({
+    queryKey: ["buffer-alerts"],
+    queryFn: getBufferZoneAlerts,
+    refetchInterval: 60_000,
+  });
 
   return (
     <section>
@@ -40,6 +45,41 @@ export default function LotsPage() {
           + Nouveau lot
         </Link>
       </header>
+
+      {alertsQuery.data?.hasAlerts && (
+        <section style={{
+          background: "#fff4e5", border: "1px solid #ffb300", borderLeft: "4px solid #ed6c02",
+          borderRadius: 6, padding: "0.75rem 1rem", marginBottom: "1rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <span style={{ fontSize: "1.25rem" }}>⚠️</span>
+            <strong style={{ color: "#8a4b00" }}>
+              {alertsQuery.data.totalStaleContainers} boîte{alertsQuery.data.totalStaleContainers > 1 ? "s" : ""}
+              {" "}en zone tampon depuis plus de {alertsQuery.data.thresholdDays} jours
+            </strong>
+          </div>
+          <div style={{ fontSize: "0.85rem", color: "#555", marginBottom: 6 }}>
+            Ces boîtes ont été provisionnées mais jamais rangées à une position physique.
+            Il faut soit les ranger, soit prendre une décision (ex. retour prestataire).
+          </div>
+          <ul style={{ margin: "0.25rem 0 0 1.2rem", fontSize: "0.85rem" }}>
+            {alertsQuery.data.byBatch.slice(0, 5).map((e) => (
+              <li key={e.batchId}>
+                <Link href={`/magasin/lots/${e.batchId}`} style={{ color: "#8a4b00", fontWeight: 500 }}>
+                  {e.batchReference}
+                </Link>
+                {" — "}
+                <span style={{ color: "#555" }}>
+                  {e.staleCount} boîte{e.staleCount > 1 ? "s" : ""} · plus ancienne : {formatInstant(e.oldestCreatedAt)}
+                </span>
+              </li>
+            ))}
+            {alertsQuery.data.byBatch.length > 5 && (
+              <li style={{ color: "#555" }}>… et {alertsQuery.data.byBatch.length - 5} lot{alertsQuery.data.byBatch.length - 5 > 1 ? "s" : ""} de plus</li>
+            )}
+          </ul>
+        </section>
+      )}
 
       {query.isLoading && <p>Chargement…</p>}
       {query.isError && (
