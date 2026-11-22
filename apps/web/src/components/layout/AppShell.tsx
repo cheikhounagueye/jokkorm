@@ -46,13 +46,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TopBar />
       <main style={{
         gridArea: "main",
-        padding: "24px 32px",
+        padding: "28px 40px 48px",
         overflow: "auto",
         background: "var(--surface-page)",
       }}>
-        <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-          {children}
-        </div>
+        {children}
       </main>
     </div>
   );
