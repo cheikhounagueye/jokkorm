@@ -5,10 +5,12 @@ import { useState } from "react";
 import {
   createContainer,
   createStorageLocation,
+  deleteStorageLocation,
   listContainersAtPosition,
   listStorageTree,
   placeContainer,
   storeRecord,
+  updateStorageLocation,
   type ContainerState,
   type PhysicalContainerResponse,
   type StorageLocationKind,
@@ -43,6 +45,17 @@ const CHILD_OF: Record<StorageLocationKind, StorageLocationKind | null> = {
 export default function MagasinPage() {
   const [selected, setSelected] = useState<StorageLocationResponse | null>(null);
   const treeQuery = useQuery({ queryKey: ["storage-tree"], queryFn: listStorageTree });
+  const qc = useQueryClient();
+
+  const refreshTreeAndClear = () => {
+    qc.invalidateQueries({ queryKey: ["storage-tree"] });
+    setSelected(null);
+  };
+
+  const refreshTreeAndKeep = (updated?: StorageLocationResponse) => {
+    qc.invalidateQueries({ queryKey: ["storage-tree"] });
+    if (updated) setSelected(updated);
+  };
 
   return (
     <section>
@@ -84,6 +97,11 @@ export default function MagasinPage() {
           {selected && (
             <>
               <SelectedHeader location={selected} />
+              <AdminActions
+                location={selected}
+                onRenamed={refreshTreeAndKeep}
+                onDeleted={refreshTreeAndClear}
+              />
               {CHILD_OF[selected.kind] && (
                 <CreateChildForm parent={selected} onCreated={() => treeQuery.refetch()} />
               )}
@@ -137,6 +155,97 @@ function TreeNode({
       {node.children.map((c) => (
         <TreeNode key={c.node.id} node={c} depth={depth + 1} selected={selected} onSelect={onSelect} />
       ))}
+    </div>
+  );
+}
+
+function AdminActions({
+  location, onRenamed, onDeleted,
+}: {
+  location: StorageLocationResponse;
+  onRenamed: (updated: StorageLocationResponse) => void;
+  onDeleted: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [newLabel, setNewLabel] = useState(location.label ?? "");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [typedCode, setTypedCode] = useState("");
+
+  const renameMutation = useMutation({
+    mutationFn: () => updateStorageLocation(location.id, newLabel || null),
+    onSuccess: (updated) => { setRenaming(false); onRenamed(updated); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteStorageLocation(location.id),
+    onSuccess: () => { setConfirmDeleteOpen(false); setTypedCode(""); onDeleted(); },
+  });
+
+  const canConfirmDelete = typedCode.toUpperCase() === location.code;
+
+  return (
+    <div style={{ background: "#fafbfc", border: "1px dashed #d8dae0", borderRadius: 4, padding: "0.6rem 0.75rem", marginBottom: "0.75rem" }}>
+      <div style={{ fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 700, color: "#555", letterSpacing: "0.03em", marginBottom: 6 }}>
+        Actions administrateur
+      </div>
+      {!renaming && !confirmDeleteOpen && (
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => { setNewLabel(location.label ?? ""); setRenaming(true); }} style={buttonSecondaryStyle}>
+            Renommer
+          </button>
+          <button onClick={() => setConfirmDeleteOpen(true)} style={buttonDangerStyle}>
+            Supprimer
+          </button>
+        </div>
+      )}
+      {renaming && (
+        <form onSubmit={(e) => { e.preventDefault(); renameMutation.mutate(); }} style={{ display: "flex", gap: 6 }}>
+          <input
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="nouveau libellé (vide pour effacer)"
+            autoFocus
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button type="submit" disabled={renameMutation.isPending} style={buttonStyle}>
+            {renameMutation.isPending ? "…" : "Enregistrer"}
+          </button>
+          <button type="button" onClick={() => setRenaming(false)} style={buttonSecondaryStyle}>
+            Annuler
+          </button>
+          {renameMutation.isError && <ErrorInline error={renameMutation.error as Error} />}
+        </form>
+      )}
+      {confirmDeleteOpen && (
+        <div style={{ background: "#fff3f3", border: "1px solid #ffbaba", borderRadius: 4, padding: "0.75rem" }}>
+          <div style={{ fontSize: "0.85rem", color: "#a00", fontWeight: 600, marginBottom: 6 }}>
+            Suppression destructive
+          </div>
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.85rem", color: "#555" }}>
+            Tape le code <code>{location.code}</code> pour confirmer la suppression de <code>{location.path}</code>.
+            L&apos;opération échoue si le nœud contient des enfants ou des boîtes.
+          </p>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              value={typedCode}
+              onChange={(e) => setTypedCode(e.target.value)}
+              placeholder={`retape « ${location.code} »`}
+              autoFocus
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button
+              onClick={() => deleteMutation.mutate()}
+              disabled={!canConfirmDelete || deleteMutation.isPending}
+              style={buttonDangerStyle}>
+              {deleteMutation.isPending ? "…" : "Supprimer définitivement"}
+            </button>
+            <button onClick={() => { setConfirmDeleteOpen(false); setTypedCode(""); }} style={buttonSecondaryStyle}>
+              Annuler
+            </button>
+          </div>
+          {deleteMutation.isError && <div style={{ color: "#a00", marginTop: 6, fontSize: "0.85rem" }}>{(deleteMutation.error as Error).message}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -428,6 +537,18 @@ const buttonStyle: React.CSSProperties = {
   borderRadius: 3,
   fontSize: "0.85rem",
   fontWeight: 500,
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+  ...buttonStyle,
+  background: "white",
+  color: "#1e2d5e",
+  border: "1px solid #1e2d5e",
+};
+
+const buttonDangerStyle: React.CSSProperties = {
+  ...buttonStyle,
+  background: "#b71c1c",
 };
 
 function stateLabel(s: ContainerState): string {

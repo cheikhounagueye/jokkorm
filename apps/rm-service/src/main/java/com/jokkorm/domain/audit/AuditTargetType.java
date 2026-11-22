@@ -8,5 +8,8 @@ package com.jokkorm.domain.audit;
  */
 public enum AuditTargetType {
     /** Enveloppe physique d'archive — l'agrégat central du module physique. */
-    PHYSICAL_ARCHIVE_RECORD
+    PHYSICAL_ARCHIVE_RECORD,
+
+    /** Nœud de la topographie (SITE / MAGASIN / TRAVÉE / TABLETTE / POSITION) — phase 5J. */
+    STORAGE_LOCATION
 }

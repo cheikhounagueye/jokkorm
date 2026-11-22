@@ -4,6 +4,7 @@ import com.jokkorm.application.AccessGuard;
 import com.jokkorm.application.physical.PhysicalContainerConflictException;
 import com.jokkorm.application.physical.PhysicalContainerNotFoundException;
 import com.jokkorm.application.physical.StorageLocationConflictException;
+import com.jokkorm.application.physical.StorageLocationInUseException;
 import com.jokkorm.application.physical.StorageLocationNotFoundException;
 import com.jokkorm.application.record.RecordNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,6 +50,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> storageLocationConflict(
         StorageLocationConflictException e, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, "storage-location-conflict", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(StorageLocationInUseException.class)
+    public ResponseEntity<ProblemDetail> storageLocationInUse(
+        StorageLocationInUseException e, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "storage-location-in-use", e.getMessage(), request);
     }
 
     @ExceptionHandler(PhysicalContainerNotFoundException.class)

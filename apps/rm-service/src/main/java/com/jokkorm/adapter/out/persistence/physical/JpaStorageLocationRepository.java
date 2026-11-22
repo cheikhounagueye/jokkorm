@@ -69,4 +69,10 @@ public class JpaStorageLocationRepository implements StorageLocationRepository {
         return jpa.existsByTenantIdAndKindAndParentIdIsNullAndCode(
             tenant.value(), StorageLocationKind.SITE, code);
     }
+
+    @Override
+    public void delete(TenantId tenant, UUID id) {
+        jpa.findByIdAndTenantId(id, tenant.value())
+            .ifPresent(e -> jpa.delete(e));
+    }
 }

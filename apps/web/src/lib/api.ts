@@ -155,6 +155,28 @@ export async function createStorageLocation(input: {
   return parse<StorageLocationResponse>(response);
 }
 
+export async function updateStorageLocation(id: string, label: string | null): Promise<StorageLocationResponse> {
+  const response = await fetch(`/api/v1/physical/locations/${id}`, {
+    method: "PUT",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+  return parse<StorageLocationResponse>(response);
+}
+
+export async function deleteStorageLocation(id: string): Promise<void> {
+  const response = await fetch(`/api/v1/physical/locations/${id}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as ProblemDetail;
+    const err = new Error(body.detail || body.title || `HTTP ${response.status}`) as Error & { problem?: ProblemDetail };
+    err.problem = body;
+    throw err;
+  }
+}
+
 // ─── Physical containers (phase 5B) ────────────────────────────────────────────
 
 export type ContainerState = "EMPTY" | "OPEN" | "SEALED" | "DESTROYED";

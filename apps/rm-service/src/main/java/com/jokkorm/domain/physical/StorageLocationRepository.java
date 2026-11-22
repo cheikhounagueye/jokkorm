@@ -27,4 +27,11 @@ public interface StorageLocationRepository {
 
     /** Pour SITE (parent null) — unicité du code à la racine. */
     boolean existsRootByCode(TenantId tenant, String code);
+
+    /**
+     * Suppression hard. Doit être appelée uniquement après que l'appelant ait vérifié
+     * que le nœud est bien vide (pas d'enfants, pas de boîtes). La contrainte FK sur
+     * parent_id / container.position_id reste un filet de sécurité DB.
+     */
+    void delete(TenantId tenant, UUID id);
 }

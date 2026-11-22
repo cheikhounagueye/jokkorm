@@ -19,5 +19,11 @@ public enum AuditAction {
     RECORD_STORED,
 
     /** Un mouvement physique a été enregistré (6 verbes, phase 5D). */
-    MOVEMENT_RECORDED
+    MOVEMENT_RECORDED,
+
+    /** Admin a renommé un nœud de la topographie — phase 5J. */
+    STORAGE_LOCATION_RENAMED,
+
+    /** Admin a supprimé un nœud de la topographie — phase 5J. */
+    STORAGE_LOCATION_DELETED
 }
