@@ -20,5 +20,8 @@ public enum AuditTargetType {
     CONTAINER,
 
     /** Prêt physique d'une boîte — phase 5E. */
-    LOAN
+    LOAN,
+
+    /** Demande d'accès à une boîte (BORROW/EXTRACT/DIGITIZE) — phase 5P. */
+    ACCESS_REQUEST
 }

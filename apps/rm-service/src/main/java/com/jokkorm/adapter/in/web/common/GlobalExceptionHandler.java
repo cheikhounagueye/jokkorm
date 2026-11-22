@@ -1,9 +1,11 @@
 package com.jokkorm.adapter.in.web.common;
 
 import com.jokkorm.application.AccessGuard;
+import com.jokkorm.application.access.AccessRequestNotFoundException;
 import com.jokkorm.application.loan.LoanConflictException;
 import com.jokkorm.application.loan.LoanNotFoundException;
 import com.jokkorm.application.physical.BatchNotFoundException;
+import com.jokkorm.commons.role.ForbiddenRoleException;
 import com.jokkorm.application.physical.PhysicalContainerConflictException;
 import com.jokkorm.application.physical.PhysicalContainerNotFoundException;
 import com.jokkorm.application.physical.StorageLocationConflictException;
@@ -89,6 +91,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ProblemDetail> loanConflict(
         LoanConflictException e, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, "loan-conflict", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(AccessRequestNotFoundException.class)
+    public ResponseEntity<ProblemDetail> accessRequestNotFound(
+        AccessRequestNotFoundException e, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "access-request-not-found", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(ForbiddenRoleException.class)
+    public ResponseEntity<ProblemDetail> forbiddenRole(
+        ForbiddenRoleException e, HttpServletRequest request) {
+        return problem(HttpStatus.FORBIDDEN, "forbidden-role", e.getMessage(), request);
     }
 
     @ExceptionHandler(AccessGuard.TenantMismatchException.class)

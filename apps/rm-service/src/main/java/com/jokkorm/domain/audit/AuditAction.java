@@ -46,5 +46,15 @@ public enum AuditAction {
     /** Prêt retourné (boîte rangée, fantôme retiré) — phase 5E. */
     LOAN_RETURNED,
     /** Prêt annulé avant sortie — phase 5E. */
-    LOAN_CANCELLED
+    LOAN_CANCELLED,
+
+    /** Demande d'accès cycle de vie (phase 5P). */
+    ACCESS_REQUEST_CREATED,
+    ACCESS_REQUEST_SUBMITTED,
+    ACCESS_REQUEST_QUALIFIED,
+    ACCESS_REQUEST_APPROVED,
+    ACCESS_REQUEST_REJECTED,
+    ACCESS_REQUEST_CANCELLED,
+    ACCESS_REQUEST_FULFILLED,
+    ACCESS_REQUEST_COMPLETED
 }
