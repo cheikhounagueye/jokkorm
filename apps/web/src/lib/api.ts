@@ -196,6 +196,44 @@ export interface PhysicalContainerResponse {
   externalReference: string | null;
 }
 
+// ─── Import Excel topographie (phase 5I) ──────────────────────────────────────
+
+export interface ImportTopographyReport {
+  created: number;
+  skippedExisting: number;
+  errors: string[];
+}
+
+export function topographyTemplateUrl(): string {
+  return `/api/v1/physical/locations/import/template.xlsx`;
+}
+
+/** Télécharge le modèle Excel via fetch+blob (header X-Tenant-Id obligatoire). */
+export async function downloadTopographyTemplate(): Promise<void> {
+  const response = await fetch(topographyTemplateUrl(), { headers: headers() });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "jokkorm-topographie-modele.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function importTopographyExcel(file: File): Promise<ImportTopographyReport> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`/api/v1/physical/locations/import`, {
+    method: "POST",
+    headers: headers(), // ne pas ajouter Content-Type, FormData le fait avec boundary
+    body: formData,
+  });
+  return parse<ImportTopographyReport>(response);
+}
+
 export async function setContainerExternalReference(
   containerId: string,
   externalReference: string | null,

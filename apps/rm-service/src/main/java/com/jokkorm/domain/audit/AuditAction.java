@@ -34,5 +34,8 @@ public enum AuditAction {
     CONTAINER_BATCH_PRINTED,
 
     /** Référence externe prestataire mise à jour sur une boîte — phase 5N. */
-    CONTAINER_EXTERNAL_REFERENCE_SET
+    CONTAINER_EXTERNAL_REFERENCE_SET,
+
+    /** Import Excel topographie exécuté — phase 5I. */
+    STORAGE_LOCATIONS_IMPORTED
 }

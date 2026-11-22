@@ -6,13 +6,16 @@ import {
   createContainer,
   createStorageLocation,
   deleteStorageLocation,
+  downloadTopographyTemplate,
   findContainerByBarcode,
+  importTopographyExcel,
   listContainersAtPosition,
   listStorageTree,
   placeContainer,
   storeRecord,
   updateStorageLocation,
   type ContainerState,
+  type ImportTopographyReport,
   type PhysicalContainerResponse,
   type StorageLocationKind,
   type StorageLocationResponse,
@@ -68,6 +71,8 @@ export default function MagasinPage() {
           par JokkoRM.
         </p>
       </header>
+
+      <ImportTopographyBar onImported={() => treeQuery.refetch()} />
 
       <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: "1rem" }}>
         <section style={{ background: "white", border: "1px solid #e3e5ea", borderRadius: 6, padding: "1rem", maxHeight: "72vh", overflow: "auto" }}>
@@ -647,4 +652,85 @@ function stateLabel(s: ContainerState): string {
 }
 function stateColor(s: ContainerState): string {
   return s === "EMPTY" ? "#5b7cb3" : s === "OPEN" ? "#2e7d32" : s === "SEALED" ? "#a07b00" : "#b71c1c";
+}
+
+function ImportTopographyBar({ onImported }: { onImported: () => void }) {
+  const [report, setReport] = useState<ImportTopographyReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    setDownloading(true);
+    try { await downloadTopographyTemplate(); }
+    catch (e) { setError((e as Error).message); }
+    finally { setDownloading(false); }
+  }
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true); setError(null); setReport(null);
+    try {
+      const r = await importTopographyExcel(file);
+      setReport(r);
+      onImported();
+    } catch (err) { setError((err as Error).message); }
+    finally {
+      setUploading(false);
+      e.target.value = ""; // reset input
+    }
+  }
+
+  return (
+    <section style={{
+      background: "white", border: "1px solid #e3e5ea", borderLeft: "4px solid #2e7d32",
+      borderRadius: 6, padding: "0.75rem 1rem", marginBottom: "1rem",
+      display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+    }}>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#333" }}>
+          Import en masse (phase 5I)
+        </div>
+        <div style={{ fontSize: "0.8rem", color: "#666" }}>
+          Télécharge le modèle, remplis-le dans Excel, puis uploade-le ici — SITE/MAGASIN/TRAVÉE/TABLETTE/POSITION créés en 1 transaction.
+        </div>
+      </div>
+      <button type="button" onClick={handleDownload} disabled={downloading} style={{
+        padding: "0.4rem 0.9rem", background: "white", color: "#1e2d5e",
+        border: "1px solid #1e2d5e", borderRadius: 3, fontSize: "0.85rem", cursor: "pointer",
+      }}>
+        {downloading ? "…" : "📥 Modèle .xlsx"}
+      </button>
+      <label style={{
+        padding: "0.4rem 0.9rem", background: "#2e7d32", color: "white",
+        borderRadius: 3, fontSize: "0.85rem", cursor: uploading ? "wait" : "pointer", fontWeight: 600,
+      }}>
+        {uploading ? "⏳ Import…" : "📤 Uploader .xlsx"}
+        <input type="file" accept=".xlsx" onChange={handleUpload} disabled={uploading} style={{ display: "none" }} />
+      </label>
+      {report && (
+        <div style={{
+          flexBasis: "100%", marginTop: 8,
+          background: report.errors.length ? "#fff8e1" : "#e8f5e9",
+          border: `1px solid ${report.errors.length ? "#ffb300" : "#2e7d32"}`,
+          borderRadius: 4, padding: "0.5rem 0.75rem", fontSize: "0.85rem",
+        }}>
+          <strong>Résultat :</strong> {report.created} créés, {report.skippedExisting} ignorés (déjà présents)
+          {report.errors.length > 0 && (
+            <>
+              , <span style={{ color: "#a00" }}>{report.errors.length} erreur{report.errors.length > 1 ? "s" : ""}</span>
+              <ul style={{ margin: "0.3rem 0 0 1.2rem", fontSize: "0.8rem" }}>
+                {report.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}
+                {report.errors.length > 5 && <li>… et {report.errors.length - 5} autres</li>}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+      {error && (
+        <div style={{ flexBasis: "100%", color: "#a00", fontSize: "0.85rem", marginTop: 6 }}>{error}</div>
+      )}
+    </section>
+  );
 }

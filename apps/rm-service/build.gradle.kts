@@ -20,4 +20,9 @@ dependencies {
     // Phase 5M.2 — PDFBox pour générer les feuilles d'étiquettes Avery A4
     // (BatchLabelsPdfGenerator : grille N étiquettes × M pages selon le template).
     implementation("org.apache.pdfbox:pdfbox:3.0.4")
+
+    // Phase 5I — Apache POI pour parser/générer les fichiers Excel d'import
+    // topographie (modèle à télécharger + upload utilisateur). poi-ooxml pour XLSX.
+    implementation("org.apache.poi:poi:5.3.0")
+    implementation("org.apache.poi:poi-ooxml:5.3.0")
 }
