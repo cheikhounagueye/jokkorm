@@ -1,6 +1,7 @@
 package com.jokkorm.adapter.in.web.physical;
 
 import com.jokkorm.application.physical.CreatePhysicalContainerUseCase;
+import com.jokkorm.application.physical.FindContainerByBarcodeUseCase;
 import com.jokkorm.application.physical.ListContainersAtPositionUseCase;
 import com.jokkorm.application.physical.PlaceContainerUseCase;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,22 +37,29 @@ public class PhysicalContainerController {
     private final CreatePhysicalContainerUseCase create;
     private final PlaceContainerUseCase place;
     private final ListContainersAtPositionUseCase listAtPosition;
+    private final FindContainerByBarcodeUseCase findByBarcode;
 
     public PhysicalContainerController(
         CreatePhysicalContainerUseCase create,
         PlaceContainerUseCase place,
-        ListContainersAtPositionUseCase listAtPosition) {
+        ListContainersAtPositionUseCase listAtPosition,
+        FindContainerByBarcodeUseCase findByBarcode) {
         this.create = create;
         this.place = place;
         this.listAtPosition = listAtPosition;
+        this.findByBarcode = findByBarcode;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Crée une boîte vide avec son code-barres.")
+    @Operation(
+        summary = "Crée une boîte vide. Code-barres généré automatiquement (phase 5K).",
+        description = "Le code-barres au format BOX-YYMMDD-xxxxxx est généré côté serveur "
+            + "(Crockford base32, triable chronologiquement, unique par tenant). L'appelant "
+            + "ne peut pas le choisir pour garantir la cohérence du format et l'unicité.")
     public PhysicalContainerResponse create(@Valid @RequestBody CreatePhysicalContainerRequest request) {
         return PhysicalContainerResponse.from(
-            create.execute(request.barcode(), request.label(), request.capacity()));
+            create.execute(request.label(), request.capacity()));
     }
 
     @PutMapping("/{id}/position")
@@ -70,5 +78,17 @@ public class PhysicalContainerController {
         return listAtPosition.execute(positionId).stream()
             .map(PhysicalContainerResponse::from)
             .toList();
+    }
+
+    @GetMapping("/by-barcode")
+    @Operation(
+        summary = "Lookup par code-barres — endpoint principal pour la douchette (phase 5K).",
+        description = "Scanne un code-barres BOX-YYMMDD-xxxxxx avec un lecteur USB/Bluetooth, "
+            + "le frontend envoie la chaîne lue à cet endpoint, retourne la boîte complète "
+            + "(état, position, capacité) ou 404 container-not-found.")
+    public PhysicalContainerResponse findByBarcode(
+        @Parameter(description = "Code-barres lu par la douchette")
+        @RequestParam String barcode) {
+        return PhysicalContainerResponse.from(findByBarcode.execute(barcode));
     }
 }

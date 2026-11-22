@@ -6,6 +6,7 @@ import {
   createContainer,
   createStorageLocation,
   deleteStorageLocation,
+  findContainerByBarcode,
   listContainersAtPosition,
   listStorageTree,
   placeContainer,
@@ -112,6 +113,7 @@ export default function MagasinPage() {
           )}
 
           <ContainerCreationCard />
+          <BarcodeScanner />
         </section>
       </div>
     </section>
@@ -429,17 +431,16 @@ function PlaceExistingContainerForm({ position, onPlaced }: { position: StorageL
 }
 
 function ContainerCreationCard() {
-  const [barcode, setBarcode] = useState("");
   const [label, setLabel] = useState("");
   const [capacity, setCapacity] = useState("");
   const [created, setCreated] = useState<PhysicalContainerResponse | null>(null);
 
   const mutation = useMutation({
     mutationFn: () => createContainer({
-      barcode, label: label || undefined,
+      label: label || undefined,
       capacity: capacity ? parseInt(capacity, 10) : undefined,
     }),
-    onSuccess: (c) => { setCreated(c); setBarcode(""); setLabel(""); setCapacity(""); },
+    onSuccess: (c) => { setCreated(c); setLabel(""); setCapacity(""); },
   });
 
   return (
@@ -448,49 +449,125 @@ function ContainerCreationCard() {
         Créer une nouvelle boîte
       </h2>
       <p style={{ margin: "0 0 0.5rem", color: "#666", fontSize: "0.85rem" }}>
-        La boîte est créée vide, sans position. Son UUID apparaît ci-dessous après création,
-        à copier dans le formulaire « Ranger une boîte » d&apos;une position.
+        Le code-barres est généré automatiquement au format <code>BOX-YYMMDD-xxxxxx</code>
+        (Crockford base32, triable chronologiquement, unique par tenant). Imprime-le, colle-le
+        sur la boîte, scanne-le avec la douchette dès que tu veux la retrouver.
       </p>
       <form
         onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}
         style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
       >
         <input
-          value={barcode}
-          onChange={(e) => setBarcode(e.target.value)}
-          placeholder="code-barres (ex. DMG-2024-112)"
-          required
-          style={{ ...inputStyle, flex: "1 1 180px" }}
-        />
-        <input
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="libellé"
-          style={{ ...inputStyle, flex: "1 1 180px" }}
+          placeholder="libellé (ex. Marchés publics 2024)"
+          style={{ ...inputStyle, flex: "1 1 220px" }}
         />
         <input
           value={capacity}
           onChange={(e) => setCapacity(e.target.value)}
-          placeholder="capacité"
+          placeholder="capacité (nb max de dossiers)"
           type="number"
           min={1}
-          style={{ ...inputStyle, width: 100 }}
+          style={{ ...inputStyle, width: 170 }}
         />
-        <button type="submit" disabled={mutation.isPending || !barcode} style={buttonStyle}>
+        <button type="submit" disabled={mutation.isPending} style={buttonStyle}>
           {mutation.isPending ? "…" : "Créer boîte"}
         </button>
       </form>
       {mutation.isError && <ErrorInline error={mutation.error as Error} />}
       {created && (
-        <div style={{ marginTop: "0.6rem", padding: "0.5rem 0.75rem", background: "#f0f6ef", border: "1px solid #c8e3c0", borderRadius: 4, fontSize: "0.85rem" }}>
-          Boîte créée : <code>{created.barcode}</code> · UUID <code style={{ fontSize: "0.7rem" }}>{created.id}</code>
-          <button
-            type="button"
-            onClick={() => navigator.clipboard.writeText(created.id)}
-            style={{ ...buttonStyle, marginLeft: 8, fontSize: "0.7rem", padding: "0.2rem 0.5rem" }}
-          >
-            Copier UUID
-          </button>
+        <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "#f0f6ef", border: "1px solid #c8e3c0", borderRadius: 4 }}>
+          <div style={{ fontSize: "0.8rem", color: "#555", marginBottom: 4 }}>
+            Boîte créée · code-barres à imprimer sur l&apos;étiquette :
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <code style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1e2d5e", padding: "0.2rem 0.6rem", background: "white", border: "2px solid #1e2d5e", borderRadius: 3, letterSpacing: "0.05em" }}>
+              {created.barcode}
+            </code>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(created.barcode)}
+              style={buttonSecondaryStyle}>
+              Copier
+            </button>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(created.id)}
+              style={{ ...buttonSecondaryStyle, fontSize: "0.75rem" }}>
+              Copier UUID (pour ranger)
+            </button>
+          </div>
+          <div style={{ marginTop: 6, fontSize: "0.75rem", color: "#888" }}>
+            UUID interne : <code style={{ fontSize: "0.7rem" }}>{created.id}</code>
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function BarcodeScanner() {
+  const [scanned, setScanned] = useState("");
+  const [result, setResult] = useState<PhysicalContainerResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const scan = async (barcode: string) => {
+    setResult(null); setError(null);
+    try {
+      const r = await findContainerByBarcode(barcode);
+      setResult(r);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <aside style={{ background: "white", border: "1px solid #e3e5ea", borderTop: "4px solid #a07b00", borderRadius: 6, padding: "1rem", marginTop: "0.75rem" }}>
+      <h2 style={{ marginTop: 0, fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.03em", color: "#555" }}>
+        Scanner un code-barres (douchette)
+      </h2>
+      <p style={{ margin: "0 0 0.5rem", color: "#666", fontSize: "0.85rem" }}>
+        Positionne le curseur dans le champ ci-dessous et scanne avec la douchette.
+        La plupart envoient un <kbd>Entrée</kbd> en fin de lecture — le lookup partira automatiquement.
+      </p>
+      <form
+        onSubmit={(e) => { e.preventDefault(); scan(scanned); }}
+        style={{ display: "flex", gap: 6 }}
+      >
+        <input
+          value={scanned}
+          onChange={(e) => setScanned(e.target.value)}
+          placeholder="ex. BOX-261122-A3F2K9"
+          autoFocus
+          style={{ ...inputStyle, flex: 1, fontFamily: "monospace", fontSize: "0.95rem", letterSpacing: "0.05em" }}
+        />
+        <button type="submit" style={buttonStyle}>
+          Chercher
+        </button>
+      </form>
+      {error && (
+        <div style={{ marginTop: 8, color: "#a00", fontSize: "0.85rem" }}>
+          {error}
+        </div>
+      )}
+      {result && (
+        <div style={{ marginTop: 8, padding: "0.75rem", background: "#fafbfc", border: "1px solid #d8dae0", borderRadius: 4 }}>
+          <div><strong>Boîte :</strong> <code>{result.barcode}</code></div>
+          {result.label && <div style={{ color: "#555", fontSize: "0.85rem" }}>{result.label}</div>}
+          <div style={{ marginTop: 4, fontSize: "0.85rem" }}>
+            <strong>État :</strong> <span style={{ color: stateColor(result.state), fontWeight: 600 }}>{stateLabel(result.state)}</span>
+            {result.capacity != null && <> · Capacité {result.capacity}</>}
+          </div>
+          {result.positionId ? (
+            <div style={{ marginTop: 4, fontSize: "0.85rem", color: "#555" }}>
+              Rangée à la position UUID <code style={{ fontSize: "0.7rem" }}>{result.positionId}</code>
+            </div>
+          ) : (
+            <div style={{ marginTop: 4, color: "#a07b00", fontSize: "0.85rem" }}>
+              Pas encore positionnée dans la topographie.
+            </div>
+          )}
         </div>
       )}
     </aside>

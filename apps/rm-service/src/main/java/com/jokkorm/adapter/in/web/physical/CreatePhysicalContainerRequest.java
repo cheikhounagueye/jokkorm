@@ -1,9 +1,11 @@
 package com.jokkorm.adapter.in.web.physical;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 
+/**
+ * Création d'une boîte : seul le label + la capacité sont saisis par l'utilisateur.
+ * Le code-barres est généré automatiquement côté serveur (phase 5K).
+ */
 public record CreatePhysicalContainerRequest(
-    @NotBlank String barcode,
     String label,
     @Positive Integer capacity) {}

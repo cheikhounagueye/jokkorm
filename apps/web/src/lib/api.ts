@@ -194,7 +194,6 @@ export interface PhysicalContainerResponse {
 }
 
 export async function createContainer(input: {
-  barcode: string;
   label?: string;
   capacity?: number;
 }): Promise<PhysicalContainerResponse> {
@@ -202,6 +201,14 @@ export async function createContainer(input: {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+  return parse<PhysicalContainerResponse>(response);
+}
+
+export async function findContainerByBarcode(barcode: string): Promise<PhysicalContainerResponse> {
+  const qs = new URLSearchParams({ barcode });
+  const response = await fetch(`/api/v1/physical/containers/by-barcode?${qs.toString()}`, {
+    headers: headers(),
   });
   return parse<PhysicalContainerResponse>(response);
 }

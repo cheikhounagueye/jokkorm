@@ -8,27 +8,32 @@ import java.time.Clock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Crée une nouvelle boîte vide non positionnée. */
+/**
+ * Crée une nouvelle boîte vide non positionnée. Le code-barres est TOUJOURS généré
+ * automatiquement par {@link BarcodeGenerator} — on n'accepte plus de code saisi
+ * côté client pour garantir l'unicité, le format normalisé, et éviter l'incohérence
+ * (phase 5K).
+ */
 @Service
 public class CreatePhysicalContainerUseCase {
 
     private final PhysicalContainerRepository repository;
+    private final BarcodeGenerator barcodeGenerator;
     private final Clock clock;
 
-    public CreatePhysicalContainerUseCase(PhysicalContainerRepository repository, Clock clock) {
+    public CreatePhysicalContainerUseCase(
+        PhysicalContainerRepository repository,
+        BarcodeGenerator barcodeGenerator,
+        Clock clock) {
         this.repository = repository;
+        this.barcodeGenerator = barcodeGenerator;
         this.clock = clock;
     }
 
     @Transactional
-    public PhysicalContainer execute(String barcode, String label, Integer capacity) {
+    public PhysicalContainer execute(String label, Integer capacity) {
         TenantId tenant = TenantContext.current();
-        String normalized = barcode == null ? null : barcode.toUpperCase(java.util.Locale.ROOT).trim();
-        if (normalized != null && repository.existsByBarcode(tenant, normalized)) {
-            throw new PhysicalContainerConflictException(
-                "A container with barcode '%s' already exists for tenant %s"
-                    .formatted(normalized, tenant.value()));
-        }
+        String barcode = barcodeGenerator.generateForContainer(tenant);
         return repository.save(
             PhysicalContainer.createEmpty(tenant, barcode, label, capacity, clock.instant()));
     }
