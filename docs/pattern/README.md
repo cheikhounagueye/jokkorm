@@ -9,5 +9,6 @@ JokkoRM n'invente pas un modèle fonctionnel : il applique un pattern déjà pr�
 | [03 — Qui détient quoi](03-qui-detient-quoi.md) | Tableau de répartition — spec d'acceptance |
 | [04 — Le dossier hybride](04-dossier-hybride.md) | Une cote, deux supports, une seule vue |
 | [05 — Cycle de vie d'une archive papier](05-cycle-vie-papier.md) | Les 5 étapes + 3 sorts finaux, qui pilote à chaque étape |
+| [06 — Provisionnement masse + retrouvage universel](06-provisioning-masse-boites.md) | Lot, zone tampon, PDF Avery, les 10 chemins de retrouvage, 6 règles d'or |
 
 Ces pages sont destinées à un lecteur archiviste ou DSI, pas à un développeur. Pour la vue API, voir `docs/api/`. Pour les adapters, voir `docs/adapters/`.

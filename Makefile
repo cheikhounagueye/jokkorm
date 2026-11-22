@@ -46,6 +46,7 @@ pattern-check:
 	 test -f docs/pattern/03-qui-detient-quoi.md && \
 	 test -f docs/pattern/04-dossier-hybride.md && \
 	 test -f docs/pattern/05-cycle-vie-papier.md && \
+	 test -f docs/pattern/06-provisioning-masse-boites.md && \
 	 echo "Pattern docs OK" || (echo "Pattern docs INCOMPLÈTES" && exit 1)
 
 adr-new:
