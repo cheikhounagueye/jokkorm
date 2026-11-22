@@ -42,12 +42,13 @@ public final class PhysicalContainer {
     private Instant lastMovedAt;
     private final UUID batchId;
     private final Integer sequenceInBatch;
+    private String externalReference;
 
     private PhysicalContainer(
         UUID id, TenantId tenantId, String barcode, String label, UUID positionId,
         Integer capacity, ContainerState state,
         Instant createdAt, Instant updatedAt, Instant lastMovedAt,
-        UUID batchId, Integer sequenceInBatch) {
+        UUID batchId, Integer sequenceInBatch, String externalReference) {
         this.id = Objects.requireNonNull(id, "id");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         this.barcode = requireValidBarcode(barcode);
@@ -60,6 +61,7 @@ public final class PhysicalContainer {
         this.lastMovedAt = lastMovedAt;
         this.batchId = batchId;
         this.sequenceInBatch = sequenceInBatch;
+        this.externalReference = externalReference;
         if ((batchId == null) != (sequenceInBatch == null)) {
             throw new IllegalArgumentException(
                 "batchId and sequenceInBatch must both be set or both be null");
@@ -74,7 +76,7 @@ public final class PhysicalContainer {
         TenantId tenant, String barcode, String label, Integer capacity, Instant at) {
         return new PhysicalContainer(
             UUID.randomUUID(), tenant, normalize(barcode), label, null,
-            capacity, ContainerState.EMPTY, at, at, null, null, null);
+            capacity, ContainerState.EMPTY, at, at, null, null, null, null);
     }
 
     /** Création d'une boîte dans un lot (phase 5M bulk). */
@@ -83,7 +85,7 @@ public final class PhysicalContainer {
         UUID batchId, int sequenceInBatch, Instant at) {
         return new PhysicalContainer(
             UUID.randomUUID(), tenant, normalize(barcode), label, null,
-            capacity, ContainerState.EMPTY, at, at, null, batchId, sequenceInBatch);
+            capacity, ContainerState.EMPTY, at, at, null, batchId, sequenceInBatch, null);
     }
 
     /** Rehydratation depuis la persistance. */
@@ -91,10 +93,26 @@ public final class PhysicalContainer {
         UUID id, TenantId tenant, String barcode, String label, UUID positionId,
         Integer capacity, ContainerState state,
         Instant createdAt, Instant updatedAt, Instant lastMovedAt,
-        UUID batchId, Integer sequenceInBatch) {
+        UUID batchId, Integer sequenceInBatch, String externalReference) {
         return new PhysicalContainer(
             id, tenant, barcode, label, positionId, capacity, state,
-            createdAt, updatedAt, lastMovedAt, batchId, sequenceInBatch);
+            createdAt, updatedAt, lastMovedAt, batchId, sequenceInBatch, externalReference);
+    }
+
+    /**
+     * Fixe une référence externe (ex. numéro PRO ARCHIVES SYSTEMES "19944") pour
+     * tracer une boîte reçue d'un prestataire tiers. Nullable, modifiable.
+     */
+    public void setExternalReference(String ref, Instant at) {
+        requireNotDestroyed();
+        this.externalReference = (ref == null || ref.isBlank()) ? null : ref.trim();
+        this.updatedAt = at;
+    }
+
+    private void requireNotDestroyed() {
+        if (state == ContainerState.DESTROYED) {
+            throw new IllegalStateException("Container " + barcode + " is destroyed");
+        }
     }
 
     /** Range (ou déplace) la boîte sur une position donnée. */
@@ -142,12 +160,6 @@ public final class PhysicalContainer {
         this.updatedAt = at;
     }
 
-    private void requireNotDestroyed() {
-        if (state == ContainerState.DESTROYED) {
-            throw new IllegalStateException("Container " + barcode + " is destroyed");
-        }
-    }
-
     private static String requireValidBarcode(String barcode) {
         if (barcode == null || barcode.isBlank()) {
             throw new IllegalArgumentException("barcode must not be blank");
@@ -183,4 +195,5 @@ public final class PhysicalContainer {
     public Optional<Instant> lastMovedAt() { return Optional.ofNullable(lastMovedAt); }
     public Optional<UUID> batchId() { return Optional.ofNullable(batchId); }
     public Optional<Integer> sequenceInBatch() { return Optional.ofNullable(sequenceInBatch); }
+    public Optional<String> externalReference() { return Optional.ofNullable(externalReference); }
 }

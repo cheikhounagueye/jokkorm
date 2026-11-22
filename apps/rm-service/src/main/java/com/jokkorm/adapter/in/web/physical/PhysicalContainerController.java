@@ -6,6 +6,7 @@ import com.jokkorm.application.physical.CreatePhysicalContainerUseCase;
 import com.jokkorm.application.physical.FindContainerByBarcodeUseCase;
 import com.jokkorm.application.physical.ListContainersAtPositionUseCase;
 import com.jokkorm.application.physical.PlaceContainerUseCase;
+import com.jokkorm.application.physical.SetContainerExternalReferenceUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -44,18 +46,36 @@ public class PhysicalContainerController {
     private final ListContainersAtPositionUseCase listAtPosition;
     private final FindContainerByBarcodeUseCase findByBarcode;
     private final BarcodeImageGenerator imageGenerator;
+    private final SetContainerExternalReferenceUseCase setExternalRef;
 
     public PhysicalContainerController(
         CreatePhysicalContainerUseCase create,
         PlaceContainerUseCase place,
         ListContainersAtPositionUseCase listAtPosition,
         FindContainerByBarcodeUseCase findByBarcode,
-        BarcodeImageGenerator imageGenerator) {
+        BarcodeImageGenerator imageGenerator,
+        SetContainerExternalReferenceUseCase setExternalRef) {
         this.create = create;
         this.place = place;
         this.listAtPosition = listAtPosition;
         this.findByBarcode = findByBarcode;
         this.imageGenerator = imageGenerator;
+        this.setExternalRef = setExternalRef;
+    }
+
+    public record ExternalReferenceRequest(String externalReference) {}
+
+    @PutMapping("/{id}/external-reference")
+    @Operation(
+        summary = "Fixe/efface la référence externe prestataire (ex. PRO ARCHIVES #19944).",
+        description = "Référence libre (max 128 chars). Null ou vide efface. Idempotent "
+            + "sur valeur inchangée. Audit CONTAINER_EXTERNAL_REFERENCE_SET avec old→new.")
+    public PhysicalContainerResponse setExternalReference(
+        @PathVariable UUID id,
+        @RequestBody ExternalReferenceRequest request,
+        @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        return PhysicalContainerResponse.from(
+            setExternalRef.execute(id, request.externalReference(), actor));
     }
 
     @PostMapping

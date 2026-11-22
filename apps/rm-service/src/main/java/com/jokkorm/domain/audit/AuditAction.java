@@ -31,5 +31,8 @@ public enum AuditAction {
     CONTAINER_BATCH_CREATED,
 
     /** Lot imprimé (PDF étiquettes téléchargé) — phase 5M.2. */
-    CONTAINER_BATCH_PRINTED
+    CONTAINER_BATCH_PRINTED,
+
+    /** Référence externe prestataire mise à jour sur une boîte — phase 5N. */
+    CONTAINER_EXTERNAL_REFERENCE_SET
 }

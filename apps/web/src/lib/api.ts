@@ -191,6 +191,21 @@ export interface PhysicalContainerResponse {
   createdAt: string;
   updatedAt: string;
   lastMovedAt: string | null;
+  batchId: string | null;
+  sequenceInBatch: number | null;
+  externalReference: string | null;
+}
+
+export async function setContainerExternalReference(
+  containerId: string,
+  externalReference: string | null,
+): Promise<PhysicalContainerResponse> {
+  const response = await fetch(`/api/v1/physical/containers/${containerId}/external-reference`, {
+    method: "PUT",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ externalReference }),
+  });
+  return parse<PhysicalContainerResponse>(response);
 }
 
 export async function createContainer(input: {

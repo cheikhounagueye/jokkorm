@@ -15,3 +15,5 @@ databaseChangeLog:
       file: db/changelog/0007-physical-movement.yaml
   - include:
       file: db/changelog/0008-container-batch.yaml
+  - include:
+      file: db/changelog/0009-container-external-reference.yaml

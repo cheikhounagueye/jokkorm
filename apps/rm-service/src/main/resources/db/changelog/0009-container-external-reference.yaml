@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0009-container-external-reference
+      author: jokkorm
+      comment: >
+        Phase 5N — référence externe prestataire (ex. numéro PRO ARCHIVES
+        SYSTEMES "19944"). Nullable, modifiable après création. Index tenant+ref
+        pour recherches ciblées style "trouve-moi la boîte PAS #19944".
+      changes:
+        - addColumn:
+            tableName: physical_container
+            columns:
+              - column:
+                  name: external_reference
+                  type: VARCHAR(128)
+        - createIndex:
+            tableName: physical_container
+            indexName: ix_physical_container_tenant_extref
+            columns:
+              - column:
+                  name: tenant_id
+              - column:
+                  name: external_reference

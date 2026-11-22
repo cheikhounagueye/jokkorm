@@ -132,6 +132,26 @@ public class BatchLabelsPdfGenerator {
                         content.showText(sanitize(label));
                         content.endText();
                     }
+
+                    // Phase 5N — N° séquence dans le lot (haut-droite) :
+                    //   format "N° 023/500" aligné pour lecture rapide humaine
+                    if (c.sequenceInBatch().isPresent()) {
+                        String seq = "N° %03d/%03d".formatted(c.sequenceInBatch().get(), batch.size());
+                        content.beginText();
+                        content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 6);
+                        content.newLineAtOffset(x + labelWidthPt - 42, yTop - 10);
+                        content.showText(seq);
+                        content.endText();
+                    }
+
+                    // Phase 5N — Référence externe prestataire en bas-gauche si présente
+                    if (c.externalReference().isPresent()) {
+                        content.beginText();
+                        content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_OBLIQUE), 5);
+                        content.newLineAtOffset(x + 4, yBottom + 3);
+                        content.showText(sanitize("Ref. " + c.externalReference().get()));
+                        content.endText();
+                    }
                 }
             } finally {
                 if (content != null) content.close();

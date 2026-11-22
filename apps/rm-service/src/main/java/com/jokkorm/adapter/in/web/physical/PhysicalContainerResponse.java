@@ -14,7 +14,10 @@ public record PhysicalContainerResponse(
     ContainerState state,
     Instant createdAt,
     Instant updatedAt,
-    Instant lastMovedAt) {
+    Instant lastMovedAt,
+    UUID batchId,
+    Integer sequenceInBatch,
+    String externalReference) {
 
     public static PhysicalContainerResponse from(PhysicalContainer d) {
         return new PhysicalContainerResponse(
@@ -23,6 +26,9 @@ public record PhysicalContainerResponse(
             d.capacity().orElse(null),
             d.state(),
             d.createdAt(), d.updatedAt(),
-            d.lastMovedAt().orElse(null));
+            d.lastMovedAt().orElse(null),
+            d.batchId().orElse(null),
+            d.sequenceInBatch().orElse(null),
+            d.externalReference().orElse(null));
     }
 }

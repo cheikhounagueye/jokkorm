@@ -14,5 +14,8 @@ public enum AuditTargetType {
     STORAGE_LOCATION,
 
     /** Lot de provisionnement de boîtes (phase 5M). */
-    CONTAINER_BATCH
+    CONTAINER_BATCH,
+
+    /** Conteneur physique individuel (boîte, carton) — phase 5N. */
+    CONTAINER
 }
