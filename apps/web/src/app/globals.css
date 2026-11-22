@@ -219,6 +219,15 @@ tbody tr:hover td { background: var(--surface-hover); }
   outline-offset: 2px;
 }
 
+/* ─── Impression : pas de cadre applicatif ────────────────────────── */
+
+@media print {
+  [data-app-chrome], .no-print { display: none !important; }
+  [data-app-content] { margin-left: 0 !important; }
+  [data-app-content] main { padding: 0 !important; background: white !important; }
+  html, body { background: white !important; }
+}
+
 /* ─── Animations ──────────────────────────────────────────────────── */
 
 @keyframes fade-up {

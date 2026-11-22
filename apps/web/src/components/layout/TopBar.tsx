@@ -21,7 +21,7 @@ const ROLES: { value: UserRole; label: string; color: string; defaultActor: stri
 
 export function TopBar() {
   return (
-    <header style={{
+    <header data-app-chrome style={{
       height: 56,
       background: "var(--surface-card)",
       borderBottom: "1px solid var(--border-subtle)",

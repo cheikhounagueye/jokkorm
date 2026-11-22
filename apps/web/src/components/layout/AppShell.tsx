@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div style={{ minHeight: "100vh", background: "var(--surface-page)" }}>
       <Sidebar />
-      <div style={{
+      <div data-app-content style={{
         marginLeft: SIDEBAR_WIDTH,
         minHeight: "100vh",
         display: "flex",
@@ -60,7 +60,7 @@ function Sidebar() {
   const sections = Array.from(new Set(NAV_ITEMS.map((i) => i.section)));
 
   return (
-    <aside style={{
+    <aside data-app-chrome style={{
       position: "fixed",
       top: 0, left: 0, bottom: 0,
       width: SIDEBAR_WIDTH,
