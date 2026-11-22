@@ -347,7 +347,8 @@ export interface BufferZoneAlert {
   thresholdDays: number;
   totalStaleContainers: number;
   byBatch: StaleBufferEntry[];
-  hasAlerts: boolean;
+  /** Calculé côté client (backend n'expose pas ce champ en JSON) */
+  hasAlerts?: boolean;
 }
 
 export async function getBufferZoneAlerts(): Promise<BufferZoneAlert> {

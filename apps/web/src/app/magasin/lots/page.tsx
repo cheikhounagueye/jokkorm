@@ -46,7 +46,7 @@ export default function LotsPage() {
         </Link>
       </header>
 
-      {alertsQuery.data?.hasAlerts && (
+      {alertsQuery.data && alertsQuery.data.totalStaleContainers > 0 && (
         <section style={{
           background: "#fff4e5", border: "1px solid #ffb300", borderLeft: "4px solid #ed6c02",
           borderRadius: 6, padding: "0.75rem 1rem", marginBottom: "1rem",

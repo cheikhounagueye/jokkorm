@@ -35,7 +35,7 @@ public class BufferZoneAlertUseCase {
         @Value("${jokkorm.physical.buffer-zone-alert-days:14}") long alertDays) {
         this.containers = containers;
         this.clock = clock;
-        this.alertDays = Math.max(1, alertDays);
+        this.alertDays = Math.max(0, alertDays); // 0 = alerte immédiate (test/démo)
     }
 
     public record Alert(
