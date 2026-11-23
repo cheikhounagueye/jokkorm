@@ -272,7 +272,7 @@ Le texte ci-dessus laissait plusieurs points ouverts. Voici ce qui a été reten
 8. **Gel et numérisation** : simple avertissement (rien ne sort de la salle) ; prêt et
    extraction restent bloqués par un gel.
 
-### Convention « double face » (5T.C, 5T.D)
+### Convention « double face » (5T.C, 5T.D) — proposée le 2026-11-23, à valider
 
 Un épi double face porte **une travée par rang et par face**. Les deux travées d'un même rang
 ont le même code d'épi et le même rang, l'une face A, l'autre face B, et toutes deux

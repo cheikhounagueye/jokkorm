@@ -118,6 +118,9 @@ export interface RoomLayout {
   equipment: LayoutEquipment[];
   doorX: number;
   waypoints: Waypoint[];
+  /** Profondeur de la zone d'entrée et largeur des allées (m) : mesurées ou par défaut. */
+  entranceGap: number;
+  aisleGap: number;
 }
 
 /** Échelle réelle (pattern 10) : 1 unité de scène = 1 m, les longueurs arrivent en mm. */
@@ -214,9 +217,18 @@ export function computeRoomLayout(room: RoomResponse): RoomLayout {
   const colWidths = rows.map((row) => row.front.map((f, k) =>
     Math.max(f ? shelfWidth(f) : 0, row.back[k] ? shelfWidth(row.back[k]!) : 0, 0.3)));
   const rowWidths = colWidths.map((cols) => cols.reduce((w, c) => w + c, 0) + DIM.shelfGap * Math.max(0, cols.length - 1));
+  // Salle mesurée : ses vraies dimensions, telles quelles (un mobilier trop grand déborde des
+  // murs, comme le signale l'alerte de salle). Non mesurée : taille déduite du mobilier.
   const dims = room.dims;
-  const width = Math.max(6, ...rowWidths.map((w) => w + 2 * DIM.sideMargin), dims?.widthMm ? dims.widthMm * MM : 0);
+  const width = dims?.widthMm ? dims.widthMm * MM : Math.max(6, ...rowWidths.map((w) => w + 2 * DIM.sideMargin));
   const height = dims?.ceilingHeightMm ? dims.ceilingHeightMm * MM : DIM.roomH;
+  const rowDepths = rows.map((row) => Math.max(...row.front.map(unitDepth)) + (row.back.length ? Math.max(...row.back.map(unitDepth)) : 0));
+  // Longueur mesurée : les allées se partagent la place restante (entrée, entre rangées, fond), 60 cm au moins.
+  const measuredGap = dims?.lengthMm
+    ? Math.max(0.6, (dims.lengthMm * MM - rowDepths.reduce((a, b) => a + b, 0)) / (rows.length + 1))
+    : null;
+  const entranceGap = measuredGap ?? DIM.entrance;
+  const aisleGap = measuredGap ?? DIM.aisle;
 
   const shelves: LayoutShelf[] = [];
   const slots: LayoutSlot[] = [];
@@ -260,7 +272,7 @@ export function computeRoomLayout(room: RoomResponse): RoomLayout {
     });
   };
 
-  let z = DIM.entrance;
+  let z = entranceGap;
   rows.forEach((row, r) => {
     const depthA = Math.max(...row.front.map(unitDepth));
     const depthB = row.back.length ? Math.max(...row.back.map(unitDepth)) : 0;
@@ -275,22 +287,22 @@ export function computeRoomLayout(room: RoomResponse): RoomLayout {
     aisles.push({
       index: r,
       label: row.label,
-      z: r === 0 ? z - DIM.entrance * 0.45 : z - DIM.aisle / 2,
+      z: r === 0 ? z - entranceGap * 0.45 : z - aisleGap / 2,
       x0: DIM.sideMargin * 0.4,
       x1: width - DIM.sideMargin * 0.4,
       shelves: rowShelves,
       occupancy: sumOccupancy(rowShelves),
     });
-    z += depthA + depthB + DIM.aisle;
+    z += depthA + depthB + aisleGap;
   });
-  const depth = Math.max(z - DIM.aisle + DIM.backMargin, dims?.lengthMm ? dims.lengthMm * MM : 0);
+  const depth = dims?.lengthMm ? dims.lengthMm * MM : z - aisleGap + DIM.backMargin;
 
   const equipment = room.equipment.map((e) => placeEquipment(e, width, depth, height));
   const entrance = room.equipment.find((e) => e.kind === "EMERGENCY_EXIT" && e.z <= 0.02);
   const doorX = (entrance ? entrance.x : 0.5) * width;
 
   const layout: RoomLayout = {
-    width, depth, height, shelves, slots, boxes, aisles, equipment, doorX, waypoints: [],
+    width, depth, height, shelves, slots, boxes, aisles, equipment, doorX, waypoints: [], entranceGap, aisleGap,
   };
   mirrorForEntranceView(layout);
   layout.waypoints = buildWaypoints(room, layout);
@@ -370,7 +382,7 @@ function buildWaypoints(room: RoomResponse, l: RoomLayout): Waypoint[] {
       const back = ls.zFront + ls.depth;
       const next = l.shelves.filter((o) => o.row === aisle.index + 1 && o.facing === 1).map((o) => o.zFront);
       const behind = Math.max(0.6, (next.length ? Math.min(...next) : l.depth) - back - 0.25);
-      const front = aisle.index === 0 ? DIM.entrance - 0.35 : DIM.aisle - 0.25;
+      const front = Math.max(0.5, (aisle.index === 0 ? l.entranceGap : l.aisleGap) - 0.25);
       wps.push({
         kind: "shelf",
         title: `Travée ${ls.shelf.node.code}${ls.shelf.node.label ? ` — ${ls.shelf.node.label}` : ""}`,
