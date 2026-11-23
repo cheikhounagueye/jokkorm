@@ -63,6 +63,11 @@ Pattern 03 : l'emplacement et les mouvements appartiennent à JokkoRM ; Maarch l
   envoie : une modification faite dans Maarch entre la relecture et l'écriture (quelques ms)
   serait perdue.
 - **Suivi** : `GET /api/v1/master/sync?cote=` et la fiche de l'archive (« Affiché dans Maarch RM »).
+- **Vérifié en réel le 2026-11-23** (Maarch RM 2.7, compte de service `jokkorm`) :
+  - la boîte d'une archive DOSIP déplacée est envoyée 2 s plus tard, au premier essai ;
+  - le champ s'affiche dans la description de l'archive côté Maarch ;
+  - l'empreinte des autres champs est inchangée, `originatorArchiveId` et la date comprises ;
+  - le journal Maarch attribue `updateMetadata` à `jokkorm`.
 
 ### Préparation de Maarch RM (une fois)
 
@@ -71,7 +76,7 @@ Script : `~/maarchrm-test/jokkorm-setup-2a.sh` (sauvegarde de la base Maarch pri
 1. Champ de description `localisation_physique` (« Localisation physique (JokkoRM) »), type texte,
    **non immuable** (un champ immuable bloquerait aussi JokkoRM). Les profils `DOSIP` et `ETAC`
    acceptent les index ajoutés (`acceptUserIndex`), sinon l'ajouter au profil.
-2. Compte de service `jokkorm`, rattaché au service d'archives GIC, avec 4 droits :
+2. Compte de service `jokkorm` (adresse e-mail obligatoire, ici technique), rattaché au service d'archives GIC, avec 4 droits :
    `recordsManagement/archives/read`, `recordsManagement/archives/readCount`,
    `recordsManagement/archive/readMetadata*`, `recordsManagement/archives/updateMetadata`.
    Ses écritures apparaissent sous son nom dans le journal Maarch.
