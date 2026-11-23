@@ -195,6 +195,20 @@ class MasterSyncIT {
     }
 
     @Test
+    @DisplayName("Demande de prêt pas encore sortie : Maarch affiche toujours « en magasin »")
+    void requested_loan_is_not_shown_as_out() {
+        as(() -> requestLoan.execute(box.id(), "Awa Diop", "DRH", "Audit", Instant.now().plus(Duration.ofDays(10)), "it"));
+        as(() -> {
+            sync.touchContainer(tenant, box.id());  // un envoi est demandé pendant que la demande attend
+            return null;
+        });
+
+        sync.drain(100);
+
+        assertThat(row().lastPayload()).contains("en magasin").doesNotContain("en prêt");
+    }
+
+    @Test
     @DisplayName("Maarch en panne : le geste réussit quand même, l'envoi est reprogrammé")
     void outage_never_blocks_the_gesture() {
         MAARCH.stubFor(put(urlPathEqualTo("/recordsManagement/archives/Metadata"))

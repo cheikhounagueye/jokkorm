@@ -156,7 +156,9 @@ public class MasterSyncService {
         if (box == null) return new PhysicalStatus(null, "pas encore rangée", asOf);
         if (box.state() == ContainerState.DESTROYED) return new PhysicalStatus(null, "boîte détruite", asOf);
         String address = box.positionId().flatMap(id -> locations.findById(tenant, id)).map(p -> address(tenant, p)).orElse(null);
+        // findActiveByContainer inclut les simples demandes (REQUESTED) : la boîte est encore en rayon.
         String state = loans.findActiveByContainer(tenant, box.id())
+            .filter(l -> l.status().isActive())
             .map(l -> l.expectedReturnAt() == null ? "en prêt"
                 : "en prêt, retour prévu le " + DAY.withZone(zone).format(l.expectedReturnAt()))
             .orElse(address == null ? "en zone tampon (pas encore rangée)" : "en magasin");
