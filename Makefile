@@ -46,8 +46,11 @@ pattern-check:
 	 test -f docs/pattern/03-qui-detient-quoi.md && \
 	 test -f docs/pattern/04-dossier-hybride.md && \
 	 test -f docs/pattern/05-cycle-vie-papier.md && \
-	 test -f docs/pattern/06-provisioning-masse-boites.md \
-		docs/pattern/07-demandes-utilisateurs-multi-types.md && \
+	 test -f docs/pattern/06-provisioning-masse-boites.md && \
+	 test -f docs/pattern/07-demandes-utilisateurs-multi-types.md && \
+	 test -f docs/pattern/08-recherche-metier-vs-barcode-technique.md && \
+	 test -f docs/pattern/09-design-system-salle-archives.md && \
+	 test -f docs/pattern/10-dimensionnement-reprise-tableaux-de-gestion.md && \
 	 echo "Pattern docs OK" || (echo "Pattern docs INCOMPLÈTES" && exit 1)
 
 adr-new:
