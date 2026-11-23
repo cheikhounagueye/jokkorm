@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import {
   getConsolidatedRecord,
+  getMasterSync,
   type ConsolidatedRecordResponse,
   type MasterStatus,
   type RecordResponse,
@@ -149,6 +150,7 @@ function PhysicalPanel({ data }: { data: RecordResponse }) {
         <InfoRow label="Enregistrée le">{formatInstant(data.registeredAt)}</InfoRow>
         <InfoRow label="Dernière transition">{formatInstant(data.lastTransitionAt)}</InfoRow>
         <InfoRow label="Identifiant"><code style={{ fontSize: 12, wordBreak: "break-all" }}>{data.id}</code></InfoRow>
+        <MasterSyncRow cote={data.cote} />
       </dl>
     </Card>
   );
@@ -159,6 +161,40 @@ const FINAL_FATE: Record<string, string> = {
   CONSERVATION: "Conservation définitive",
   VERSEMENT_AN: "Versement aux Archives nationales",
 };
+
+/** Ce que la GED maître affiche de l'état physique (tranche 2a), et où en est l'envoi. */
+function MasterSyncRow({ cote }: { cote: string }) {
+  const info = useMasterInfo();
+  const q = useQuery({ queryKey: ["master-sync", cote], queryFn: () => getMasterSync(cote), refetchInterval: 10_000 });
+  if (!info.data || info.data.kind === "noop" || info.data.kind === "demo") return null;
+  const s = q.data;
+  const label = `Affiché dans ${info.data.displayName}`;
+  if (!s) return <InfoRow label={label}><span style={{ color: "var(--text-tertiary)" }}>Rien envoyé pour l&apos;instant</span></InfoRow>;
+  return (
+    <InfoRow label={label}>
+      {s.status === "SENT" && (
+        <span style={{ display: "grid", gap: 4 }}>
+          <Badge tone="success" icon={<Icons.success size={12} weight="bold" />}>À jour · {formatInstant(s.lastSentAt!)}</Badge>
+          {s.lastPayload && <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.lastPayload}</span>}
+        </span>
+      )}
+      {s.status === "PENDING" && (
+        <span style={{ display: "grid", gap: 4 }}>
+          <Badge tone="warning" icon={<Icons.pending size={12} weight="bold" />}>
+            {s.attempts === 0 ? "Envoi en cours" : `En attente · nouvel essai ${s.nextAttemptAt ? formatInstant(s.nextAttemptAt) : "bientôt"}`}
+          </Badge>
+          {s.lastError && <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{s.lastError}</span>}
+        </span>
+      )}
+      {s.status === "REJECTED" && (
+        <span style={{ display: "grid", gap: 4 }}>
+          <Badge tone="danger" icon={<Icons.error size={12} weight="bold" />}>Refusé par {info.data.displayName}</Badge>
+          <span style={{ fontSize: 12, color: "var(--danger-700)" }}>{s.lastError}</span>
+        </span>
+      )}
+    </InfoRow>
+  );
+}
 
 function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
   const info = useMasterInfo();

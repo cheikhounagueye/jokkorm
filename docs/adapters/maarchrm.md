@@ -41,6 +41,46 @@ Endpoints utilisés : `GET /recordsManagement/archives` (recherche, par cote) et
 
 Maarch RM ne prévient pas JokkoRM quand il attribue une cote (pas de webhook). L'archiviste cherche dans Maarch depuis la page **Archives**, puis importe celles qui ont du papier : `POST /api/v1/master/import`, idempotent et audité. Une archive inconnue de Maarch donne 404, et Maarch injoignable donne 502.
 
-## Tranche 2 (à venir)
+## Tranche 2a — l'état physique affiché dans Maarch RM (livrée)
 
-Écritures vers Maarch : emplacement physique, mouvements, gel, destruction (Medona `archiveDestruction`). Il faut d'abord décider, selon les patterns 02 et 03, quels champs sont détenus par qui.
+Pattern 03 : l'emplacement et les mouvements appartiennent à JokkoRM ; Maarch les **affiche**.
+
+- **Quand** : à chaque geste physique (rangement d'un dossier, rangement ou déplacement d'une
+  boîte — toutes ses archives —, sortie et retour de prêt, mouvement enregistré), JokkoRM met
+  la cote dans une file d'envoi (`master_sync`), dans la même transaction que le geste.
+- **Envoi** : un travailleur (toutes les 5 s, `JOKKORM_MASTER_SYNC_WORKER_ENABLED`) recalcule
+  l'état **actuel** et l'écrit dans Maarch. Panne → relances (30 s, 2 min, 10 min, 30 min, 2 h,
+  puis 6 h) ; refus durable → « refusé » avec le message Maarch, jusqu'au prochain geste.
+  Une panne de Maarch ne bloque jamais un rangement.
+- **Ce qui est écrit** : une ligne dans le champ de description `localisation_physique`
+  (`JOKKORM_MAARCHRM_LOCATION_FIELD`), ex. « Salle d'archives A (SALLE-A) · Épi E1 · rang 3 ·
+  face A · Travée T03 · Tablette 2 · Emplacement 01 — en magasin (JokkoRM, 23/11/2026 14:02) ».
+  **Jamais de code-barres** (pattern 08 : tout utilisateur Maarch qui voit l'archive voit ce texte).
+- **Comment** : relecture de l'archive juste avant l'écriture, puis `PUT
+  /recordsManagement/archives/Metadata` en renvoyant cote, `originatorArchiveId`, titre, date et
+  description **inchangés**, plus le seul champ de localisation. Maarch remplace tout ce qu'on lui
+  envoie : une modification faite dans Maarch entre la relecture et l'écriture (quelques ms)
+  serait perdue.
+- **Suivi** : `GET /api/v1/master/sync?cote=` et la fiche de l'archive (« Affiché dans Maarch RM »).
+
+### Préparation de Maarch RM (une fois)
+
+Script : `~/maarchrm-test/jokkorm-setup-2a.sh` (sauvegarde de la base Maarch prise avant).
+
+1. Champ de description `localisation_physique` (« Localisation physique (JokkoRM) »), type texte,
+   **non immuable** (un champ immuable bloquerait aussi JokkoRM). Les profils `DOSIP` et `ETAC`
+   acceptent les index ajoutés (`acceptUserIndex`), sinon l'ajouter au profil.
+2. Compte de service `jokkorm`, rattaché au service d'archives GIC, avec 4 droits :
+   `recordsManagement/archives/read`, `recordsManagement/archives/readCount`,
+   `recordsManagement/archive/readMetadata*`, `recordsManagement/archives/updateMetadata`.
+   Ses écritures apparaissent sous son nom dans le journal Maarch.
+3. Jeton du compte → `JOKKORM_MAARCHRM_AUTH_MODE=service-token` +
+   `JOKKORM_MAARCHRM_SERVICE_TOKEN`.
+
+## Tranche 2b (à étudier)
+
+- **Droits unifiés** (pattern 11) : Maarch n'offre pas d'appel « cet utilisateur peut-il voir
+  cette archive ? » et agir au nom d'un utilisateur demande ses identifiants ou un vrai SSO.
+  Étude préalable avant tout code.
+- **Destruction** : attestation jointe à l'archive Maarch, avec la phase 5G (ordre exact
+  attestation / élimination côté Maarch à fixer avec le bordereau d'élimination).

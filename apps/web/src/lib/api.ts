@@ -626,6 +626,25 @@ export async function importFromMaster(cote: string): Promise<ImportFromMasterRe
   return parse<ImportFromMasterResponse>(response);
 }
 
+/** Affichage de l'état physique dans le maître pour une cote (tranche 2a). */
+export interface MasterSyncStatus {
+  cote: string;
+  status: "PENDING" | "SENT" | "REJECTED";
+  attempts: number;
+  lastSentAt: string | null;
+  lastAttemptAt: string | null;
+  nextAttemptAt: string | null;
+  lastError: string | null;
+  lastPayload: string | null;
+}
+
+/** null si le maître de l'espace n'affiche pas l'état physique ou si rien n'a encore été envoyé. */
+export async function getMasterSync(cote: string): Promise<MasterSyncStatus | null> {
+  const response = await fetch(`/api/v1/master/sync?${new URLSearchParams({ cote })}`, { headers: headers() });
+  if (response.status === 204) return null;
+  return parse<MasterSyncStatus>(response);
+}
+
 export interface DevTenant { id: string; displayName: string }
 
 /** Dev uniquement : liste des espaces (404 si les endpoints de démo sont désactivés). */

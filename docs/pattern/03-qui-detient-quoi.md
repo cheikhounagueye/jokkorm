@@ -7,7 +7,7 @@ Ce tableau **engage celui qui construira le module** — équipe interne ou pres
 | Information ou fonction | Maître | Précision |
 |---|---|---|
 | Plan de classement | **Maître** | L'arborescence qui organise le fonds. JokkoRM en reçoit une copie en lecture seule, rafraîchie quotidiennement via `fetchClassificationPlan`. |
-| Cote de l'archive | **Maître** | L'identifiant unique du dossier, fixé à la clôture. Porté par le champ `originatorArchiveId` côté Maarch, repris tel quel côté JokkoRM. Voir ADR-0004. |
+| Cote de l'archive | **Maître** | L'identifiant unique du dossier, fixé à la clôture. Porté par le champ `archiverArchiveId` côté Maarch RM (cote du service d'archives, ADR-0004 amendé le 2026-11-23), repris tel quel côté JokkoRM. |
 | DUA et sort final | **Maître** | Affichés dans JokkoRM à titre informatif, jamais modifiables. Reçus via `fetchByCote` au moment du versement physique. |
 | Scellement et preuve d'intégrité | **Maître** | Porte sur le numérique. Un original papier ne se scelle pas : sa preuve, c'est sa chaîne de garde (voir mouvements). |
 | Bordereau d'élimination | **Maître** | Instruit, visé et scellé côté maître. JokkoRM y joint l'attestation d'exécution via `notifyDestructionExecuted`. |
@@ -24,7 +24,10 @@ Ce tableau **engage celui qui construira le module** — équipe interne ou pres
 À chaque livraison, le script `make acceptance-test` exécute une suite Playwright qui tente, pour chaque ligne, les cas suivants :
 
 - **Ligne « Maître »** : essaie de modifier le champ côté JokkoRM → doit retourner `403 master-owned-field`.
-- **Ligne « JokkoRM »** : essaie de modifier le champ côté maître → doit retourner l'équivalent 403 côté maître (Maarch : `resource.locked.by.physical.module`).
+- **Ligne « JokkoRM »** : ~~essaie de modifier le champ côté maître → doit retourner l'équivalent 403 côté maître~~.
+  *Amendement proposé le 2026-11-23, à valider* : avec Maarch RM, un champ verrouillé (immuable) bloque aussi
+  JokkoRM. Le champ d'affichage reste donc modifiable dans Maarch ; la recette vérifie que **le geste
+  physique suivant le réécrit** avec la valeur de JokkoRM (JokkoRM reste la seule source).
 - **Ligne « Les deux »** : vérifie que la modification propagée par le SSO est visible des deux côtés dans les 30 secondes.
 
 Un échec sur une ligne bloque la livraison. C'est la règle.
