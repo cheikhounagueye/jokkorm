@@ -31,6 +31,10 @@ public enum AuditAction {
     STORAGE_LOCATION_CAPACITY_SET,
     /** Longueur utile d'une travée, tablette ou position modifiée — phase 5T. */
     STORAGE_LOCATION_LENGTH_SET,
+    /** Mobilier et dimensions d'une travée ou d'une tablette (pattern 10, 5T.B). */
+    STORAGE_LOCATION_SPEC_SET,
+    /** Dimensions, limites et consignes climatiques d'une salle (pattern 10, 5T.B). */
+    ROOM_SPEC_SET,
     /** Boîte rangée pour la première fois sur une position — phase 5T. */
     CONTAINER_PLACED,
     /** Boîte déplacée d'une position à une autre — phase 5T. */

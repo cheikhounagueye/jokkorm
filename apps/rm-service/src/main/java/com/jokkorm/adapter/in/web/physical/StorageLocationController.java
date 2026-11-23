@@ -53,6 +53,7 @@ public class StorageLocationController {
     private final TopographyExcelTemplateGenerator templateGenerator;
     private final com.jokkorm.application.physical.SetStorageLengthUseCase lengthUseCase;
     private final com.jokkorm.application.physical.GetStorageSpaceUseCase spaceUseCase;
+    private final com.jokkorm.application.physical.SetStorageSpecUseCase specUseCase;
 
     public StorageLocationController(
         CreateStorageLocationUseCase createUseCase,
@@ -62,7 +63,9 @@ public class StorageLocationController {
         ImportTopographyFromExcelUseCase importUseCase,
         TopographyExcelTemplateGenerator templateGenerator,
         com.jokkorm.application.physical.SetStorageLengthUseCase lengthUseCase,
-        com.jokkorm.application.physical.GetStorageSpaceUseCase spaceUseCase) {
+        com.jokkorm.application.physical.GetStorageSpaceUseCase spaceUseCase,
+        com.jokkorm.application.physical.SetStorageSpecUseCase specUseCase) {
+        this.specUseCase = specUseCase;
         this.createUseCase = createUseCase;
         this.treeUseCase = treeUseCase;
         this.updateUseCase = updateUseCase;
@@ -79,6 +82,24 @@ public class StorageLocationController {
         description = "Longueur, occupé, rangeable (marge de manipulation déduite), en mm.")
     public com.jokkorm.application.physical.GetStorageSpaceUseCase.Space space(@PathVariable UUID id) {
         return spaceUseCase.execute(id);
+    }
+
+    public record SpecRequest(
+        com.jokkorm.domain.physical.FurnitureType furnitureType, Integer depthMm, Integer clearanceMm,
+        Integer heightMm, Integer faces, String aisleCode, Integer aisleOrder, String aisleSide) {}
+
+    @PutMapping("/{id}/spec")
+    @Operation(
+        summary = "Mobilier et dimensions d'une travée, ou dimensions propres d'une tablette (mm).",
+        description = "Pattern 10, 5T.B. Valeurs null = non mesurées (pas de contrôle). Une tablette "
+            + "sans valeur hérite de sa travée. 409 si une boîte déjà rangée ne tiendrait plus.")
+    public StorageLocationResponse setSpec(
+        @PathVariable UUID id,
+        @RequestBody SpecRequest r,
+        @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        return StorageLocationResponse.from(specUseCase.execute(id, new com.jokkorm.domain.physical.PhysicalSpec(
+            r.furnitureType(), r.depthMm(), r.clearanceMm(), r.heightMm(), r.faces(),
+            r.aisleCode(), r.aisleOrder(), r.aisleSide()), actor));
     }
 
     public record LengthRequest(Integer lengthMm) {}

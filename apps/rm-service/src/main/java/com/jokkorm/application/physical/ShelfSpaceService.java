@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 
 /**
  * Place disponible sur une tablette, en millimètres (pattern 10). Seule source des règles
- * de rangement : longueur de l'emplacement, marge de manipulation de la tablette.
+ * de rangement : longueur de l'emplacement, marge de manipulation de la tablette, et
+ * (5T.B) hauteur libre et profondeur de la tablette, héritées de la travée sauf surcharge.
+ * Une hauteur ou une profondeur non mesurée n'est pas contrôlée.
  */
 @Service
 public class ShelfSpaceService {
@@ -51,7 +53,27 @@ public class ShelfSpaceService {
     /** État d'une tablette au moment d'un rangement ou d'un réglage. */
     public record TabletteSpace(StorageLocation tablette, List<StorageLocation> positions,
                                 List<PhysicalContainer> boxes, BoxFormatCatalog.Spines spines,
-                                int lengthMm, int fillableMm) {
+                                int lengthMm, int fillableMm, Integer clearanceMm, Integer depthMm) {
+
+        /**
+         * Pourquoi cette boîte ne tient pas en hauteur ou en profondeur, ou vide si elle tient
+         * (ou si la tablette, ou le format de la boîte, n'est pas mesuré).
+         */
+        public java.util.Optional<String> sizeProblem(PhysicalContainer box) {
+            var format = spines.formatOf(box);
+            if (format.isEmpty()) return java.util.Optional.empty();
+            var f = format.get();
+            String where = tablette == null ? "cet emplacement" : "la tablette " + tablette.path();
+            if (clearanceMm != null && f.heightMm() > clearanceMm) {
+                return java.util.Optional.of("La boîte %s (%s) fait %s de haut : %s n'a que %s de hauteur libre"
+                    .formatted(box.barcode(), f.label(), LinearCapacity.cm(f.heightMm()), where, LinearCapacity.cm(clearanceMm)));
+            }
+            if (depthMm != null && f.depthMm() > depthMm) {
+                return java.util.Optional.of("La boîte %s (%s) fait %s de profondeur : %s n'a que %s de profondeur"
+                    .formatted(box.barcode(), f.label(), LinearCapacity.cm(f.depthMm()), where, LinearCapacity.cm(depthMm)));
+            }
+            return java.util.Optional.empty();
+        }
 
         public int usedMm() {
             return boxes.stream().mapToInt(spines::of).sum();
@@ -101,7 +123,17 @@ public class ShelfSpaceService {
 
         int length = LinearCapacity.tabletteLengthMm(tablette, travee, defaultTabletteMm);
         return new TabletteSpace(tablette, positions, boxes, catalog.spines(tenant), length,
-            LinearCapacity.fillableMm(length, marginPercent));
+            LinearCapacity.fillableMm(length, marginPercent),
+            effective(tablette, travee, true), effective(tablette, travee, false));
+    }
+
+    /** Hauteur libre ({@code clearance}) ou profondeur : celle de la tablette, sinon de sa travée. */
+    static Integer effective(StorageLocation tablette, StorageLocation travee, boolean clearance) {
+        Integer own = tablette == null ? null
+            : clearance ? tablette.spec().clearanceMm() : tablette.spec().depthMm();
+        if (own != null) return own;
+        return travee == null ? null
+            : clearance ? travee.spec().clearanceMm() : travee.spec().depthMm();
     }
 
     /**
@@ -110,6 +142,10 @@ public class ShelfSpaceService {
      */
     public void requireRoomFor(TenantId tenant, StorageLocation position, PhysicalContainer box) {
         TabletteSpace space = tabletteOf(tenant, position, true, box.id());
+        var tooBig = space.sizeProblem(box);
+        if (tooBig.isPresent()) {
+            throw new PhysicalContainerConflictException(tooBig.get());
+        }
         int spine = space.spines().of(box);
 
         int posFree = space.positionLengthMm(position) - space.usedMm(position.id());

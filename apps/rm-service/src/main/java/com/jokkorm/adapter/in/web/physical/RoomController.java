@@ -43,8 +43,11 @@ public class RoomController {
 
     private final GetRoomViewUseCase viewUseCase;
     private final RoomEquipmentUseCase equipmentUseCase;
+    private final com.jokkorm.application.physical.RoomSpecUseCase specUseCase;
 
-    public RoomController(GetRoomViewUseCase viewUseCase, RoomEquipmentUseCase equipmentUseCase) {
+    public RoomController(GetRoomViewUseCase viewUseCase, RoomEquipmentUseCase equipmentUseCase,
+                          com.jokkorm.application.physical.RoomSpecUseCase specUseCase) {
+        this.specUseCase = specUseCase;
         this.viewUseCase = viewUseCase;
         this.equipmentUseCase = equipmentUseCase;
     }
@@ -54,6 +57,22 @@ public class RoomController {
     public RoomResponse view(@PathVariable UUID storehouseId) {
         boolean reveal = RoleContext.hasAny(UserRole.ARCHIVIST, UserRole.ARCHIVES_HEAD, UserRole.AUDITOR);
         return RoomResponse.from(viewUseCase.execute(storehouseId), reveal);
+    }
+
+    @GetMapping("/{storehouseId}/spec")
+    @Operation(summary = "Dimensions, limites et consignes de la salle, et contrôle du mobilier (avertissements).")
+    public com.jokkorm.application.physical.RoomSpecUseCase.View spec(@PathVariable UUID storehouseId) {
+        return specUseCase.get(storehouseId);
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/{storehouseId}/spec")
+    @Operation(summary = "Saisit les dimensions de la salle (mm, m², kg/m², °C, %HR). Archiviste.",
+        description = "Toutes les valeurs sont facultatives ; aucune n'est préremplie (pattern 10 § 6).")
+    public com.jokkorm.application.physical.RoomSpecUseCase.View setSpec(
+        @PathVariable UUID storehouseId,
+        @org.springframework.web.bind.annotation.RequestBody com.jokkorm.application.physical.RoomSpecUseCase.Input body,
+        @org.springframework.web.bind.annotation.RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        return specUseCase.set(storehouseId, body, actor);
     }
 
     public record AddEquipmentRequest(

@@ -43,6 +43,32 @@ public class StorageLocationEntity {
     @Column(name = "length_mm")
     private Integer lengthMm;
 
+    // ─── Mobilier et dimensions (pattern 10, 5T.B) ───
+    @Enumerated(EnumType.STRING)
+    @Column(name = "furniture_type", length = 32)
+    private com.jokkorm.domain.physical.FurnitureType furnitureType;
+
+    @Column(name = "depth_mm")
+    private Integer depthMm;
+
+    @Column(name = "clearance_mm")
+    private Integer clearanceMm;
+
+    @Column(name = "height_mm")
+    private Integer heightMm;
+
+    @Column(name = "faces")
+    private Integer faces;
+
+    @Column(name = "aisle_code", length = 16)
+    private String aisleCode;
+
+    @Column(name = "aisle_order")
+    private Integer aisleOrder;
+
+    @Column(name = "aisle_side", length = 1)
+    private String aisleSide;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -65,6 +91,7 @@ public class StorageLocationEntity {
         e.parentId = d.parentId().orElse(null);
         e.path = d.path();
         e.lengthMm = d.lengthMm().orElse(null);
+        e.copySpec(d.spec());
         e.createdAt = d.createdAt();
         e.updatedAt = d.updatedAt();
         return e;
@@ -72,13 +99,28 @@ public class StorageLocationEntity {
 
     public StorageLocation toDomain() {
         return StorageLocation.rehydrate(
-            id, TenantId.of(tenantId), kind, code, label, parentId, path, lengthMm, createdAt, updatedAt);
+            id, TenantId.of(tenantId), kind, code, label, parentId, path, lengthMm,
+            new com.jokkorm.domain.physical.PhysicalSpec(furnitureType, depthMm, clearanceMm, heightMm,
+                faces, aisleCode, aisleOrder, aisleSide),
+            createdAt, updatedAt);
+    }
+
+    private void copySpec(com.jokkorm.domain.physical.PhysicalSpec s) {
+        this.furnitureType = s.furnitureType();
+        this.depthMm = s.depthMm();
+        this.clearanceMm = s.clearanceMm();
+        this.heightMm = s.heightMm();
+        this.faces = s.faces();
+        this.aisleCode = s.aisleCode();
+        this.aisleOrder = s.aisleOrder();
+        this.aisleSide = s.aisleSide();
     }
 
     public void copyMutableStateFrom(StorageLocation d) {
         this.label = d.label();
         this.path = d.path();
         this.lengthMm = d.lengthMm().orElse(null);
+        copySpec(d.spec());
         this.updatedAt = d.updatedAt();
     }
 

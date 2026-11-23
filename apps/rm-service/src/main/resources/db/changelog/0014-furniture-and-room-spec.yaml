@@ -1,0 +1,56 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0014-furniture-and-room-spec
+      author: jokkorm
+      comment: >
+        Phase 5T.B (pattern 10 § 2.3-2.4) — mobilier et dimensions. Sur la travée : type de
+        mobilier, profondeur et hauteur libre par défaut de ses tablettes, hauteur hors tout,
+        simple/double face, épi (code, rang, face). Sur la tablette : profondeur et hauteur
+        libre propres. Nouvelle table room_spec pour la salle (dimensions, plafond, surface,
+        charge au sol, consignes climatiques). Tout est facultatif : aucune donnée existante
+        n'est modifiée, et une dimension non mesurée n'est pas contrôlée.
+      changes:
+        - addColumn:
+            tableName: storage_location
+            columns:
+              - column: { name: furniture_type, type: VARCHAR(32) }
+              - column: { name: depth_mm, type: INT }
+              - column: { name: clearance_mm, type: INT }
+              - column: { name: height_mm, type: INT }
+              - column: { name: faces, type: INT }
+              - column: { name: aisle_code, type: VARCHAR(16) }
+              - column: { name: aisle_order, type: INT }
+              - column: { name: aisle_side, type: VARCHAR(1) }
+        - createTable:
+            tableName: room_spec
+            columns:
+              - column:
+                  name: storehouse_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    foreignKeyName: fk_room_spec_storehouse
+                    references: storage_location(id)
+                    deleteCascade: true
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { nullable: false, foreignKeyName: fk_room_spec_tenant, references: tenant(id) }
+              - column: { name: length_mm, type: INT }
+              - column: { name: width_mm, type: INT }
+              - column: { name: ceiling_height_mm, type: INT }
+              - column: { name: usable_area_m2, type: "NUMERIC(10,2)" }
+              - column: { name: floor_load_kg_m2, type: INT }
+              - column: { name: temp_min_c, type: "NUMERIC(4,1)" }
+              - column: { name: temp_max_c, type: "NUMERIC(4,1)" }
+              - column: { name: rh_min_pct, type: INT }
+              - column: { name: rh_max_pct, type: INT }
+              - column: { name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+        - createIndex:
+            tableName: room_spec
+            indexName: ix_room_spec_tenant
+            columns:
+              - column: { name: tenant_id }

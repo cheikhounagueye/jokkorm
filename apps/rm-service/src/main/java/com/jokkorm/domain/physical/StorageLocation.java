@@ -38,6 +38,8 @@ public final class StorageLocation {
     private String path;
     /** Longueur utile en mm (travée, tablette ou emplacement). Null = déduite (pattern 10). */
     private Integer lengthMm;
+    /** Mobilier et dimensions (travée, tablette), jamais null : {@link PhysicalSpec#EMPTY}. */
+    private PhysicalSpec spec = PhysicalSpec.EMPTY;
     private final Instant createdAt;
     private Instant updatedAt;
 
@@ -87,6 +89,26 @@ public final class StorageLocation {
         UUID id, TenantId tenant, StorageLocationKind kind, String code, String label,
         UUID parentId, String path, Integer lengthMm, Instant createdAt, Instant updatedAt) {
         return new StorageLocation(id, tenant, kind, code, label, parentId, path, lengthMm, createdAt, updatedAt);
+    }
+
+    /** Rehydratation avec le mobilier et les dimensions (pattern 10, 5T.B). */
+    public static StorageLocation rehydrate(
+        UUID id, TenantId tenant, StorageLocationKind kind, String code, String label,
+        UUID parentId, String path, Integer lengthMm, PhysicalSpec spec, Instant createdAt, Instant updatedAt) {
+        StorageLocation l = new StorageLocation(id, tenant, kind, code, label, parentId, path, lengthMm, createdAt, updatedAt);
+        l.spec = (spec == null ? PhysicalSpec.EMPTY : spec).requireAllowedFor(kind);
+        return l;
+    }
+
+    /** Fixe le mobilier et les dimensions (travée) ou les dimensions propres (tablette). */
+    public void changeSpec(PhysicalSpec newSpec, Instant at) {
+        this.spec = (newSpec == null ? PhysicalSpec.EMPTY : newSpec).requireAllowedFor(kind);
+        this.updatedAt = at;
+    }
+
+    /** Seules la travée et la tablette portent du mobilier ou des dimensions de rangement. */
+    public static boolean hasSpec(StorageLocationKind kind) {
+        return kind == StorageLocationKind.SHELF || kind == StorageLocationKind.RACK;
     }
 
     public void rename(String newLabel, Instant at) {
@@ -157,6 +179,7 @@ public final class StorageLocation {
     public Optional<UUID> parentId() { return Optional.ofNullable(parentId); }
     public String path() { return path; }
     public Optional<Integer> lengthMm() { return Optional.ofNullable(lengthMm); }
+    public PhysicalSpec spec() { return spec; }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
 }
