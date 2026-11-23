@@ -57,6 +57,13 @@ public class JpaPhysicalArchiveRecordRepository implements PhysicalArchiveRecord
     }
 
     @Override
+    public java.util.List<PhysicalArchiveRecord> findByContainer(TenantId tenant, UUID containerId) {
+        return jpa.findByTenantIdAndContainerIdOrderByCote(tenant.value(), containerId).stream()
+            .map(PhysicalArchiveRecordEntity::toDomain)
+            .toList();
+    }
+
+    @Override
     public boolean existsByCote(TenantId tenant, Cote cote) {
         return jpa.existsByTenantIdAndCote(tenant.value(), cote.value());
     }

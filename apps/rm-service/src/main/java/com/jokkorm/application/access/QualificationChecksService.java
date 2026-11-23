@@ -24,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class QualificationChecksService {
 
+    private final com.jokkorm.application.record.LegalHoldGuard legalHolds;
+
     private final PhysicalContainerRepository containers;
     private final PhysicalLoanRepository loans;
     private final AccessRequestRepository requests;
@@ -31,7 +33,9 @@ public class QualificationChecksService {
     public QualificationChecksService(
         PhysicalContainerRepository containers,
         PhysicalLoanRepository loans,
-        AccessRequestRepository requests) {
+        AccessRequestRepository requests,
+        com.jokkorm.application.record.LegalHoldGuard legalHolds) {
+        this.legalHolds = legalHolds;
         this.containers = containers;
         this.loans = loans;
         this.requests = requests;
@@ -77,6 +81,20 @@ public class QualificationChecksService {
             } else {
                 checks.add(QualificationCheck.pass("NO_ACTIVE_REQUEST"));
             }
+        }
+
+        // Gel contentieux (JokkoRM ou GED maître) : la boîte ou des pièces sortiraient de la salle.
+        // Numérisation : rien ne sort, le gel est signalé sans bloquer.
+        var holds = legalHolds.check(tenant, container.id());
+        if (!holds.blocked()) {
+            checks.add(new QualificationCheck("NO_LEGAL_HOLD", QualificationCheck.Severity.INFO, true,
+                holds.records() == 0 ? "Aucune archive enregistrée dans la boîte"
+                    : holds.records() + " archive(s) vérifiée(s) dans JokkoRM et la GED maître"));
+        } else if (request.type() == RequestType.DIGITIZE_EXTRACT) {
+            checks.add(QualificationCheck.warn("NO_LEGAL_HOLD",
+                String.join(" ; ", holds.blockers()) + ". Numérisation sur place uniquement, aucune pièce ne sort."));
+        } else {
+            checks.add(QualificationCheck.block("NO_LEGAL_HOLD", String.join(" ; ", holds.blockers())));
         }
 
         // Zone tampon : warning seulement

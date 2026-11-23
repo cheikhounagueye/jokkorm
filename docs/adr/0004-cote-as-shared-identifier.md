@@ -13,7 +13,7 @@ Trois candidats possibles :
 
 1. **UUID interne JokkoRM** : généré ici, exporté au maître. Rejeté : la cote préexiste au versement physique, elle vient du maître par nature.
 2. **Chemin plan-de-classement** (`/finances/marchés/2024/047`) : lisible mais pas stable (si le plan bouge, la clé bouge). Rejeté.
-3. **Cote émise par le maître** (`DMG/MP/2024/047`) : fixée à la clôture du dossier, stable, humaine, portée par le champ Maarch `originatorArchiveId`. Retenu.
+3. **Cote émise par le maître** (`DMG/MP/2024/047`) : fixée par le service d'archives, stable, humaine, portée par le champ Maarch RM `archiverArchiveId`. Retenu (amendé le 2026-11-23, voir plus bas).
 
 ## Décision
 
@@ -45,7 +45,7 @@ Si JokkoRM reçoit un événement `cote-assigned` pour une cote déjà présente
 ## Conséquences
 
 ### Positives
-- **Zéro ambiguïté** : la slide « qui détient quoi » devient littérale — Maarch RM colonne 2 (maître), JokkoRM colonne 2 (`originatorArchiveId` repris tel quel).
+- **Zéro ambiguïté** : la slide « qui détient quoi » devient littérale — Maarch RM colonne 2 (maître), JokkoRM colonne 2 (`archiverArchiveId` repris tel quel).
 - **Interopérabilité maître libre** : pas de format imposé, JokkoRM est agnostique.
 - **Humainement lisible** : les étiquettes papier affichent la cote, pas un UUID.
 
@@ -56,3 +56,12 @@ Si JokkoRM reçoit un événement `cote-assigned` pour une cote déjà présente
 ## Notes
 
 Compatible avec SEDA (balise `<ArchivalAgencyArchiveIdentifier>`) et avec MoReq 2010 (champ `id`). Pas de surprise à l'export réglementaire.
+
+## Amendement du 2026-11-23 — champ Maarch RM de la cote
+
+Décision de Cheikh A. Bamba : la cote partagée est **`archiverArchiveId`**, l'identifiant attribué par le service d'archives, et non `originatorArchiveId`.
+
+- Constat sur une instance Maarch RM 2.7 réelle : `originatorArchiveId` est la référence interne du service producteur (« 123 »), et `archiverArchiveId` porte la cote archivistique (`FR094080_2026_AE0002`).
+- Cohérent avec la note SEDA de cet ADR : `archiverArchiveId` correspond à `<ArchivalAgencyArchiveIdentifier>`.
+- Mis en œuvre dans l'adapter `maarchrm` (`docs/adapters/maarchrm.md`).
+

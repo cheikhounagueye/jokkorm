@@ -22,6 +22,9 @@ public interface PhysicalArchiveRecordRepository {
 
     boolean existsByCote(TenantId tenant, Cote cote);
 
+    /** Archives rangées dans une boîte (pour savoir ce qui sortirait avec elle). */
+    java.util.List<PhysicalArchiveRecord> findByContainer(TenantId tenant, UUID containerId);
+
     /** Liste paginée triée par date d'enregistrement décroissante. */
     Page<PhysicalArchiveRecord> findAll(TenantId tenant, PageRequest pageRequest);
 

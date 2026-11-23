@@ -22,12 +22,15 @@ public class RequestLoanUseCase {
     private final PhysicalContainerRepository containers;
     private final AuditChainService audit;
     private final Clock clock;
+    private final com.jokkorm.application.record.LegalHoldGuard legalHolds;
 
     public RequestLoanUseCase(
         PhysicalLoanRepository loans,
         PhysicalContainerRepository containers,
         AuditChainService audit,
-        Clock clock) {
+        Clock clock,
+        com.jokkorm.application.record.LegalHoldGuard legalHolds) {
+        this.legalHolds = legalHolds;
         this.loans = loans;
         this.containers = containers;
         this.audit = audit;
@@ -48,6 +51,8 @@ public class RequestLoanUseCase {
             throw new LoanConflictException(
                 "Container %s is destroyed, cannot be loaned".formatted(container.barcode()));
         }
+
+        legalHolds.requireNoHold(tenant, containerId, container.barcode());
 
         loans.findActiveByContainer(tenant, containerId).ifPresent(existing -> {
             throw new LoanConflictException(

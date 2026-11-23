@@ -45,6 +45,7 @@ public class AccessRequestWorkflow {
     private final AuditChainService audit;
     private final Clock clock;
     private final boolean allowSelfApproval;
+    private final com.jokkorm.application.record.LegalHoldGuard legalHolds;
 
     public AccessRequestWorkflow(
         AccessRequestRepository requests,
@@ -55,7 +56,9 @@ public class AccessRequestWorkflow {
         MaarchDigitizePort maarchPort,
         AuditChainService audit,
         Clock clock,
-        @Value("${jokkorm.access.allow-self-approval:false}") boolean allowSelfApproval) {
+        @Value("${jokkorm.access.allow-self-approval:false}") boolean allowSelfApproval,
+        com.jokkorm.application.record.LegalHoldGuard legalHolds) {
+        this.legalHolds = legalHolds;
         this.requests = requests;
         this.containers = containers;
         this.checksService = checksService;
@@ -167,7 +170,8 @@ public class AccessRequestWorkflow {
                 loanId = loan.id();
             }
             case EXTRACT_PIECES -> {
-                // Pas de mouvement de boîte — on trace juste l'extraction via notes
+                // Pas de mouvement de boîte, mais des pièces sortent : gel revérifié au moment de la remise.
+                legalHolds.requireNoHold(TenantContext.current(), container.id(), container.barcode());
             }
             case DIGITIZE_EXTRACT -> {
                 if (digitizedPdf == null || digitizedPdf.length == 0) {

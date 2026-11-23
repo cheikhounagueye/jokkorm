@@ -16,6 +16,8 @@ public interface PhysicalArchiveRecordJpaRepository
 
     boolean existsByTenantIdAndCote(String tenantId, String cote);
 
+    java.util.List<PhysicalArchiveRecordEntity> findByTenantIdAndContainerIdOrderByCote(String tenantId, UUID containerId);
+
     Page<PhysicalArchiveRecordEntity> findByTenantIdOrderByRegisteredAtDesc(
         String tenantId, Pageable pageable);
 

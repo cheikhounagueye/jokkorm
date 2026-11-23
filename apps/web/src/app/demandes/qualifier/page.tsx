@@ -147,6 +147,18 @@ function QualifyPanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: st
   );
 }
 
+/** Contrôles de qualification en clair (le code technique reste au survol). */
+const CHECK_LABEL: Record<string, string> = {
+  CONTAINER_EXISTS: "Boîte trouvée",
+  NOT_DESTROYED: "Boîte non détruite",
+  NO_ACTIVE_LOAN: "Pas de prêt en cours",
+  NO_ACTIVE_REQUEST: "Pas d'autre prêt approuvé",
+  NO_LEGAL_HOLD: "Aucun gel contentieux",
+  BUFFER_ZONE: "Boîte rangée en magasin",
+  DUA_STATUS: "Durée de conservation",
+  COMMUNICABILITY: "Communicabilité",
+};
+
 function CheckItem({ c }: { c: QualificationCheck }) {
   const kind = c.passed ? "ok" : c.severity === "BLOCKING" ? "blocked" : c.severity === "WARNING" ? "warning" : "info";
   const style = {
@@ -164,8 +176,8 @@ function CheckItem({ c }: { c: QualificationCheck }) {
       fontSize: 13,
     }}>
       <ItemIcon size={18} weight="fill" style={{ color: style.fg, flexShrink: 0 }} />
-      <code style={{ background: "transparent", border: "none", padding: 0, fontWeight: 600, color: "var(--text-primary)" }}>{c.code}</code>
-      <span style={{ color: "var(--text-secondary)" }}>{c.message}</span>
+      <span title={c.code} style={{ fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>{CHECK_LABEL[c.code] ?? c.code}</span>
+      {c.message && c.message !== "OK" && <span style={{ color: "var(--text-secondary)" }}>{c.message}</span>}
     </li>
   );
 }

@@ -125,6 +125,12 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "access-denied", e.getMessage(), request);
     }
 
+    @ExceptionHandler(com.jokkorm.application.record.LegalHoldException.class)
+    public ResponseEntity<ProblemDetail> legalHold(
+        com.jokkorm.application.record.LegalHoldException e, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "legal-hold", e.getMessage(), request);
+    }
+
     @ExceptionHandler(com.jokkorm.domain.master.MasterUnreachableException.class)
     public ResponseEntity<ProblemDetail> masterUnreachable(
         com.jokkorm.domain.master.MasterUnreachableException e, HttpServletRequest request) {

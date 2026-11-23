@@ -33,8 +33,18 @@ public class AccessRequestController {
 
     private final AccessRequestWorkflow workflow;
     private final AccessRequestRepository requests;
+    private final com.jokkorm.application.access.QualificationChecksService checksService;
 
-    public AccessRequestController(AccessRequestWorkflow workflow, AccessRequestRepository requests) {
+    /** Résultat de qualification exposé en JSON (l'agrégat métier ne se sérialise pas). */
+    public record QualifyResponse(AccessRequestResponse request, List<QualificationCheck> checks,
+                                  boolean qualified, String blockingReason) {}
+
+    /** Résultat de remise exposé en JSON. */
+    public record FulfillResponse(AccessRequestResponse request, UUID createdLoanId) {}
+
+    public AccessRequestController(AccessRequestWorkflow workflow, AccessRequestRepository requests,
+                                   com.jokkorm.application.access.QualificationChecksService checksService) {
+        this.checksService = checksService;
         this.workflow = workflow;
         this.requests = requests;
     }
@@ -74,11 +84,13 @@ public class AccessRequestController {
 
     @PostMapping("/{id}/qualify")
     @Operation(summary = "SUBMITTED → QUALIFIED. Archiviste. Checks auto, bloque si contrôle bloquant échoue.")
-    public AccessRequestWorkflow.QualifyResult qualify(
+    public QualifyResponse qualify(
         @PathVariable UUID id,
         @RequestBody(required = false) NotesRequest body,
         @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
-        return workflow.qualify(id, body == null ? null : body.notes(), actor);
+        var result = workflow.qualify(id, body == null ? null : body.notes(), actor);
+        return new QualifyResponse(AccessRequestResponse.from(result.request()), result.checks(),
+            result.qualified(), result.blockingReason());
     }
 
     @PostMapping("/{id}/approve")
@@ -113,13 +125,14 @@ public class AccessRequestController {
 
     @PostMapping("/{id}/fulfill")
     @Operation(summary = "APPROVED → FULFILLED. Archiviste. Pour DIGITIZE : digitizedPdfBase64 obligatoire.")
-    public AccessRequestWorkflow.FulfillResult fulfill(
+    public FulfillResponse fulfill(
         @PathVariable UUID id,
         @RequestBody(required = false) FulfillRequest body,
         @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
         byte[] pdf = (body == null || body.digitizedPdfBase64() == null) ? null
             : Base64.getDecoder().decode(body.digitizedPdfBase64());
-        return workflow.fulfill(id, body == null ? null : body.notes(), pdf, actor);
+        var result = workflow.fulfill(id, body == null ? null : body.notes(), pdf, actor);
+        return new FulfillResponse(AccessRequestResponse.from(result.request()), result.createdLoanId());
     }
 
     @PostMapping("/{id}/complete")
@@ -185,10 +198,6 @@ public class AccessRequestController {
         var r = requests.findById(TenantContext.current(), id)
             .orElseThrow(() -> new com.jokkorm.application.access.AccessRequestNotFoundException(
                 "AccessRequest " + id + " not found"));
-        // Appelle le service directement via le workflow qualify qui retourne les checks
-        // Mais ça transitionne donc on ne peut pas. Alternative : exposer checksService.
-        // Pour l'instant : reload fresh et appel manuel. Simplest: inline.
-        throw new UnsupportedOperationException(
-            "Use POST /qualify to run checks and transition (preview endpoint à venir)");
+        return checksService.run(r);
     }
 }
