@@ -27,8 +27,11 @@ public class MasterController {
 
     private final RoutingSaeMasterPort routing;
     private final ImportFromMasterUseCase importFromMaster;
+    private final com.jokkorm.application.master.MasterSyncService sync;
 
-    public MasterController(RoutingSaeMasterPort routing, ImportFromMasterUseCase importFromMaster) {
+    public MasterController(RoutingSaeMasterPort routing, ImportFromMasterUseCase importFromMaster,
+                            com.jokkorm.application.master.MasterSyncService sync) {
+        this.sync = sync;
         this.routing = routing;
         this.importFromMaster = importFromMaster;
     }
@@ -41,6 +44,21 @@ public class MasterController {
         var tenant = TenantContext.current();
         MasterAdapter adapter = routing.adapterFor(tenant);
         return new MasterInfo(tenant.value(), adapter.kind(), adapter.displayName());
+    }
+
+    /** État de l'envoi de l'état physique vers le maître, pour une cote. */
+    public record SyncStatus(String cote, String status, int attempts, java.time.Instant lastSentAt,
+                             java.time.Instant lastAttemptAt, java.time.Instant nextAttemptAt, String lastError,
+                             String lastPayload) {}
+
+    @GetMapping("/sync")
+    @Operation(summary = "Où en est l'affichage de l'état physique dans le maître pour cette cote (tranche 2a).",
+        description = "204 si le maître de l'espace n'affiche pas l'état physique ou si rien n'a encore été envoyé.")
+    public ResponseEntity<SyncStatus> syncStatus(@org.springframework.web.bind.annotation.RequestParam String cote) {
+        return sync.status(Cote.of(cote.trim()))
+            .map(s -> ResponseEntity.ok(new SyncStatus(s.cote(), s.status().name(), s.attempts(), s.lastSentAt(),
+                s.lastAttemptAt(), s.nextAttemptAt(), s.lastError(), s.lastPayload())))
+            .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     public record ImportRequest(@NotBlank String cote) {}

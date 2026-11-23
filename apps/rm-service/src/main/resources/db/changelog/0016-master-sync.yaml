@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0016-master-sync
+      author: jokkorm
+      comment: >
+        Interconnexion maître, tranche 2a — file d'envoi de l'état physique vers la GED maître
+        (pattern 03 : emplacement et mouvements appartiennent à JokkoRM, renvoyés au maître pour
+        affichage). Une ligne par cote : la plus récente demande l'emporte, l'état est recalculé
+        au moment de l'envoi. Écrite dans la même transaction que le geste physique, envoyée
+        ensuite par un travailleur : une panne du maître ne bloque jamais un rangement.
+      changes:
+        - createTable:
+            tableName: master_sync
+            columns:
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { nullable: false, foreignKeyName: fk_master_sync_tenant, references: tenant(id) }
+              - column: { name: cote, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: status, type: VARCHAR(16), constraints: { nullable: false } }
+              - column: { name: attempts, type: INT, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: next_attempt_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: last_attempt_at, type: TIMESTAMP WITH TIME ZONE }
+              - column: { name: last_sent_at, type: TIMESTAMP WITH TIME ZONE }
+              - column: { name: last_error, type: VARCHAR(1000) }
+              - column: { name: last_payload, type: VARCHAR(1000) }
+              - column: { name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+        - addPrimaryKey:
+            tableName: master_sync
+            columnNames: tenant_id, cote
+            constraintName: pk_master_sync
+        - createIndex:
+            tableName: master_sync
+            indexName: ix_master_sync_due
+            columns:
+              - column: { name: status }
+              - column: { name: next_attempt_at }

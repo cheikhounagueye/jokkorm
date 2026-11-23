@@ -37,13 +37,16 @@ public class RecordMovementUseCase {
     private final SaeMasterPort master;
     private final AuditChainService audit;
     private final Clock clock;
+    private final com.jokkorm.application.master.MasterSyncService masterSync;
 
     public RecordMovementUseCase(
         PhysicalArchiveRecordRepository records,
         PhysicalMovementRepository movements,
         SaeMasterPort master,
         AuditChainService audit,
-        Clock clock) {
+        Clock clock,
+        com.jokkorm.application.master.MasterSyncService masterSync) {
+        this.masterSync = masterSync;
         this.records = records;
         this.movements = movements;
         this.master = master;
@@ -68,6 +71,7 @@ public class RecordMovementUseCase {
 
         master.notifyMovement(tenant, cote,
             new MovementEvent(translate(kind), actor, now, motive));
+        masterSync.touchRecord(tenant, cote);
 
         audit.record(
             AuditAction.MOVEMENT_RECORDED,

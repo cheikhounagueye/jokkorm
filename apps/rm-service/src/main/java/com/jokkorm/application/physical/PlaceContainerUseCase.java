@@ -39,6 +39,7 @@ public class PlaceContainerUseCase {
     private final ShelfSpaceService space;
     private final AuditChainService audit;
     private final Clock clock;
+    private final com.jokkorm.application.master.MasterSyncService masterSync;
 
     public PlaceContainerUseCase(
         PhysicalContainerRepository containers,
@@ -46,7 +47,9 @@ public class PlaceContainerUseCase {
         PhysicalLoanRepository loans,
         ShelfSpaceService space,
         AuditChainService audit,
-        Clock clock) {
+        Clock clock,
+        com.jokkorm.application.master.MasterSyncService masterSync) {
+        this.masterSync = masterSync;
         this.containers = containers;
         this.locations = locations;
         this.loans = loans;
@@ -94,6 +97,7 @@ public class PlaceContainerUseCase {
 
         container.placeAt(positionId, clock.instant());
         PhysicalContainer saved = containers.save(container);
+        masterSync.touchContainer(tenant, saved.id()); // les archives de la boîte ont changé d'adresse
 
         if (fromPath == null) {
             audit.record(AuditAction.CONTAINER_PLACED, AuditTargetType.CONTAINER, saved.id(), actor,

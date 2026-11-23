@@ -44,4 +44,21 @@ public interface SaeMasterPort {
 
     /** La destruction a été exécutée. On remonte l'attestation PDF scellée. */
     void notifyDestructionExecuted(TenantId tenant, Cote cote, DestructionAttestation attestation);
+
+    // --- État physique affiché côté maître (tranche 2a, pattern 03) ---
+
+    /** Ce maître sait-il afficher l'état physique d'une archive ? (noop et démo : non) */
+    default boolean acceptsPhysicalStatus(TenantId tenant) {
+        return false;
+    }
+
+    /**
+     * Écrit l'état physique actuel d'une cote dans la fiche du maître, pour affichage.
+     * Appelé hors transaction par la file d'envoi, jamais pendant un geste physique.
+     *
+     * @throws MasterUnreachableException panne passagère : on réessaiera
+     * @throws MasterRejectedException    refus durable : l'envoi passe en « refusé »
+     */
+    default void publishPhysicalStatus(TenantId tenant, Cote cote, PhysicalStatus status) {
+    }
 }

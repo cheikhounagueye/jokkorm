@@ -90,4 +90,14 @@ public class RoutingSaeMasterPort implements SaeMasterPort {
     public void notifyDestructionExecuted(TenantId tenant, Cote cote, DestructionAttestation attestation) {
         adapterFor(tenant).notifyDestructionExecuted(tenant, cote, attestation);
     }
+
+    @Override
+    public boolean acceptsPhysicalStatus(TenantId tenant) {
+        return adapterFor(tenant).acceptsPhysicalStatus(tenant);
+    }
+
+    @Override
+    public void publishPhysicalStatus(TenantId tenant, Cote cote, com.jokkorm.domain.master.PhysicalStatus status) {
+        adapterFor(tenant).publishPhysicalStatus(tenant, cote, status);
+    }
 }

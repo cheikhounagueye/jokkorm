@@ -18,8 +18,11 @@ public class MarkLoanReturnedUseCase {
     private final PhysicalLoanRepository loans;
     private final AuditChainService audit;
     private final Clock clock;
+    private final com.jokkorm.application.master.MasterSyncService masterSync;
 
-    public MarkLoanReturnedUseCase(PhysicalLoanRepository loans, AuditChainService audit, Clock clock) {
+    public MarkLoanReturnedUseCase(PhysicalLoanRepository loans, AuditChainService audit, Clock clock,
+        com.jokkorm.application.master.MasterSyncService masterSync) {
+        this.masterSync = masterSync;
         this.loans = loans;
         this.audit = audit;
         this.clock = clock;
@@ -32,6 +35,7 @@ public class MarkLoanReturnedUseCase {
             .orElseThrow(() -> new LoanNotFoundException("Loan %s not found".formatted(loanId)));
         loan.markReturned(actor, clock.instant());
         PhysicalLoan saved = loans.save(loan);
+        masterSync.touchContainer(tenant, loan.containerId());
         audit.record(AuditAction.LOAN_RETURNED, AuditTargetType.LOAN, saved.id(), actor,
             "container=%s".formatted(loan.containerId()));
         return saved;

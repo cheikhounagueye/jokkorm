@@ -72,6 +72,13 @@ jokkorm:
       password: ${JOKKORM_MAARCHRM_PASSWORD:}
       service-token: ${JOKKORM_MAARCHRM_SERVICE_TOKEN:}
       timeout-ms: ${JOKKORM_MAARCHRM_TIMEOUT_MS:10000}
+      # Champ de description Maarch qui affiche l'état physique (à créer dans Maarch et à
+      # ajouter, non immuable, aux profils d'archivage utilisés).
+      location-field: ${JOKKORM_MAARCHRM_LOCATION_FIELD:localisation_physique}
+    # File d'envoi de l'état physique vers le maître (tranche 2a).
+    sync:
+      worker-enabled: ${JOKKORM_MASTER_SYNC_WORKER_ENABLED:true}
+      delay-ms: ${JOKKORM_MASTER_SYNC_DELAY_MS:5000}
   physical:
     # Pattern 10 : longueur de tablette par défaut et marge de manipulation (validés 2026-11-23).
     default-tablette-length-mm: ${JOKKORM_DEFAULT_TABLETTE_LENGTH_MM:1000}

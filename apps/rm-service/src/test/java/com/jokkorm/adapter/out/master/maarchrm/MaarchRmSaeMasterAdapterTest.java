@@ -5,6 +5,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.put;
+import static com.github.tomakehurst.wiremock.client.WireMock.putRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,7 +16,9 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.master.ArchiveSearchCriteria;
+import com.jokkorm.domain.master.MasterRejectedException;
 import com.jokkorm.domain.master.MasterUnreachableException;
+import com.jokkorm.domain.master.PhysicalStatus;
 import com.jokkorm.domain.record.Cote;
 import java.io.IOException;
 import java.io.InputStream;
@@ -206,5 +211,67 @@ class MaarchRmSaeMasterAdapterTest {
         assertThat(MaarchRmSaeMasterAdapter.durationYears("n'importe quoi")).isNull();
         assertThat(MaarchRmSaeMasterAdapter.finalFate("preservation")).isEqualTo("CONSERVATION");
         assertThat(MaarchRmSaeMasterAdapter.finalFate("autre")).isNull();
+    }
+
+    // ─── Écriture de l'état physique (tranche 2a) ─────────────────────────────
+
+    /** Métadonnées synthétiques (aucune donnée réelle) d'une archive Maarch. */
+    private static final String METADATA = """
+        {"archiveId":"arc-1","archiverArchiveId":"FR094080_2026_AE0002","originatorArchiveId":"123",
+         "archiveName":"Dossier test","originatingDate":"2026-11-04","status":"preserved",
+         "description":{"empid":"000","service":"RH","adresses":[{"ville":"Dakar"}]}}""";
+
+    private void stubArchiveAndMetadata() {
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archives"))
+            .withQueryParam("archiverArchiveId", equalTo(COTE.value()))
+            .willReturn(json("[{\"archiveId\":\"arc-1\",\"archiverArchiveId\":\"FR094080_2026_AE0002\"}]")));
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/arc-1")).willReturn(json(METADATA)));
+    }
+
+    private static final PhysicalStatus STATUS = new PhysicalStatus(
+        "SALLE-A · Épi E1 · rang 3 · face A · Travée T03 · Tablette 2 · Emplacement 01", "en magasin", "23/11/2026 14:02");
+
+    @Test
+    @DisplayName("Écriture : relit l'archive et renvoie cote, date, titre et description intacts, plus le champ de localisation")
+    void publish_rewrites_every_field_plus_location() {
+        stubArchiveAndMetadata();
+        wireMock.stubFor(put(urlPathEqualTo("/recordsManagement/archives/Metadata")).willReturn(json("true")));
+
+        adapter.publishPhysicalStatus(TENANT, COTE, STATUS);
+
+        wireMock.verify(putRequestedFor(urlPathEqualTo("/recordsManagement/archives/Metadata"))
+            .withHeader("User-Agent", containing("service"))
+            .withRequestBody(equalToJson("""
+                {"archiveId":"arc-1","originatorArchiveId":"123","archiverArchiveId":"FR094080_2026_AE0002",
+                 "archiveName":"Dossier test","originatingDate":"2026-11-04",
+                 "description":{"empid":"000","service":"RH","adresses":[{"ville":"Dakar"}],
+                   "localisation_physique":"SALLE-A · Épi E1 · rang 3 · face A · Travée T03 · Tablette 2 · Emplacement 01 — en magasin (JokkoRM, 23/11/2026 14:02)"}}""")));
+    }
+
+    @Test
+    @DisplayName("Écriture refusée par Maarch (champ absent du profil…) : refus durable, avec le message de Maarch")
+    void publish_rejected_by_maarch() {
+        stubArchiveAndMetadata();
+        wireMock.stubFor(put(urlPathEqualTo("/recordsManagement/archives/Metadata")).willReturn(aResponse()
+            .withStatus(400).withHeader("Content-Type", "application/json")
+            .withBody("{\"message\":\"Invalid description field localisation_physique\",\"code\":400}")));
+
+        assertThatThrownBy(() -> adapter.publishPhysicalStatus(TENANT, COTE, STATUS))
+            .isInstanceOf(MasterRejectedException.class)
+            .hasMessageContaining("localisation_physique");
+    }
+
+    @Test
+    @DisplayName("Écriture : cote inconnue de Maarch → refus durable ; Maarch en panne → panne passagère")
+    void publish_unknown_cote_or_outage() {
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).willReturn(json("[]")));
+        assertThatThrownBy(() -> adapter.publishPhysicalStatus(TENANT, COTE, STATUS))
+            .isInstanceOf(MasterRejectedException.class).hasMessageContaining("inconnue");
+
+        stubArchiveAndMetadata();
+        wireMock.stubFor(put(urlPathEqualTo("/recordsManagement/archives/Metadata"))
+            .willReturn(aResponse().withStatus(503).withBody("down")));
+        assertThatThrownBy(() -> adapter.publishPhysicalStatus(TENANT, COTE, STATUS))
+            .isInstanceOf(MasterUnreachableException.class);
     }
 }

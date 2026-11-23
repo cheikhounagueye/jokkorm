@@ -55,6 +55,7 @@ public class StoreRecordInContainerUseCase {
     private final SaeMasterPort master;
     private final AuditChainService audit;
     private final Clock clock;
+    private final com.jokkorm.application.master.MasterSyncService masterSync;
 
     public StoreRecordInContainerUseCase(
         PhysicalArchiveRecordRepository records,
@@ -63,7 +64,9 @@ public class StoreRecordInContainerUseCase {
         PhysicalMovementRepository movements,
         SaeMasterPort master,
         AuditChainService audit,
-        Clock clock) {
+        Clock clock,
+        com.jokkorm.application.master.MasterSyncService masterSync) {
+        this.masterSync = masterSync;
         this.records = records;
         this.containers = containers;
         this.locations = locations;
@@ -121,6 +124,7 @@ public class StoreRecordInContainerUseCase {
         // 3) notify master avec l'adresse complète (5 niveaux parsés depuis le path)
         PhysicalLocation address = resolveFiveLevelLocation(position);
         master.notifyPhysicalLocation(tenant, cote, address);
+        masterSync.touchRecord(tenant, cote); // état physique affiché côté maître (file d'envoi)
 
         // 4) audit
         audit.record(

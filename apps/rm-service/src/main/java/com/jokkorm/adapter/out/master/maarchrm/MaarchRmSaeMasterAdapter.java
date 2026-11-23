@@ -57,8 +57,13 @@ import org.springframework.stereotype.Component;
  *   <li>Maarch concatène {@code archiveName} dans sa requête : le texte cherché est épuré.</li>
  * </ul>
  *
- * <p>Tranche 1 = lecture seule. Les {@code notify*} (emplacement, mouvements, destruction)
- * sont journalisés sans écrire dans Maarch : l'écriture fera l'objet de la tranche suivante.
+ * <p>Tranche 2a : l'état physique (adresse de terrain + statut, sans code-barres) est écrit
+ * dans un champ de description dédié de l'archive Maarch, par la file d'envoi
+ * ({@link #publishPhysicalStatus}). Maarch remplace toute la description et remet à vide
+ * {@code originatorArchiveId} / {@code originatingDate} s'ils ne sont pas renvoyés : on relit
+ * donc l'archive juste avant d'écrire et on renvoie chaque champ tel quel. Une modification
+ * faite dans Maarch entre cette lecture et l'écriture serait perdue (fenêtre de quelques ms).
+ * Les {@code notify*} historiques restent journalisés seulement.
  *
  * <p>Activé dès que {@code jokkorm.master.maarchrm.base-url} est renseignée ; le routage
  * par tenant ({@code jokkorm.master.tenants.<tenant>=maarchrm}) décide qui l'utilise.
@@ -163,13 +168,52 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
 
     @Override
     public void notifyPhysicalLocation(TenantId tenant, Cote cote, PhysicalLocation location) {
-        LOG.info("[maarchrm] emplacement de {} non transmis à Maarch RM (écriture prévue en tranche 2)", cote.value());
+        LOG.debug("[maarchrm] emplacement de {} : transmis par la file d'envoi", cote.value());
     }
 
     @Override
     public void notifyMovement(TenantId tenant, Cote cote, MovementEvent event) {
-        LOG.info("[maarchrm] mouvement {} de {} non transmis à Maarch RM (écriture prévue en tranche 2)",
-            event.kind(), cote.value());
+        LOG.debug("[maarchrm] mouvement {} de {} : état transmis par la file d'envoi", event.kind(), cote.value());
+    }
+
+    // ─── Écriture de l'état physique (tranche 2a) ────────────────────────────────
+
+    @Override
+    public boolean acceptsPhysicalStatus(TenantId tenant) {
+        return true;
+    }
+
+    @Override
+    public void publishPhysicalStatus(TenantId tenant, Cote cote, com.jokkorm.domain.master.PhysicalStatus status) {
+        JsonNode hits = getArray(ARCHIVES + "?" + query(Map.of("archiverArchiveId", cote.value(), "maxResults", "2")));
+        String archiveId = null;
+        for (JsonNode a : hits) {
+            if (cote.value().equals(a.path("archiverArchiveId").asText())) {
+                archiveId = a.path("archiveId").asText();
+                break;
+            }
+        }
+        if (archiveId == null || archiveId.isBlank()) {
+            throw new com.jokkorm.domain.master.MasterRejectedException(
+                "Cote " + cote.value() + " inconnue de Maarch RM (ou non visible par le compte de connexion)");
+        }
+        // Relire juste avant d'écrire : Maarch remplace tout ce qu'on lui envoie.
+        JsonNode meta = getJson("/recordsManagement/archive/Metadata/" + URLEncoder.encode(archiveId, StandardCharsets.UTF_8));
+        com.fasterxml.jackson.databind.node.ObjectNode description = meta.path("description").isObject()
+            ? ((com.fasterxml.jackson.databind.node.ObjectNode) meta.path("description")).deepCopy()
+            : JSON.createObjectNode();
+        description.put(config.locationField(), status.line());
+        com.fasterxml.jackson.databind.node.ObjectNode body = JSON.createObjectNode();
+        body.put("archiveId", archiveId);
+        body.set("originatorArchiveId", meta.path("originatorArchiveId"));
+        body.set("archiverArchiveId", meta.path("archiverArchiveId"));
+        body.set("archiveName", meta.path("archiveName"));
+        body.set("originatingDate", meta.path("originatingDate"));
+        body.set("description", description);
+        JsonNode result = send("PUT", "/recordsManagement/archives/Metadata", body.toString());
+        if (result.isBoolean() && !result.asBoolean()) {
+            throw new com.jokkorm.domain.master.MasterRejectedException("Maarch RM a refusé la modification de " + cote.value());
+        }
     }
 
     @Override
@@ -200,12 +244,18 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
     // ─── HTTP ────────────────────────────────────────────────────────────────────
 
     private JsonNode getJson(String pathAndQuery) {
+        return send("GET", pathAndQuery, null);
+    }
+
+    private JsonNode send(String method, String pathAndQuery, String jsonBody) {
         HttpRequest.Builder req = HttpRequest.newBuilder()
             .uri(URI.create(config.baseUrl() + pathAndQuery))
             .timeout(Duration.ofMillis(config.timeoutMs()))
             .header("Accept", "application/json")
             .header("User-Agent", "JokkoRM/1.0 (" + config.serviceClientToken() + ")")
-            .GET();
+            .method(method, jsonBody == null ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8));
+        if (jsonBody != null) req.header("Content-Type", "application/json");
         if (config.mode() == MaarchRmProperties.AuthMode.BASIC) {
             String pair = (config.login() == null ? "" : config.login()) + ":" + (config.password() == null ? "" : config.password());
             req.header("Authorization", "Basic " + Base64.getEncoder().encodeToString(pair.getBytes(StandardCharsets.UTF_8)));
@@ -225,9 +275,16 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
         }
 
         int status = response.statusCode();
-        if (status == 401 || status == 403) {
-            throw new MasterUnreachableException("Maarch RM refuse la connexion (HTTP " + status
-                + ") : vérifier le compte et son rattachement au service d'archives");
+        if (status == 401) {
+            throw new MasterUnreachableException("Maarch RM refuse la connexion (HTTP 401) : vérifier le compte");
+        }
+        if (status == 403 && jsonBody == null) {
+            throw new MasterUnreachableException("Maarch RM refuse la connexion (HTTP 403) : vérifier le compte et son rattachement au service d'archives");
+        }
+        if (jsonBody != null && status >= 400 && status < 500 && status != 408 && status != 429) {
+            // Écriture refusée par Maarch (champ inconnu du profil, droits…) : refus durable.
+            throw new com.jokkorm.domain.master.MasterRejectedException(
+                "Maarch RM refuse l'écriture (HTTP " + status + ") : " + maarchMessage(response.body()));
         }
         if (status >= 300) {
             throw new MasterUnreachableException("Maarch RM a répondu HTTP " + status);
@@ -243,6 +300,18 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
         } catch (IOException e) {
             throw new MasterUnreachableException("Réponse JSON illisible de Maarch RM", e);
         }
+    }
+
+    /** Le message d'erreur Maarch ({"message": …}) ou le début de la réponse. */
+    private static String maarchMessage(String body) {
+        if (body == null || body.isBlank()) return "sans détail";
+        try {
+            JsonNode n = JSON.readTree(body);
+            if (n.hasNonNull("message")) return n.get("message").asText();
+        } catch (IOException ignored) {
+            // réponse non JSON
+        }
+        return body.length() > 200 ? body.substring(0, 200) + "…" : body;
     }
 
     private JsonNode getArray(String pathAndQuery) {

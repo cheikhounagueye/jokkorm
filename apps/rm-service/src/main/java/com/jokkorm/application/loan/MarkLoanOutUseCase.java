@@ -18,11 +18,14 @@ public class MarkLoanOutUseCase {
     private final PhysicalLoanRepository loans;
     private final AuditChainService audit;
     private final Clock clock;
+    private final com.jokkorm.application.master.MasterSyncService masterSync;
 
     private final com.jokkorm.application.record.LegalHoldGuard legalHolds;
 
     public MarkLoanOutUseCase(PhysicalLoanRepository loans, AuditChainService audit, Clock clock,
-                              com.jokkorm.application.record.LegalHoldGuard legalHolds) {
+                              com.jokkorm.application.record.LegalHoldGuard legalHolds,
+        com.jokkorm.application.master.MasterSyncService masterSync) {
+        this.masterSync = masterSync;
         this.legalHolds = legalHolds;
         this.loans = loans;
         this.audit = audit;
@@ -38,6 +41,7 @@ public class MarkLoanOutUseCase {
         legalHolds.requireNoHold(tenant, loan.containerId(), null);
         loan.markOut(actor, clock.instant());
         PhysicalLoan saved = loans.save(loan);
+        masterSync.touchContainer(tenant, loan.containerId());
         audit.record(AuditAction.LOAN_OUT, AuditTargetType.LOAN, saved.id(), actor,
             "container=%s borrower='%s'".formatted(loan.containerId(), loan.borrowerName()));
         return saved;

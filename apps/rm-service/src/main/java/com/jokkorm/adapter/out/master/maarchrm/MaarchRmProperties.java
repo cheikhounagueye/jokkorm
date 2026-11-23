@@ -17,6 +17,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param password           mot de passe en mode basic (jamais loggé)
  * @param serviceToken       jeton du compte de service en mode service-token (jamais loggé)
  * @param timeoutMs          délai max d'un appel
+ * @param locationField      champ de description Maarch où s'affiche l'état physique (tranche 2a)
  */
 @ConfigurationProperties(prefix = "jokkorm.master.maarchrm")
 public record MaarchRmProperties(
@@ -26,15 +27,24 @@ public record MaarchRmProperties(
     String login,
     String password,
     String serviceToken,
-    int timeoutMs) {
+    int timeoutMs,
+    String locationField) {
 
     public enum AuthMode { BASIC, SERVICE_TOKEN }
 
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public MaarchRmProperties {
         baseUrl = baseUrl == null ? "" : baseUrl.trim().replaceAll("/+$", "");
         serviceClientToken = serviceClientToken == null || serviceClientToken.isBlank() ? "service" : serviceClientToken.trim();
         authMode = authMode == null || authMode.isBlank() ? "basic" : authMode.trim();
         if (timeoutMs <= 0) timeoutMs = 10_000;
+        locationField = locationField == null || locationField.isBlank() ? "localisation_physique" : locationField.trim();
+    }
+
+    /** Sans champ de localisation précisé : {@code localisation_physique}. */
+    public MaarchRmProperties(String baseUrl, String serviceClientToken, String authMode, String login,
+                              String password, String serviceToken, int timeoutMs) {
+        this(baseUrl, serviceClientToken, authMode, login, password, serviceToken, timeoutMs, null);
     }
 
     public AuthMode mode() {
