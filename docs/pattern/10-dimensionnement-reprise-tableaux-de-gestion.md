@@ -272,7 +272,7 @@ Le texte ci-dessus laissait plusieurs points ouverts. Voici ce qui a été reten
 8. **Gel et numérisation** : simple avertissement (rien ne sort de la salle) ; prêt et
    extraction restent bloqués par un gel.
 
-### Convention « double face » (5T.C, 5T.D) — proposée le 2026-11-23, à valider
+### Convention « double face » (5T.C, 5T.D) — validée le 2026-11-23
 
 Un épi double face porte **une travée par rang et par face**. Les deux travées d'un même rang
 ont le même code d'épi et le même rang, l'une face A, l'autre face B, et toutes deux
@@ -287,3 +287,14 @@ ont le même code d'épi et le même rang, l'une face A, l'autre face B, et tout
 
 Ainsi l'emprise au sol s'additionne sans double compte (A + B), et le contrôle de profondeur
 reste exact. Exemple de générateur : 2 épis × 5 rangs × 2 faces = **20 travées**.
+
+### Autres décisions validées le 2026-11-23 (5T.C, 5T.D)
+
+- **Saturation, prudente** : une boîte déplacée à l'intérieur d'une salle compte comme une
+  arrivée ; la date estimée est donc un peu plus proche. Calcul seulement après 90 jours
+  d'historique réel, sur le rythme des 12 derniers mois.
+- **Import Excel** : une case vide garde la valeur actuelle ; effacer une mesure se fait à
+  l'écran. L'import est réservé à l'archiviste et au responsable des archives.
+- **Charge au sol** : calculée seulement si le poids moyen au mètre linéaire est mesuré pour
+  la salle ; résultat indicatif, à faire confirmer par un bureau d'études.
+
