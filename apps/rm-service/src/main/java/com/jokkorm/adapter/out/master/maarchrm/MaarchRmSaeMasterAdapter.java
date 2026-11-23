@@ -289,6 +289,15 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
         if (status >= 300) {
             throw new MasterUnreachableException("Maarch RM a répondu HTTP " + status);
         }
+        // Piège laabs : une exception sans code HTTP part en « 200 {} », le vrai message est dans cet en-tête.
+        String laabsException = response.headers().firstValue("X-Laabs-Exception").orElse("");
+        if (!laabsException.isBlank()) {
+            String detail = laabsException.length() > 300 ? laabsException.substring(0, 300) + "…" : laabsException;
+            if (jsonBody != null) {
+                throw new com.jokkorm.domain.master.MasterRejectedException("Maarch RM signale une erreur : " + detail);
+            }
+            throw new MasterUnreachableException("Maarch RM signale une erreur : " + detail);
+        }
         String type = response.headers().firstValue("Content-Type").orElse("");
         if (!type.contains("json") && !type.contains("javascript")) {
             throw new MasterUnreachableException("Maarch RM a répondu en " + (type.isEmpty() ? "format inconnu" : type)

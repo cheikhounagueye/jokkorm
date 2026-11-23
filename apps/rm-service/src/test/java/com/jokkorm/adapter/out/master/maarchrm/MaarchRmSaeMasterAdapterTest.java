@@ -262,6 +262,24 @@ class MaarchRmSaeMasterAdapterTest {
     }
 
     @Test
+    @DisplayName("Maarch répond 200 {} mais signale une erreur dans X-Laabs-Exception : jamais pris pour un succès")
+    void laabs_exception_header_is_never_a_success() {
+        stubArchiveAndMetadata();
+        wireMock.stubFor(put(urlPathEqualTo("/recordsManagement/archives/Metadata")).willReturn(json("{}")
+            .withHeader("X-Laabs-Exception", "PDOException; SQLSTATE[23502]: Not null violation")));
+        assertThatThrownBy(() -> adapter.publishPhysicalStatus(TENANT, COTE, STATUS))
+            .isInstanceOf(MasterRejectedException.class)
+            .hasMessageContaining("Not null violation");
+
+        // En lecture, la même erreur est une panne : jamais « cote inconnue ».
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).willReturn(json("{}")
+            .withHeader("X-Laabs-Exception", "core\\Exception; erreur interne")));
+        assertThatThrownBy(() -> adapter.publishPhysicalStatus(TENANT, COTE, STATUS))
+            .isInstanceOf(MasterUnreachableException.class)
+            .hasMessageContaining("erreur interne");
+    }
+
+    @Test
     @DisplayName("Écriture : cote inconnue de Maarch → refus durable ; Maarch en panne → panne passagère")
     void publish_unknown_cote_or_outage() {
         wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).willReturn(json("[]")));

@@ -20,6 +20,7 @@ Puis router un tenant vers ce maître : `JOKKORM_MASTER_TENANTS_<TENANT>=maarchr
 - **Le User-Agent choisit l'API.** Maarch ne sert son API JSON que si le User-Agent contient le `SERVICE_CLIENT_TOKEN`. Sinon il répond **200 avec la page HTML** de son interface. L'adapter traite cette réponse comme une panne (`MasterUnreachableException`), jamais comme « cote inconnue ».
 - **Visibilité par rattachement.** Maarch filtre les archives selon la position du compte dans les organisations. Un compte sans position, comme `superadmin` en démo, voit 0 archive. Au démarrage, l'adapter compte les archives visibles et prévient si c'est 0.
 - **Texte cherché concaténé.** Maarch insère `archiveName` dans sa requête sans paramètre lié. L'adapter retire `' " * \ % ;` et les caractères de contrôle.
+- **Erreur déguisée en succès.** Une exception laabs sans code HTTP repart en **200 avec `{}`**, et le vrai message est dans l'en-tête `X-Laabs-Exception`. Exemple : un compte créé sans `emailAddress`, colonne obligatoire. L'adapter lit cet en-tête à chaque appel. En écriture, il en fait un refus durable avec le message ; en lecture, une panne, jamais « cote inconnue ».
 - **Ne pas régénérer le jeton des comptes de service existants** (`Systeme`…) : les traitements de Maarch peuvent en dépendre. Créer un compte dédié JokkoRM.
 
 ## Correspondances
