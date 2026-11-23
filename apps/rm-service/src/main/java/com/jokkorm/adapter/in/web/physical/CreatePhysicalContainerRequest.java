@@ -8,4 +8,6 @@ import jakarta.validation.constraints.Positive;
  */
 public record CreatePhysicalContainerRequest(
     String label,
-    @Positive Integer capacity) {}
+    @Positive Integer capacity,
+    /** Format de boîte (dos 8, 10, 15, 20…). Null = format par défaut du tenant. */
+    java.util.UUID boxFormatId) {}

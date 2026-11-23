@@ -12,8 +12,8 @@ public record StorageLocationResponse(
     String label,
     UUID parentId,
     String path,
-    /** Boîtes acceptées (POSITION uniquement, valeur par défaut incluse), null sinon. */
-    Integer capacity,
+    /** Longueur utile saisie en mm (travée, tablette, position). Null = déduite (pattern 10). */
+    Integer lengthMm,
     Instant createdAt,
     Instant updatedAt) {
 
@@ -21,7 +21,7 @@ public record StorageLocationResponse(
         return new StorageLocationResponse(
             d.id(), d.kind(), d.code(), d.label(),
             d.parentId().orElse(null), d.path(),
-            d.kind() == StorageLocationKind.POSITION ? Integer.valueOf(d.effectiveCapacity()) : null,
+            d.lengthMm().orElse(null),
             d.createdAt(), d.updatedAt());
     }
 }

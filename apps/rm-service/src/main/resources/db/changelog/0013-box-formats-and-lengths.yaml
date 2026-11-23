@@ -1,0 +1,87 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0013-box-formats-and-lengths
+      author: jokkorm
+      comment: >
+        Phase 5T.A (pattern 10) — capacité en longueur. Catalogue de formats de boîtes
+        par tenant (dos, profondeur, hauteur), format par boîte, longueur utile en mm sur
+        travée / tablette / emplacement. Conversion unique de l'ancienne capacité en boîtes
+        (phase 5S) : capacité × 100 mm (dos 10, format par défaut) par emplacement, somme
+        sur la tablette ; les taux d'occupation existants restent identiques.
+      changes:
+        - createTable:
+            tableName: box_format
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { nullable: false, foreignKeyName: fk_box_format_tenant, references: tenant(id) }
+              - column: { name: code, type: VARCHAR(32), constraints: { nullable: false } }
+              - column: { name: label, type: VARCHAR(255), constraints: { nullable: false } }
+              - column: { name: spine_mm, type: INT, constraints: { nullable: false } }
+              - column: { name: depth_mm, type: INT, constraints: { nullable: false } }
+              - column: { name: height_mm, type: INT, constraints: { nullable: false } }
+              - column: { name: orientation, type: VARCHAR(16), constraints: { nullable: false } }
+              - column: { name: quality, type: VARCHAR(32), constraints: { nullable: false } }
+              - column: { name: max_weight_kg, type: INT }
+              - column: { name: active, type: BOOLEAN, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: is_default, type: BOOLEAN, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: box_format
+            columnNames: tenant_id, code
+            constraintName: uq_box_format_tenant_code
+        - sql:
+            comment: Un seul format par défaut par tenant
+            sql: CREATE UNIQUE INDEX ux_box_format_one_default ON box_format (tenant_id) WHERE is_default
+        - sql:
+            comment: Catalogue initial pour chaque tenant existant (dos 10 par défaut)
+            sql: >
+              INSERT INTO box_format (id, tenant_id, code, label, spine_mm, depth_mm, height_mm,
+                                      orientation, quality, max_weight_kg, active, is_default,
+                                      created_at, updated_at, version)
+              SELECT gen_random_uuid(), t.id, f.code, f.label, f.spine, 250, 330,
+                     'UPRIGHT', 'STANDARD', NULL, TRUE, f.spine = 100, now(), now(), 0
+              FROM tenant t
+              CROSS JOIN (VALUES
+                ('BOITE-25X33-D08', 'Boîte 25 × 33 dos 8 cm', 80),
+                ('BOITE-25X33-D10', 'Boîte 25 × 33 dos 10 cm', 100),
+                ('BOITE-25X33-D15', 'Boîte 25 × 33 dos 15 cm', 150),
+                ('BOITE-25X33-D20', 'Boîte 25 × 33 dos 20 cm', 200)
+              ) AS f(code, label, spine)
+        - addColumn:
+            tableName: physical_container
+            columns:
+              - column:
+                  name: box_format_id
+                  type: UUID
+                  constraints: { foreignKeyName: fk_physical_container_box_format, references: box_format(id) }
+        - sql:
+            comment: Les boîtes existantes reçoivent le format par défaut de leur tenant
+            sql: >
+              UPDATE physical_container c
+              SET box_format_id = b.id
+              FROM box_format b
+              WHERE b.tenant_id = c.tenant_id AND b.is_default AND c.box_format_id IS NULL
+        - addColumn:
+            tableName: storage_location
+            columns:
+              - column: { name: length_mm, type: INT }
+        - sql:
+            comment: Ancienne capacité en boîtes → longueur (dos 10 = 100 mm)
+            sql: >
+              UPDATE storage_location SET length_mm = COALESCE(capacity, 6) * 100
+              WHERE kind = 'POSITION'
+        - sql:
+            comment: La tablette reçoit la somme de ses emplacements
+            sql: >
+              UPDATE storage_location r SET length_mm = s.total
+              FROM (SELECT parent_id, SUM(length_mm) AS total
+                    FROM storage_location WHERE kind = 'POSITION' GROUP BY parent_id) s
+              WHERE r.id = s.parent_id AND r.kind = 'RACK'
+        - dropColumn:
+            tableName: storage_location
+            columnName: capacity

@@ -42,6 +42,11 @@ public class JpaStorageLocationRepository implements StorageLocationRepository {
     }
 
     @Override
+    public Optional<StorageLocation> lockById(TenantId tenant, UUID id) {
+        return jpa.lockByIdAndTenantId(id, tenant.value()).map(StorageLocationEntity::toDomain);
+    }
+
+    @Override
     public Optional<StorageLocation> findByPath(TenantId tenant, String path) {
         return jpa.findByTenantIdAndPath(tenant.value(), path).map(StorageLocationEntity::toDomain);
     }

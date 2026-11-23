@@ -58,6 +58,9 @@ public class PhysicalContainerEntity {
     @Column(name = "external_reference", length = 128)
     private String externalReference;
 
+    @Column(name = "box_format_id")
+    private UUID boxFormatId;
+
     @Version
     @Column(name = "version", nullable = false)
     private long version;
@@ -79,6 +82,7 @@ public class PhysicalContainerEntity {
         e.batchId = d.batchId().orElse(null);
         e.sequenceInBatch = d.sequenceInBatch().orElse(null);
         e.externalReference = d.externalReference().orElse(null);
+        e.boxFormatId = d.boxFormatId().orElse(null);
         return e;
     }
 
@@ -86,7 +90,7 @@ public class PhysicalContainerEntity {
         return PhysicalContainer.rehydrate(
             id, TenantId.of(tenantId), barcode, label, positionId,
             capacity, state, createdAt, updatedAt, lastMovedAt,
-            batchId, sequenceInBatch, externalReference);
+            batchId, sequenceInBatch, externalReference, boxFormatId);
     }
 
     public void copyMutableStateFrom(PhysicalContainer d) {
@@ -96,6 +100,8 @@ public class PhysicalContainerEntity {
         this.state = d.state();
         this.updatedAt = d.updatedAt();
         this.lastMovedAt = d.lastMovedAt().orElse(null);
+        this.externalReference = d.externalReference().orElse(null);
+        this.boxFormatId = d.boxFormatId().orElse(null);
     }
 
     public String tenantId() { return tenantId; }

@@ -15,6 +15,9 @@ public interface StorageLocationRepository {
 
     Optional<StorageLocation> findById(TenantId tenant, UUID id);
 
+    /** Lecture avec verrou d'écriture jusqu'à la fin de la transaction (rangements concurrents). */
+    Optional<StorageLocation> lockById(TenantId tenant, UUID id);
+
     Optional<StorageLocation> findByPath(TenantId tenant, String path);
 
     /** Enfants directs triés par code ascending. */

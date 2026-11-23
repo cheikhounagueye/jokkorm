@@ -60,6 +60,10 @@ jokkorm:
   # See docs/adr/0003-sae-master-port.md.
   master:
     kind: ${JOKKORM_MASTER_KIND:noop}
+  physical:
+    # Pattern 10 : longueur de tablette par défaut et marge de manipulation (validés 2026-11-23).
+    default-tablette-length-mm: ${JOKKORM_DEFAULT_TABLETTE_LENGTH_MM:1000}
+    handling-margin-percent: ${JOKKORM_HANDLING_MARGIN_PERCENT:5}
   dev:
     # Endpoints /api/v1/dev/* (données de démo). Jamais en prod.
     seeding-enabled: ${JOKKORM_DEV_SEEDING_ENABLED:false}

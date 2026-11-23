@@ -88,9 +88,14 @@ public class RoomController {
 
     // ─── DTO ────────────────────────────────────────────────────────────────
 
-    public record Occupancy(int boxes, int capacity, double rate) {
+    /**
+     * Occupation en longueur (pattern 10). {@code capacity} = équivalent en boîtes du format
+     * par défaut, gardé pour les écrans qui comptent en « places ».
+     */
+    public record Occupancy(int boxes, int capacity, double rate, int usedMm, int lengthMm, int placeableMm) {
         static Occupancy from(RoomView.Occupancy o) {
-            return new Occupancy(o.boxes(), o.capacity(), Math.round(o.rate() * 1000) / 1000.0);
+            return new Occupancy(o.boxes(), o.places(), Math.round(o.rate() * 1000) / 1000.0,
+                o.usedMm(), o.lengthMm(), o.placeableMm());
         }
     }
 
@@ -100,8 +105,8 @@ public class RoomController {
         }
     }
 
-    public record BoxDto(UUID id, String barcode, String label, ContainerState state,
-                         boolean onLoan, boolean overdue, Instant expectedReturnAt) {}
+    public record BoxDto(UUID id, String barcode, String label, ContainerState state, int spineMm,
+                         String formatCode, boolean onLoan, boolean overdue, Instant expectedReturnAt) {}
 
     public record PositionDto(Node node, Occupancy occupancy, List<BoxDto> boxes) {}
 
@@ -121,7 +126,7 @@ public class RoomController {
 
     public record RoomResponse(Node room, Occupancy occupancy, int positions, int boxesOnLoan,
                                boolean detailsRevealed, List<ShelfDto> shelves,
-                               List<EquipmentResponse> equipment) {
+                               List<EquipmentResponse> equipment, int defaultSpineMm, int marginPercent) {
 
         static RoomResponse from(RoomView v, boolean reveal) {
             int[] positions = {0};
@@ -139,13 +144,14 @@ public class RoomController {
                                 return new BoxDto(c.id(),
                                     reveal ? c.barcode() : null,
                                     reveal ? c.label() : null,
-                                    c.state(), b.onLoan(), b.overdue(), b.expectedReturnAt());
+                                    c.state(), b.spineMm(), b.formatCode(),
+                                    b.onLoan(), b.overdue(), b.expectedReturnAt());
                             }).toList());
                     }).toList())).toList())).toList();
             List<EquipmentResponse> equipment = v.equipment().stream()
                 .map(e -> EquipmentResponse.from(e, v.today())).toList();
             return new RoomResponse(Node.from(v.storehouse()), Occupancy.from(v.occupancy()),
-                positions[0], onLoan[0], reveal, shelves, equipment);
+                positions[0], onLoan[0], reveal, shelves, equipment, v.defaultSpineMm(), v.marginPercent());
         }
     }
 }

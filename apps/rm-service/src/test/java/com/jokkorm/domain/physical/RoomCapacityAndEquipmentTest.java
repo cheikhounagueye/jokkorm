@@ -24,31 +24,33 @@ class RoomCapacityAndEquipmentTest {
     }
 
     @Test
-    @DisplayName("Une position sans capacité saisie accueille la valeur par défaut")
-    void default_capacity() {
+    @DisplayName("Une position sans longueur saisie prend sa part de la tablette (pattern 10)")
+    void position_length_is_derived() {
         StorageLocation p = position();
-        assertThat(p.capacity()).isEmpty();
-        assertThat(p.effectiveCapacity()).isEqualTo(StorageLocation.DEFAULT_POSITION_CAPACITY);
+        assertThat(p.lengthMm()).isEmpty();
+        assertThat(LinearCapacity.positionLengthMm(p, 1000, 1)).isEqualTo(1000);
+        assertThat(LinearCapacity.positionLengthMm(p, 1000, 4)).isEqualTo(250);
     }
 
     @Test
-    @DisplayName("La capacité se fixe sur une position, dans [1, 100], et null revient au défaut")
-    void change_capacity() {
+    @DisplayName("La longueur se fixe en mm dans [50, 30 000], et null revient à la valeur déduite")
+    void change_length() {
         StorageLocation p = position();
-        p.changeCapacity(8, NOW);
-        assertThat(p.effectiveCapacity()).isEqualTo(8);
-        p.changeCapacity(null, NOW);
-        assertThat(p.effectiveCapacity()).isEqualTo(StorageLocation.DEFAULT_POSITION_CAPACITY);
-        assertThatThrownBy(() -> p.changeCapacity(0, NOW)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> p.changeCapacity(101, NOW)).isInstanceOf(IllegalArgumentException.class);
+        p.changeLength(600, NOW);
+        assertThat(p.lengthMm()).contains(600);
+        p.changeLength(null, NOW);
+        assertThat(p.lengthMm()).isEmpty();
+        assertThatThrownBy(() -> p.changeLength(49, NOW)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> p.changeLength(30_001, NOW)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("Seule une position porte une capacité en boîtes")
-    void capacity_only_on_position() {
+    @DisplayName("Seules travée, tablette et position ont une longueur de rangement")
+    void length_only_on_storage_levels() {
         StorageLocation site = StorageLocation.createSite(TENANT, "DKR", null, NOW);
-        assertThatThrownBy(() -> site.changeCapacity(5, NOW)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(site::effectiveCapacity).isInstanceOf(IllegalStateException.class);
+        StorageLocation room = StorageLocation.createChild(site, StorageLocationKind.STOREHOUSE, "S", null, NOW);
+        assertThatThrownBy(() -> site.changeLength(1000, NOW)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> room.changeLength(1000, NOW)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

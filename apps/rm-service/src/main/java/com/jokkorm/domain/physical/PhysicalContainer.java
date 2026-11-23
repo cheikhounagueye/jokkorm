@@ -43,12 +43,14 @@ public final class PhysicalContainer {
     private final UUID batchId;
     private final Integer sequenceInBatch;
     private String externalReference;
+    /** Format de boîte (dos, hauteur…). Null = format par défaut du tenant. */
+    private UUID boxFormatId;
 
     private PhysicalContainer(
         UUID id, TenantId tenantId, String barcode, String label, UUID positionId,
         Integer capacity, ContainerState state,
         Instant createdAt, Instant updatedAt, Instant lastMovedAt,
-        UUID batchId, Integer sequenceInBatch, String externalReference) {
+        UUID batchId, Integer sequenceInBatch, String externalReference, UUID boxFormatId) {
         this.id = Objects.requireNonNull(id, "id");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         this.barcode = requireValidBarcode(barcode);
@@ -62,6 +64,7 @@ public final class PhysicalContainer {
         this.batchId = batchId;
         this.sequenceInBatch = sequenceInBatch;
         this.externalReference = externalReference;
+        this.boxFormatId = boxFormatId;
         if ((batchId == null) != (sequenceInBatch == null)) {
             throw new IllegalArgumentException(
                 "batchId and sequenceInBatch must both be set or both be null");
@@ -73,19 +76,19 @@ public final class PhysicalContainer {
 
     /** Création d'une boîte vide, non positionnée, sans lot (phase 5B unitaire). */
     public static PhysicalContainer createEmpty(
-        TenantId tenant, String barcode, String label, Integer capacity, Instant at) {
+        TenantId tenant, String barcode, String label, Integer capacity, UUID boxFormatId, Instant at) {
         return new PhysicalContainer(
             UUID.randomUUID(), tenant, normalize(barcode), label, null,
-            capacity, ContainerState.EMPTY, at, at, null, null, null, null);
+            capacity, ContainerState.EMPTY, at, at, null, null, null, null, boxFormatId);
     }
 
     /** Création d'une boîte dans un lot (phase 5M bulk). */
     public static PhysicalContainer createInBatch(
         TenantId tenant, String barcode, String label, Integer capacity,
-        UUID batchId, int sequenceInBatch, Instant at) {
+        UUID batchId, int sequenceInBatch, UUID boxFormatId, Instant at) {
         return new PhysicalContainer(
             UUID.randomUUID(), tenant, normalize(barcode), label, null,
-            capacity, ContainerState.EMPTY, at, at, null, batchId, sequenceInBatch, null);
+            capacity, ContainerState.EMPTY, at, at, null, batchId, sequenceInBatch, null, boxFormatId);
     }
 
     /** Rehydratation depuis la persistance. */
@@ -93,10 +96,17 @@ public final class PhysicalContainer {
         UUID id, TenantId tenant, String barcode, String label, UUID positionId,
         Integer capacity, ContainerState state,
         Instant createdAt, Instant updatedAt, Instant lastMovedAt,
-        UUID batchId, Integer sequenceInBatch, String externalReference) {
+        UUID batchId, Integer sequenceInBatch, String externalReference, UUID boxFormatId) {
         return new PhysicalContainer(
             id, tenant, barcode, label, positionId, capacity, state,
-            createdAt, updatedAt, lastMovedAt, batchId, sequenceInBatch, externalReference);
+            createdAt, updatedAt, lastMovedAt, batchId, sequenceInBatch, externalReference, boxFormatId);
+    }
+
+    /** Change le format (ex. correction après reprise). Le contrôle de place est fait par l'appelant. */
+    public void changeFormat(UUID newFormatId, Instant at) {
+        requireNotDestroyed();
+        this.boxFormatId = Objects.requireNonNull(newFormatId, "newFormatId");
+        this.updatedAt = at;
     }
 
     /**
@@ -147,10 +157,12 @@ public final class PhysicalContainer {
         this.updatedAt = at;
     }
 
-    /** Destruction physique — terminal. */
+    /** Destruction physique — terminal. La boîte quitte la tablette et libère sa place. */
     public void destroy(Instant at) {
         requireNotDestroyed();
         this.state = ContainerState.DESTROYED;
+        this.positionId = null;
+        this.lastMovedAt = at;
         this.updatedAt = at;
     }
 
@@ -196,4 +208,5 @@ public final class PhysicalContainer {
     public Optional<UUID> batchId() { return Optional.ofNullable(batchId); }
     public Optional<Integer> sequenceInBatch() { return Optional.ofNullable(sequenceInBatch); }
     public Optional<String> externalReference() { return Optional.ofNullable(externalReference); }
+    public Optional<UUID> boxFormatId() { return Optional.ofNullable(boxFormatId); }
 }

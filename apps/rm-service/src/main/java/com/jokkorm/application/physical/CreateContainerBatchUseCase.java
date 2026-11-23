@@ -31,6 +31,7 @@ public class CreateContainerBatchUseCase {
     private final PhysicalContainerRepository containers;
     private final BarcodeGenerator barcodeGenerator;
     private final AuditChainService audit;
+    private final BoxFormatCatalog catalog;
     private final Clock clock;
 
     public CreateContainerBatchUseCase(
@@ -38,11 +39,13 @@ public class CreateContainerBatchUseCase {
         PhysicalContainerRepository containers,
         BarcodeGenerator barcodeGenerator,
         AuditChainService audit,
+        BoxFormatCatalog catalog,
         Clock clock) {
         this.batches = batches;
         this.containers = containers;
         this.barcodeGenerator = barcodeGenerator;
         this.audit = audit;
+        this.catalog = catalog;
         this.clock = clock;
     }
 
@@ -51,8 +54,16 @@ public class CreateContainerBatchUseCase {
     @Transactional
     public Result execute(String reference, int size, String labelPattern,
                           Integer defaultCapacity, String createdBy) {
+        return execute(reference, size, labelPattern, defaultCapacity, null, createdBy);
+    }
+
+    /** Toutes les boîtes d'un lot ont le même format ({@code null} = défaut du tenant). */
+    @Transactional
+    public Result execute(String reference, int size, String labelPattern,
+                          Integer defaultCapacity, java.util.UUID boxFormatId, String createdBy) {
         TenantId tenant = TenantContext.current();
         java.time.Instant now = clock.instant();
+        var format = catalog.resolveForNewBox(tenant, boxFormatId);
 
         ContainerBatch batch = batches.save(ContainerBatch.create(
             tenant, reference, size, labelPattern, defaultCapacity, createdBy, now));
@@ -64,7 +75,7 @@ public class CreateContainerBatchUseCase {
                 ? null
                 : labelPattern + " · " + String.format("%03d/%03d", i, size);
             PhysicalContainer c = PhysicalContainer.createInBatch(
-                tenant, barcode, label, defaultCapacity, batch.id(), i, now);
+                tenant, barcode, label, defaultCapacity, batch.id(), i, format.id(), now);
             created.add(containers.save(c));
         }
 
@@ -73,8 +84,8 @@ public class CreateContainerBatchUseCase {
             AuditTargetType.CONTAINER_BATCH,
             batch.id(),
             createdBy,
-            "reference=%s size=%d labelPattern=%s"
-                .formatted(reference, size, labelPattern == null ? "" : labelPattern));
+            "reference=%s size=%d labelPattern=%s format=%s"
+                .formatted(reference, size, labelPattern == null ? "" : labelPattern, format.code()));
 
         LOG.info("Container batch created : ref='{}' size={} actor={}", reference, size, createdBy);
         return new Result(batch, created);

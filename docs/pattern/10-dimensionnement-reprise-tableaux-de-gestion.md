@@ -1,6 +1,10 @@
 # Pattern 10 — Dimensionnement en mètres linéaires, reprise de l'existant, tableaux de gestion
 
-**Statut** : constitutionnel, en attente de validation · **Phase** : 5T · **Complète** : patterns 02, 06, 08, 09
+**Statut** : constitutionnel, validé le 2026-11-23 · **Phase** : 5T · **Complète** : patterns 02, 06, 08, 09
+
+> **Décisions du 2026-11-23** : tablette par défaut **100 cm**, marge de manipulation **5 %** ;
+> format par défaut **dos 10 cm** ; formats à plat (registres, liasses, plans) en **v2** ;
+> ordre **5T.A → 5T.C, puis interconnexion Maarch, puis 5T.F** (tableaux de gestion).
 
 ## 1. Le problème
 
@@ -36,10 +40,13 @@ Affichage dérivé : « reste 46 cm = 4 boîtes dos 10 ou 3 boîtes dos 15 ».
 
 1. longueur saisie sur l'emplacement ;
 2. longueur de la tablette ÷ nombre d'emplacements de la tablette ;
-3. longueur par défaut de la travée (type de mobilier) ;
-4. ancienne capacité en boîtes (phase 5S) × dos du format par défaut du tenant.
+3. longueur de la travée ÷ nombre d'emplacements de la tablette ;
+4. longueur par défaut (100 cm) ÷ nombre d'emplacements de la tablette.
 
-La capacité en boîtes de la phase 5S devient un **repli historique**, plus jamais la source.
+**Reprise de la capacité en boîtes de la phase 5S** : la migration la convertit une fois en
+longueur (capacité × dos du format par défaut, soit 6 × 100 mm = 600 mm par emplacement
+existant ; la tablette reçoit la somme de ses emplacements). Les taux d'occupation existants
+restent identiques, puis l'ancienne colonne disparaît.
 
 **Jeu de manipulation** : une tablette pleine à 100 % est inutilisable (on ne peut plus sortir
 une boîte). On réserve une marge configurable par tenant (défaut proposé 5 %, *à valider*).

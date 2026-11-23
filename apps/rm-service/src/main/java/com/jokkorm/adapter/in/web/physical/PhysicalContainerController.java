@@ -47,6 +47,7 @@ public class PhysicalContainerController {
     private final FindContainerByBarcodeUseCase findByBarcode;
     private final BarcodeImageGenerator imageGenerator;
     private final SetContainerExternalReferenceUseCase setExternalRef;
+    private final com.jokkorm.application.physical.ChangeContainerFormatUseCase changeFormat;
 
     public PhysicalContainerController(
         CreatePhysicalContainerUseCase create,
@@ -54,13 +55,15 @@ public class PhysicalContainerController {
         ListContainersAtPositionUseCase listAtPosition,
         FindContainerByBarcodeUseCase findByBarcode,
         BarcodeImageGenerator imageGenerator,
-        SetContainerExternalReferenceUseCase setExternalRef) {
+        SetContainerExternalReferenceUseCase setExternalRef,
+        com.jokkorm.application.physical.ChangeContainerFormatUseCase changeFormat) {
         this.create = create;
         this.place = place;
         this.listAtPosition = listAtPosition;
         this.findByBarcode = findByBarcode;
         this.imageGenerator = imageGenerator;
         this.setExternalRef = setExternalRef;
+        this.changeFormat = changeFormat;
     }
 
     public record ExternalReferenceRequest(String externalReference) {}
@@ -87,15 +90,34 @@ public class PhysicalContainerController {
             + "ne peut pas le choisir pour garantir la cohérence du format et l'unicité.")
     public PhysicalContainerResponse create(@Valid @RequestBody CreatePhysicalContainerRequest request) {
         return PhysicalContainerResponse.from(
-            create.execute(request.label(), request.capacity()));
+            create.execute(request.label(), request.capacity(), request.boxFormatId()));
     }
 
     @PutMapping("/{id}/position")
-    @Operation(summary = "Range (ou déplace) la boîte sur une position (feuille de la topographie).")
+    @Operation(
+        summary = "Range (ou déplace) la boîte sur une position (feuille de la topographie).",
+        description = "Contrôle en longueur (dos de la boîte vs place restante) et marge de "
+            + "manipulation de la tablette. 409 si la boîte ne tient pas, si elle est en prêt "
+            + "ou détruite. Audit CONTAINER_PLACED ou CONTAINER_MOVED (from → to).")
     public PhysicalContainerResponse place(
         @PathVariable UUID id,
-        @Valid @RequestBody PlaceContainerRequest request) {
-        return PhysicalContainerResponse.from(place.execute(id, request.positionId()));
+        @Valid @RequestBody PlaceContainerRequest request,
+        @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        return PhysicalContainerResponse.from(place.execute(id, request.positionId(), actor));
+    }
+
+    public record ChangeFormatRequest(@jakarta.validation.constraints.NotNull UUID boxFormatId) {}
+
+    @PutMapping("/{id}/format")
+    @Operation(
+        summary = "Corrige le format d'une boîte (dos 8, 10, 15, 20…).",
+        description = "Si la boîte est rangée, le nouveau dos doit tenir sur son emplacement. "
+            + "Audit CONTAINER_FORMAT_CHANGED.")
+    public PhysicalContainerResponse changeFormat(
+        @PathVariable UUID id,
+        @Valid @RequestBody ChangeFormatRequest request,
+        @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        return PhysicalContainerResponse.from(changeFormat.execute(id, request.boxFormatId(), actor));
     }
 
     @GetMapping

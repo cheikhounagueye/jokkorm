@@ -25,9 +25,9 @@ public final class StorageLocation {
 
     private static final Pattern CODE = Pattern.compile("^[A-Z0-9][A-Z0-9_\\-]{0,31}$");
 
-    /** Nombre de boîtes qu'une POSITION accueille quand aucune capacité n'est saisie. */
-    public static final int DEFAULT_POSITION_CAPACITY = 6;
-    public static final int MAX_POSITION_CAPACITY = 100;
+    /** Bornes d'une longueur utile (travée, tablette ou emplacement), en millimètres. */
+    public static final int MIN_LENGTH_MM = 50;
+    public static final int MAX_LENGTH_MM = 30_000;
 
     private final UUID id;
     private final TenantId tenantId;
@@ -36,13 +36,14 @@ public final class StorageLocation {
     private String label;
     private final UUID parentId;
     private String path;
-    private Integer capacity;
+    /** Longueur utile en mm (travée, tablette ou emplacement). Null = déduite (pattern 10). */
+    private Integer lengthMm;
     private final Instant createdAt;
     private Instant updatedAt;
 
     private StorageLocation(
         UUID id, TenantId tenantId, StorageLocationKind kind, String code, String label,
-        UUID parentId, String path, Integer capacity, Instant createdAt, Instant updatedAt) {
+        UUID parentId, String path, Integer lengthMm, Instant createdAt, Instant updatedAt) {
         this.id = Objects.requireNonNull(id, "id");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         this.kind = Objects.requireNonNull(kind, "kind");
@@ -50,7 +51,7 @@ public final class StorageLocation {
         this.label = label;
         this.parentId = parentId;
         this.path = Objects.requireNonNull(path, "path");
-        this.capacity = requireValidCapacity(kind, capacity);
+        this.lengthMm = requireValidLength(kind, lengthMm);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
         requireParentShape(kind, parentId);
@@ -84,8 +85,8 @@ public final class StorageLocation {
     /** Rehydratation depuis la persistance (le path est lu, pas recalculé). */
     public static StorageLocation rehydrate(
         UUID id, TenantId tenant, StorageLocationKind kind, String code, String label,
-        UUID parentId, String path, Integer capacity, Instant createdAt, Instant updatedAt) {
-        return new StorageLocation(id, tenant, kind, code, label, parentId, path, capacity, createdAt, updatedAt);
+        UUID parentId, String path, Integer lengthMm, Instant createdAt, Instant updatedAt) {
+        return new StorageLocation(id, tenant, kind, code, label, parentId, path, lengthMm, createdAt, updatedAt);
     }
 
     public void rename(String newLabel, Instant at) {
@@ -93,30 +94,28 @@ public final class StorageLocation {
         this.updatedAt = at;
     }
 
-    /** Fixe le nombre de boîtes qu'accueille une POSITION ({@code null} = valeur par défaut). */
-    public void changeCapacity(Integer newCapacity, Instant at) {
-        this.capacity = requireValidCapacity(kind, newCapacity);
+    /** Fixe la longueur utile (travée, tablette, emplacement) ; {@code null} = déduite. */
+    public void changeLength(Integer newLengthMm, Instant at) {
+        this.lengthMm = requireValidLength(kind, newLengthMm);
         this.updatedAt = at;
     }
 
-    /** Capacité en boîtes d'une POSITION, valeur par défaut incluse. */
-    public int effectiveCapacity() {
-        if (kind != StorageLocationKind.POSITION) {
-            throw new IllegalStateException("Only a POSITION has a box capacity, got " + kind);
-        }
-        return capacity != null ? capacity : DEFAULT_POSITION_CAPACITY;
+    /** Seuls la travée, la tablette et l'emplacement ont une longueur de rangement. */
+    public static boolean hasLength(StorageLocationKind kind) {
+        return kind == StorageLocationKind.SHELF || kind == StorageLocationKind.RACK
+            || kind == StorageLocationKind.POSITION;
     }
 
-    private static Integer requireValidCapacity(StorageLocationKind kind, Integer capacity) {
-        if (capacity == null) return null;
-        if (kind != StorageLocationKind.POSITION) {
-            throw new IllegalArgumentException("Only a POSITION can have a box capacity, got " + kind);
+    private static Integer requireValidLength(StorageLocationKind kind, Integer mm) {
+        if (mm == null) return null;
+        if (!hasLength(kind)) {
+            throw new IllegalArgumentException("A " + kind + " has no storage length");
         }
-        if (capacity < 1 || capacity > MAX_POSITION_CAPACITY) {
+        if (mm < MIN_LENGTH_MM || mm > MAX_LENGTH_MM) {
             throw new IllegalArgumentException(
-                "capacity must be in [1, %d], got %d".formatted(MAX_POSITION_CAPACITY, capacity));
+                "length must be in [%d, %d] mm, got %d".formatted(MIN_LENGTH_MM, MAX_LENGTH_MM, mm));
         }
-        return capacity;
+        return mm;
     }
 
     /** Recalcule le path quand le parent a bougé — utilisé par le use case de recalcul récursif. */
@@ -157,7 +156,7 @@ public final class StorageLocation {
     public String label() { return label; }
     public Optional<UUID> parentId() { return Optional.ofNullable(parentId); }
     public String path() { return path; }
-    public Optional<Integer> capacity() { return Optional.ofNullable(capacity); }
+    public Optional<Integer> lengthMm() { return Optional.ofNullable(lengthMm); }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
 }

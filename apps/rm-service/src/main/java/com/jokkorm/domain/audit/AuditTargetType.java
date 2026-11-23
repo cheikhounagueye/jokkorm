@@ -23,5 +23,8 @@ public enum AuditTargetType {
     LOAN,
 
     /** Demande d'accès à une boîte (BORROW/EXTRACT/DIGITIZE) — phase 5P. */
-    ACCESS_REQUEST
+    ACCESS_REQUEST,
+
+    /** Format du catalogue de boîtes — phase 5T. */
+    BOX_FORMAT
 }

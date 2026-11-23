@@ -77,7 +77,7 @@ public class ContainerBatchController {
         @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
         var result = createUseCase.execute(
             request.reference(), request.size(), request.labelPattern(),
-            request.defaultCapacity(), actor);
+            request.defaultCapacity(), request.boxFormatId(), actor);
         return new BatchCreatedResponse(
             ContainerBatchResponse.from(result.batch()),
             result.containers().stream()

@@ -27,8 +27,19 @@ public enum AuditAction {
     /** Admin a supprimé un nœud de la topographie — phase 5J. */
     STORAGE_LOCATION_DELETED,
 
-    /** Capacité en boîtes d'une position modifiée — phase 5S. */
+    /** Capacité en boîtes d'une position modifiée — phase 5S (remplacée par la longueur, 5T). */
     STORAGE_LOCATION_CAPACITY_SET,
+    /** Longueur utile d'une travée, tablette ou position modifiée — phase 5T. */
+    STORAGE_LOCATION_LENGTH_SET,
+    /** Boîte rangée pour la première fois sur une position — phase 5T. */
+    CONTAINER_PLACED,
+    /** Boîte déplacée d'une position à une autre — phase 5T. */
+    CONTAINER_MOVED,
+    /** Format de boîte corrigé — phase 5T. */
+    CONTAINER_FORMAT_CHANGED,
+    /** Format ajouté ou modifié dans le catalogue du tenant — phase 5T. */
+    BOX_FORMAT_CREATED,
+    BOX_FORMAT_UPDATED,
     /** Équipement (extincteur, issue…) ajouté ou retiré d'un magasin — phase 5S. */
     ROOM_EQUIPMENT_ADDED,
     ROOM_EQUIPMENT_REMOVED,

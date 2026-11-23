@@ -4,6 +4,8 @@ import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.loan.PhysicalLoan;
 import com.jokkorm.domain.loan.PhysicalLoanRepository;
+import com.jokkorm.domain.physical.BoxFormat;
+import com.jokkorm.domain.physical.LinearCapacity;
 import com.jokkorm.domain.physical.PhysicalContainer;
 import com.jokkorm.domain.physical.PhysicalContainerRepository;
 import com.jokkorm.domain.physical.RoomEquipmentRepository;
@@ -27,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Assemble la vue d'un magasin en un nombre de requêtes borné : la structure via les
  * enfants de chaque niveau, puis toutes les boîtes en une requête, puis les prêts actifs.
+ * L'occupation est calculée en longueur, avec les mêmes règles que le rangement
+ * ({@link ShelfSpaceService}) : ce que l'écran affiche est ce que le rangement accepte.
  */
 @Service
 public class GetRoomViewUseCase {
@@ -39,6 +43,8 @@ public class GetRoomViewUseCase {
     private final PhysicalContainerRepository containers;
     private final PhysicalLoanRepository loans;
     private final RoomEquipmentRepository equipment;
+    private final BoxFormatCatalog catalog;
+    private final ShelfSpaceService space;
     private final Clock clock;
 
     public GetRoomViewUseCase(
@@ -46,11 +52,15 @@ public class GetRoomViewUseCase {
         PhysicalContainerRepository containers,
         PhysicalLoanRepository loans,
         RoomEquipmentRepository equipment,
+        BoxFormatCatalog catalog,
+        ShelfSpaceService space,
         Clock clock) {
         this.locations = locations;
         this.containers = containers;
         this.loans = loans;
         this.equipment = equipment;
+        this.catalog = catalog;
+        this.space = space;
         this.clock = clock;
     }
 
@@ -82,11 +92,14 @@ public class GetRoomViewUseCase {
 
         Map<UUID, List<PhysicalContainer>> boxesByPosition = containers.findByPositions(tenant, positionIds)
             .stream()
+            .filter(ShelfSpaceService::occupiesSpace)
             .collect(Collectors.groupingBy(c -> c.positionId().orElseThrow()));
 
         Instant now = clock.instant();
         Map<UUID, PhysicalLoan> activeLoanByContainer = loans.findActive(tenant).stream()
             .collect(Collectors.toMap(PhysicalLoan::containerId, Function.identity(), (a, b) -> a));
+        BoxFormatCatalog.Spines spines = catalog.spines(tenant);
+        int defaultSpine = spines.defaultSpineMm();
 
         List<RoomView.Shelf> shelfViews = new ArrayList<>();
         RoomView.Occupancy roomOcc = RoomView.Occupancy.EMPTY;
@@ -94,20 +107,37 @@ public class GetRoomViewUseCase {
             List<RoomView.Rack> rackViews = new ArrayList<>();
             RoomView.Occupancy shelfOcc = RoomView.Occupancy.EMPTY;
             for (StorageLocation rack : racksByShelf.get(shelf.id())) {
+                List<StorageLocation> positions = positionsByRack.get(rack.id());
+                int tabletteMm = LinearCapacity.tabletteLengthMm(rack, shelf, space.defaultTabletteMm());
+                int fillable = LinearCapacity.fillableMm(tabletteMm, space.marginPercent());
+                int rackUsed = positions.stream()
+                    .flatMap(p -> boxesByPosition.getOrDefault(p.id(), List.of()).stream())
+                    .mapToInt(spines::of).sum();
+                int rackFree = Math.max(0, fillable - rackUsed);
+
                 List<RoomView.Position> positionViews = new ArrayList<>();
                 RoomView.Occupancy rackOcc = RoomView.Occupancy.EMPTY;
-                for (StorageLocation position : positionsByRack.get(rack.id())) {
+                for (StorageLocation position : positions) {
                     List<RoomView.Box> boxes = boxesByPosition.getOrDefault(position.id(), List.of()).stream()
                         .map(c -> {
                             PhysicalLoan loan = activeLoanByContainer.get(c.id());
-                            return new RoomView.Box(c, loan != null, loan != null && loan.isOverdue(now),
+                            return new RoomView.Box(c, spines.of(c),
+                                spines.formatOf(c).map(BoxFormat::code).orElse(null),
+                                loan != null, loan != null && loan.isOverdue(now),
                                 loan == null ? null : loan.expectedReturnAt());
                         })
                         .toList();
-                    RoomView.Occupancy posOcc = new RoomView.Occupancy(boxes.size(), position.effectiveCapacity());
+                    int length = LinearCapacity.positionLengthMm(position, tabletteMm, positions.size());
+                    int used = boxes.stream().mapToInt(RoomView.Box::spineMm).sum();
+                    int placeable = Math.max(0, Math.min(length - used, rackFree));
+                    RoomView.Occupancy posOcc = new RoomView.Occupancy(
+                        boxes.size(), used, length, placeable, length / Math.max(1, defaultSpine));
                     positionViews.add(new RoomView.Position(position, boxes, posOcc));
                     rackOcc = rackOcc.plus(posOcc);
                 }
+                // Toutes les positions ensemble ne peuvent pas dépasser la marge de la tablette.
+                rackOcc = new RoomView.Occupancy(rackOcc.boxes(), rackOcc.usedMm(), rackOcc.lengthMm(),
+                    Math.min(rackOcc.placeableMm(), rackFree), rackOcc.places());
                 rackViews.add(new RoomView.Rack(rack, positionViews, rackOcc));
                 shelfOcc = shelfOcc.plus(rackOcc);
             }
@@ -116,7 +146,7 @@ public class GetRoomViewUseCase {
         }
 
         return new RoomView(room, shelfViews, equipment.findByStorehouse(tenant, room.id()), roomOcc,
-            LocalDate.ofInstant(now, clock.getZone()));
+            LocalDate.ofInstant(now, clock.getZone()), defaultSpine, space.marginPercent());
     }
 
     private static List<StorageLocation> sorted(List<StorageLocation> nodes) {

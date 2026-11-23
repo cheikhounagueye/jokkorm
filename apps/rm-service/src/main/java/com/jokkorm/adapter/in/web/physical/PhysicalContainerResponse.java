@@ -17,7 +17,8 @@ public record PhysicalContainerResponse(
     Instant lastMovedAt,
     UUID batchId,
     Integer sequenceInBatch,
-    String externalReference) {
+    String externalReference,
+    UUID boxFormatId) {
 
     public static PhysicalContainerResponse from(PhysicalContainer d) {
         return new PhysicalContainerResponse(
@@ -29,6 +30,7 @@ public record PhysicalContainerResponse(
             d.lastMovedAt().orElse(null),
             d.batchId().orElse(null),
             d.sequenceInBatch().orElse(null),
-            d.externalReference().orElse(null));
+            d.externalReference().orElse(null),
+            d.boxFormatId().orElse(null));
     }
 }

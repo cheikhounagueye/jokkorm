@@ -51,7 +51,8 @@ public class StorageLocationController {
     private final DeleteStorageLocationUseCase deleteUseCase;
     private final ImportTopographyFromExcelUseCase importUseCase;
     private final TopographyExcelTemplateGenerator templateGenerator;
-    private final com.jokkorm.application.physical.SetPositionCapacityUseCase capacityUseCase;
+    private final com.jokkorm.application.physical.SetStorageLengthUseCase lengthUseCase;
+    private final com.jokkorm.application.physical.GetStorageSpaceUseCase spaceUseCase;
 
     public StorageLocationController(
         CreateStorageLocationUseCase createUseCase,
@@ -60,27 +61,38 @@ public class StorageLocationController {
         DeleteStorageLocationUseCase deleteUseCase,
         ImportTopographyFromExcelUseCase importUseCase,
         TopographyExcelTemplateGenerator templateGenerator,
-        com.jokkorm.application.physical.SetPositionCapacityUseCase capacityUseCase) {
+        com.jokkorm.application.physical.SetStorageLengthUseCase lengthUseCase,
+        com.jokkorm.application.physical.GetStorageSpaceUseCase spaceUseCase) {
         this.createUseCase = createUseCase;
         this.treeUseCase = treeUseCase;
         this.updateUseCase = updateUseCase;
         this.deleteUseCase = deleteUseCase;
         this.importUseCase = importUseCase;
         this.templateGenerator = templateGenerator;
-        this.capacityUseCase = capacityUseCase;
+        this.lengthUseCase = lengthUseCase;
+        this.spaceUseCase = spaceUseCase;
     }
 
-    public record CapacityRequest(Integer capacity) {}
-
-    @PutMapping("/{id}/capacity")
+    @GetMapping("/{id}/space")
     @Operation(
-        summary = "Fixe la capacité en boîtes d'une POSITION (null = valeur par défaut).",
-        description = "Refusé (409) si la position contient déjà plus de boîtes que la capacité demandée.")
-    public StorageLocationResponse setCapacity(
+        summary = "Place restante d'une tablette ou d'un emplacement, et boîtes qui tiennent par format.",
+        description = "Longueur, occupé, rangeable (marge de manipulation déduite), en mm.")
+    public com.jokkorm.application.physical.GetStorageSpaceUseCase.Space space(@PathVariable UUID id) {
+        return spaceUseCase.execute(id);
+    }
+
+    public record LengthRequest(Integer lengthMm) {}
+
+    @PutMapping("/{id}/length")
+    @Operation(
+        summary = "Fixe la longueur utile (mm) d'une travée, tablette ou position (null = déduite).",
+        description = "Pattern 10 : la capacité se mesure en longueur. 409 si la longueur est plus "
+            + "courte que les boîtes déjà rangées, ou si les positions dépasseraient leur tablette.")
+    public StorageLocationResponse setLength(
         @PathVariable UUID id,
-        @RequestBody CapacityRequest request,
+        @RequestBody LengthRequest request,
         @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
-        return StorageLocationResponse.from(capacityUseCase.execute(id, request.capacity(), actor));
+        return StorageLocationResponse.from(lengthUseCase.execute(id, request.lengthMm(), actor));
     }
 
     @GetMapping(value = "/import/template.xlsx",
