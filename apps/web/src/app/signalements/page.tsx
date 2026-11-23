@@ -120,7 +120,7 @@ export default function SignalementsPage() {
                   icon={<IconTile name="success" tone="success" size={56} />}
                   title={scope === "open" ? "Rien à traiter" : "Aucun signalement"}
                   description={scope === "open"
-                    ? `Les emplacements affichés dans ${name} sont ceux de JokkoRM, et aucun gel ne touche une boîte sortie.`
+                    ? "Aucun signalement à traiter depuis que le veilleur lit le journal."
                     : "Le veilleur n'a encore rien repéré."}
                 />
               )}

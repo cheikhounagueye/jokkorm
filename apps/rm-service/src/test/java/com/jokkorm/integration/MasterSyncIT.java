@@ -261,11 +261,15 @@ class MasterSyncIT {
     private static final String FREEZE = "recordsManagement/freeze";
     private static final String UNFREEZE = "recordsManagement/unfreeze";
 
+    private static String eventJson(String type, String id, Instant at, String account) {
+        return "{\"eventId\":\"" + id + "\",\"eventType\":\"" + type + "\",\"timestamp\":\""
+            + OffsetDateTime.ofInstant(at, ZoneOffset.UTC) + "\",\"objectClass\":\"recordsManagement/archive\","
+            + "\"objectId\":\"arc-1\",\"accountName\":\"" + account + "\"}";
+    }
+
     private void stubEvent(String type, String id, Instant at, String account) {
         MAARCH.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).withQueryParam("eventType", equalTo(type))
-            .willReturn(json("[{\"eventId\":\"" + id + "\",\"eventType\":\"" + type + "\",\"timestamp\":\""
-                + OffsetDateTime.ofInstant(at, ZoneOffset.UTC) + "\",\"objectClass\":\"recordsManagement/archive\","
-                + "\"objectId\":\"arc-1\",\"accountName\":\"" + account + "\"}]")));
+            .willReturn(json("[" + eventJson(type, id, at, account) + "]")));
     }
 
     /** Ce que Maarch affiche dans le champ de localisation de l'archive. */
@@ -383,6 +387,22 @@ class MasterSyncIT {
         assertThat(watcher.acknowledge(tenant, alert.id(), "archiviste-it")).isTrue();
         assertThat(watcher.acknowledge(tenant, alert.id(), "archiviste-it")).isFalse();
         assertThat(audits("MASTER_ALERT_ACKNOWLEDGED")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Veilleur : écriture de JokkoRM puis modification à la main dans la même minute → un seul « rétabli », aucun faux « à vérifier »")
+    void connector_write_then_manual_edit_in_same_pass() {
+        Instant t = Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.SECONDS);
+        stubDisplayed("Bureau du DRH");
+        MAARCH.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).withQueryParam("eventType", equalTo(MOD))
+            .willReturn(json("[" + eventJson(MOD, "ev-human", t.plusSeconds(10), "ggrand") + ","
+                + eventJson(MOD, "ev-jokkorm", t, "svc") + "]")));
+
+        watcher.watch(tenant);
+
+        assertThat(alerts(false)).extracting(MasterAlert::kind).containsExactly(MasterAlert.Kind.LOCATION_RESTORED);
+        assertThat(alerts(false).get(0).actor()).isEqualTo("ggrand");
+        assertThat(audits("MASTER_LOCATION_RESTORED")).isEqualTo(1);
     }
 
     @Test

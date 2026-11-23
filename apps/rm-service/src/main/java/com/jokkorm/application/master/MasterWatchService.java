@@ -143,11 +143,23 @@ public class MasterWatchService {
         } catch (MasterUnreachableException e) {
             return fail(state, state.cursorAt(), now, e);
         }
+        // Le maître ne dit pas quel champ a changé et describe() lit l'état ACTUEL : pour une même
+        // archive, seul le dernier événement « métadonnées » du passage est évalué. Sinon une écriture
+        // de JokkoRM suivie d'une modification à la main ferait un faux « à vérifier », et deux
+        // modifications dans la minute un double rétablissement.
+        Map<String, MasterEvent> latestMetadata = new java.util.HashMap<>();
+        for (MasterEvent ev : events) {
+            if (ev.kind() == MasterEvent.Kind.METADATA_MODIFIED && !recentlyHandled.containsKey(tenant.value() + "|" + ev.id())) {
+                latestMetadata.put(ev.masterArchiveId(), ev);  // événements du plus ancien au plus récent
+            }
+        }
         Instant cursor = state.cursorAt();
         int raised = 0;
         for (MasterEvent ev : events) {
             String key = tenant.value() + "|" + ev.id();
-            if (!recentlyHandled.containsKey(key)) {
+            boolean superseded = ev.kind() == MasterEvent.Kind.METADATA_MODIFIED
+                && latestMetadata.get(ev.masterArchiveId()) != ev;
+            if (!recentlyHandled.containsKey(key) && !superseded) {
                 try {
                     if (TenantContext.callWithUnchecked(tenant, () -> handle(tenant, ev))) raised++;
                 } catch (MasterUnreachableException | DataAccessException | TransactionException e) {
@@ -157,8 +169,8 @@ public class MasterWatchService {
                     // Cas métier (archive détruite, cote illisible…) : journalisé et passé, pour ne pas bloquer le veilleur.
                     LOG.warn("[veilleur] {} : événement {} ({}) ignoré : {}", tenant.value(), ev.id(), ev.kind(), e.getMessage());
                 }
-                recentlyHandled.put(key, Boolean.TRUE);
             }
+            recentlyHandled.put(key, Boolean.TRUE);
             if (ev.occurredAt().isAfter(cursor)) cursor = ev.occurredAt();
         }
         MasterWatchState done = state.succeeded(cursor, now, events.size());

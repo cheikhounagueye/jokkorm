@@ -140,6 +140,11 @@ Maarch ne prévient personne : JokkoRM lit son journal du cycle de vie **chaque 
   - sur les 4 modifications de l'archive `FR094080_2026_AE0002`, dont le renommage par un
     agent de la DRH, aucun faux écart.
 - **Limites connues** :
+  - le journal ne dit pas quel champ a changé, et JokkoRM lit l'état actuel de l'archive. Pour une
+    même archive, seule la dernière modification de la minute est donc évaluée. Si deux personnes
+    modifient la même archive dans la minute, le signalement nomme la dernière ;
+  - un gel posé avant le début de la veille n'est pas signalé : le rapprochement hebdomadaire
+    (étape 4) le couvrira ;
   - au-delà de 20 000 événements d'un même type à rattraper d'un coup, le veilleur s'arrête en
     erreur ;
   - un gel levé remet l'archive « en magasin » même si elle n'avait pas encore de boîte.
