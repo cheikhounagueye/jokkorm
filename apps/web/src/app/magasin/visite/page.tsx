@@ -205,7 +205,7 @@ function RoomTour({ roomId, initialStep, initialColor, initialMode }: {
         </div>
 
         <div style={{ display: "grid", gap: 16 }}>
-          {pick && <SelectionCard pick={pick} revealed={room.detailsRevealed} onClose={() => setPick(null)} />}
+          {pick && <SelectionCard pick={pick} revealed={room.detailsRevealed} marginPercent={room.marginPercent} onClose={() => setPick(null)} />}
           {mode === "guided" ? (
             <TourPanel room={room} layout={layout} step={safeStep} playing={playing}
               onStep={(n) => { setPlaying(false); setStep(n); }}

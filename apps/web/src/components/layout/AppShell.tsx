@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/magasin",      label: "Salle d'archives", icon: "archiveRoom", section: "Gestion" },
   { href: "/magasin/visite", label: "Visite 3D",      icon: "virtualTour", section: "Gestion" },
   { href: "/magasin/lots", label: "Lots de boîtes",   icon: "batches",     section: "Gestion" },
+  { href: "/magasin/formats", label: "Formats de boîtes", icon: "boxFormats", section: "Gestion" },
   { href: "/records",      label: "Archives",         icon: "archives",    section: "Référence" },
 ];
 

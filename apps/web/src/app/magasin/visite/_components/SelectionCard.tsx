@@ -2,10 +2,13 @@
 
 import { ArchiveBoxIso } from "@/components/illustrations/ArchiveBoxIso";
 import { Alert, Badge, Card, CONTAINER_STATE, IconTile, StatusBadge } from "@/components/ui";
+import { cm } from "@/lib/api";
 import { Icons } from "@/lib/icons";
 import { LinkButton } from "../../_components/LinkButton";
+import { SpaceGauge } from "../../_components/SpaceGauge";
+import { spineLabel, useBoxFormats } from "../../_components/useBoxFormats";
+import type { LayoutSlot } from "./roomLayout";
 import { boxFinish, EQUIPMENT_ICON, EQUIPMENT_NAME, type ScenePick } from "./sceneShared";
-import { OccupancyBar } from "./TourPanel";
 
 const WALL_NAME = { west: "mur ouest", east: "mur est", front: "mur d'entrée", back: "mur du fond" } as const;
 
@@ -18,8 +21,37 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function SelectionCard({ pick, revealed, onClose }: {
-  pick: ScenePick; revealed: boolean; onClose: () => void;
+/**
+ * Tablette entière à l'échelle (pattern 10) : la marge de manipulation est celle de la
+ * tablette, pas de l'emplacement. L'emplacement ou la boîte choisie ressort en surbrillance.
+ * Hors archiviste, les boîtes restent anonymes même au survol (pattern 08).
+ */
+function TabletteGauge({ slot, marginPercent, revealed, isActive }: {
+  slot: LayoutSlot; marginPercent: number; revealed: boolean;
+  isActive: (boxId: string, positionId: string) => boolean;
+}) {
+  const { fitsIn } = useBoxFormats();
+  const occ = slot.rack.occupancy;
+  const segments = slot.rack.positions.flatMap((p) => p.boxes.map((b) => ({
+    key: b.id,
+    spineMm: b.spineMm,
+    title: revealed ? (b.label ?? b.barcode ?? "Boîte sans libellé") : "Boîte d'archives",
+    onLoan: b.onLoan,
+    active: isActive(b.id, p.node.id),
+  })));
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 6 }}>
+        Tablette {slot.rack.node.code}
+      </div>
+      <SpaceGauge lengthMm={occ.lengthMm} usedMm={occ.usedMm} placeableMm={occ.placeableMm}
+        marginPercent={marginPercent} segments={segments} fits={fitsIn(occ.placeableMm)} />
+    </div>
+  );
+}
+
+export function SelectionCard({ pick, revealed, marginPercent, onClose }: {
+  pick: ScenePick; revealed: boolean; marginPercent: number; onClose: () => void;
 }) {
   const close = (
     <button type="button" onClick={onClose} title="Fermer"
@@ -67,7 +99,14 @@ export function SelectionCard({ pick, revealed, onClose }: {
           </div>
           {close}
         </div>
-        <OccupancyBar occupancy={slot.position.occupancy} label="Occupation" />
+        <TabletteGauge slot={slot} marginPercent={marginPercent} revealed={revealed}
+          isActive={(_, positionId) => positionId === slot.position.node.id} />
+        <div style={{ marginTop: 10 }}>
+          <Row label="Boîtes à cet emplacement">{slot.position.occupancy.boxes}</Row>
+          {slot.rack.positions.length > 1 && (
+            <Row label="Encore rangeable ici">{cm(slot.position.occupancy.placeableMm)}</Row>
+          )}
+        </div>
         <div style={{ marginTop: 12 }}>
           <LinkButton href={nodeLink} icon={<Icons.view size={14} />}>Ouvrir l&apos;emplacement</LinkButton>
         </div>
@@ -93,9 +132,14 @@ export function SelectionCard({ pick, revealed, onClose }: {
       </div>
       {revealed && b.barcode && <Row label="Code-barres"><code>{b.barcode}</code></Row>}
       <Row label="Rangée à">{where}</Row>
+      <Row label="Format">{spineLabel(b.spineMm)}</Row>
       {b.onLoan && b.expectedReturnAt && (
         <Row label="Retour prévu">{new Date(b.expectedReturnAt).toLocaleDateString("fr-FR")}</Row>
       )}
+      <div style={{ marginTop: 12 }}>
+        <TabletteGauge slot={slot} marginPercent={marginPercent} revealed={revealed}
+          isActive={(boxId) => boxId === b.id} />
+      </div>
       {!revealed && (
         <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>
           Libellé et code-barres réservés aux archivistes.

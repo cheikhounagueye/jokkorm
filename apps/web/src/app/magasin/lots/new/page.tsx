@@ -13,8 +13,10 @@ import {
   Input,
   PageHeader,
 } from "@/components/ui";
-import { createBatch } from "@/lib/api";
+import { cm, createBatch, ml } from "@/lib/api";
 import { Icons } from "@/lib/icons";
+import { BoxSpine, FormatPicker } from "../../_components/FormatPicker";
+import { spineLabel, useBoxFormats } from "../../_components/useBoxFormats";
 import { BoxPile } from "../_components/BoxPile";
 import { AVERY_TEMPLATES, LabelSticker } from "../_components/LabelSheet";
 
@@ -30,6 +32,11 @@ export default function NewLotPage() {
   const [size, setSize] = useState(10);
   const [labelPattern, setLabelPattern] = useState("");
   const [capacity, setCapacity] = useState("");
+  const boxFormats = useBoxFormats();
+  // Vide = le format par défaut du tenant, connu une fois le catalogue chargé.
+  const [chosenFormatId, setChosenFormatId] = useState("");
+  const formatId = chosenFormatId || boxFormats.defaultFormat?.id || "";
+  const format = boxFormats.formatOf(formatId);
 
   const mutation = useMutation({
     mutationFn: () => createBatch({
@@ -37,6 +44,7 @@ export default function NewLotPage() {
       size,
       labelPattern: labelPattern || undefined,
       defaultCapacity: capacity ? parseInt(capacity, 10) : undefined,
+      boxFormatId: formatId || undefined,
     }),
     onSuccess: (r) => router.push(`/magasin/lots/${r.batch.id}`),
   });
@@ -44,6 +52,8 @@ export default function NewLotPage() {
   const digits = Math.max(3, String(size).length);
   const seq = `${"1".padStart(digits, "0")}/${String(size).padStart(digits, "0")}`;
   const pages = Math.ceil(size / AVERY_TEMPLATES.AVERY_L7160.perPage);
+  /** Longueur de rayonnage que le lot occupera une fois rangé (pattern 10). */
+  const lotLengthMm = format ? size * format.spineMm : null;
 
   return (
     <section className="fade-up">
@@ -103,6 +113,24 @@ export default function NewLotPage() {
               />
             </Field>
 
+            <Field label="Format des boîtes"
+              hint={boxFormats.query.isError
+                ? "Catalogue indisponible : le format par défaut du tenant sera appliqué."
+                : "Le dos de la boîte fixe la place prise sur la tablette."}>
+              {boxFormats.active.length > 0 ? (
+                <FormatPicker formats={boxFormats.active} value={formatId} onChange={setChosenFormatId} />
+              ) : (
+                <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>
+                  {boxFormats.query.isLoading ? "Chargement du catalogue…" : "Aucun format actif."}
+                </div>
+              )}
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                <Link href="/magasin/formats" style={{ color: "var(--brand-600)", fontWeight: 500 }}>
+                  Gérer le catalogue des formats
+                </Link>
+              </div>
+            </Field>
+
             {mutation.isError && (
               <div style={{ marginBottom: 16 }}>
                 <Alert tone="danger" title="Création impossible">{(mutation.error as Error).message}</Alert>
@@ -149,7 +177,28 @@ export default function NewLotPage() {
               <BoxPile count={size} max={24} perRow={6} size={46} />
             </div>
 
-            <div style={{ display: "flex", gap: 16, fontSize: 13, color: "var(--text-secondary)", borderTop: "1px solid var(--border-subtle)", paddingTop: 12 }}>
+            {format && lotLengthMm !== null && (
+              <div style={{
+                display: "flex", alignItems: "flex-end", gap: 14, padding: "12px 14px", marginBottom: 16,
+                borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)",
+                background: "var(--surface-sunken)",
+              }}>
+                <BoxSpine spineMm={format.spineMm} heightMm={format.heightMm} scale={0.16} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-tertiary)" }}>
+                    Place sur les tablettes
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
+                    {lotLengthMm >= 1000 ? ml(lotLengthMm) : cm(lotLengthMm)}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    {size} × {spineLabel(format.spineMm)}, sans compter la marge de manipulation
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13, color: "var(--text-secondary)", borderTop: "1px solid var(--border-subtle)", paddingTop: 12 }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <Icons.box size={16} /> <strong style={{ color: "var(--text-primary)" }}>{size}</strong> boîte{size > 1 ? "s" : ""}
               </span>

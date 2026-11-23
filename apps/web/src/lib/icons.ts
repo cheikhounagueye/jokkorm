@@ -62,6 +62,8 @@ import {
   Prohibit,
   QrCode,
   Rows,
+  Ruler,
+  Star,
   Scan,
   SealCheck,
   ShieldCheck,
@@ -92,6 +94,7 @@ export const Icons = {
   loans: Handshake,
   archiveRoom: Warehouse,
   batches: Stack,
+  boxFormats: Ruler,
   archives: Archive,
 
   // Objets métier
@@ -155,6 +158,7 @@ export const Icons = {
 
   // Actions
   add: Plus,
+  makeDefault: Star,
   edit: PencilSimple,
   remove: Trash,
   search: MagnifyingGlass,
