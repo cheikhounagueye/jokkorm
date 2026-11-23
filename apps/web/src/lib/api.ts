@@ -137,8 +137,8 @@ export interface StorageLocationResponse {
   label: string | null;
   parentId: string | null;
   path: string;
-  /** Boîtes acceptées (POSITION uniquement), null pour les autres niveaux. */
-  capacity: number | null;
+  /** Longueur utile saisie en mm (travée, tablette, position). null = déduite (pattern 10). */
+  lengthMm: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -206,6 +206,7 @@ export interface PhysicalContainerResponse {
   batchId: string | null;
   sequenceInBatch: number | null;
   externalReference: string | null;
+  boxFormatId: string | null;
 }
 
 // ─── Prêts (phase 5E) ──────────────────────────────────────────────────────────
@@ -515,6 +516,7 @@ export async function setContainerExternalReference(
 export async function createContainer(input: {
   label?: string;
   capacity?: number;
+  boxFormatId?: string;
 }): Promise<PhysicalContainerResponse> {
   const response = await fetch(`/api/v1/physical/containers`, {
     method: "POST",
@@ -535,7 +537,7 @@ export async function findContainerByBarcode(barcode: string): Promise<PhysicalC
 export async function placeContainer(containerId: string, positionId: string): Promise<PhysicalContainerResponse> {
   const response = await fetch(`/api/v1/physical/containers/${containerId}/position`, {
     method: "PUT",
-    headers: { ...headers(), "Content-Type": "application/json" },
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ positionId }),
   });
   return parse<PhysicalContainerResponse>(response);
@@ -582,6 +584,7 @@ export async function createBatch(input: {
   size: number;
   labelPattern?: string;
   defaultCapacity?: number;
+  boxFormatId?: string;
 }): Promise<{ batch: ContainerBatchResponse; containers: PhysicalContainerResponse[] }> {
   const response = await fetch(`/api/v1/physical/batches`, {
     method: "POST",
@@ -659,7 +662,18 @@ export async function downloadBatchLabelsPdf(
 
 export type EquipmentKind = "FIRE_EXTINGUISHER" | "SMOKE_DETECTOR" | "EMERGENCY_EXIT" | "THERMO_HYGROMETER";
 
-export interface Occupancy { boxes: number; capacity: number; rate: number }
+/**
+ * Occupation en longueur (pattern 10). `capacity` = équivalent en boîtes du format par
+ * défaut ; la vérité est `usedMm` / `lengthMm`. `placeableMm` déduit la marge de la tablette.
+ */
+export interface Occupancy {
+  boxes: number;
+  capacity: number;
+  rate: number;
+  usedMm: number;
+  lengthMm: number;
+  placeableMm: number;
+}
 export interface RoomNode { id: string; code: string; label: string | null; path: string }
 
 export interface RoomBox {
@@ -668,6 +682,9 @@ export interface RoomBox {
   barcode: string | null;
   label: string | null;
   state: ContainerState;
+  /** Dos de la boîte en mm (longueur occupée sur la tablette). */
+  spineMm: number;
+  formatCode: string | null;
   onLoan: boolean;
   overdue: boolean;
   expectedReturnAt: string | null;
@@ -694,6 +711,8 @@ export interface RoomResponse {
   detailsRevealed: boolean;
   shelves: RoomShelf[];
   equipment: RoomEquipment[];
+  defaultSpineMm: number;
+  marginPercent: number;
 }
 
 export async function getRoom(storehouseId: string): Promise<RoomResponse> {
@@ -701,11 +720,106 @@ export async function getRoom(storehouseId: string): Promise<RoomResponse> {
   return parse<RoomResponse>(response);
 }
 
-export async function setPositionCapacity(positionId: string, capacity: number | null): Promise<StorageLocationResponse> {
-  const response = await fetch(`/api/v1/physical/locations/${positionId}/capacity`, {
+/** Longueur utile (mm) d'une travée, tablette ou position ; null = déduite. */
+export async function setStorageLength(locationId: string, lengthMm: number | null): Promise<StorageLocationResponse> {
+  const response = await fetch(`/api/v1/physical/locations/${locationId}/length`, {
     method: "PUT",
     headers: { ...accessHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ capacity }),
+    body: JSON.stringify({ lengthMm }),
   });
   return parse<StorageLocationResponse>(response);
+}
+
+export interface SpaceFit { formatId: string; code: string; label: string; spineMm: number; count: number }
+export interface StorageSpace {
+  locationId: string;
+  kind: StorageLocationKind;
+  lengthMm: number;
+  usedMm: number;
+  placeableMm: number;
+  boxes: number;
+  marginPercent: number;
+  fits: SpaceFit[];
+}
+
+/** Place restante d'une tablette ou position, et boîtes qui tiennent par format. */
+export async function getStorageSpace(locationId: string): Promise<StorageSpace> {
+  const response = await fetch(`/api/v1/physical/locations/${locationId}/space`, { headers: headers() });
+  return parse<StorageSpace>(response);
+}
+
+// ─── Formats de boîtes (phase 5T, pattern 10) ──────────────────────────────────
+
+export type BoxQuality = "CONSERVATION" | "STANDARD" | "POLYPROPYLENE";
+
+export interface BoxFormatResponse {
+  id: string;
+  code: string;
+  label: string;
+  spineMm: number;
+  depthMm: number;
+  heightMm: number;
+  orientation: "UPRIGHT" | "FLAT";
+  quality: BoxQuality;
+  maxWeightKg: number | null;
+  active: boolean;
+  isDefault: boolean;
+}
+
+export async function listBoxFormats(): Promise<BoxFormatResponse[]> {
+  const response = await fetch(`/api/v1/physical/box-formats`, { headers: headers() });
+  return parse<BoxFormatResponse[]>(response);
+}
+
+export async function createBoxFormat(input: {
+  code: string;
+  label: string;
+  spineMm: number;
+  depthMm: number;
+  heightMm: number;
+  quality?: BoxQuality;
+  maxWeightKg?: number;
+}): Promise<BoxFormatResponse> {
+  const response = await fetch(`/api/v1/physical/box-formats`, {
+    method: "POST",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parse<BoxFormatResponse>(response);
+}
+
+export async function updateBoxFormat(id: string, change: {
+  label?: string;
+  quality?: BoxQuality;
+  maxWeightKg?: number;
+  active?: boolean;
+  isDefault?: boolean;
+}): Promise<BoxFormatResponse> {
+  const response = await fetch(`/api/v1/physical/box-formats/${id}`, {
+    method: "PUT",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(change),
+  });
+  return parse<BoxFormatResponse>(response);
+}
+
+export async function changeContainerFormat(containerId: string, boxFormatId: string): Promise<PhysicalContainerResponse> {
+  const response = await fetch(`/api/v1/physical/containers/${containerId}/format`, {
+    method: "PUT",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ boxFormatId }),
+  });
+  return parse<PhysicalContainerResponse>(response);
+}
+
+/** 1000 → « 100 cm », 45 → « 4,5 cm ». */
+export function cm(mm: number): string {
+  const v = mm / 10;
+  return `${Number.isInteger(v) ? v : v.toFixed(1).replace(".", ",")} cm`;
+}
+
+/** 15120 → « 15,1 ml ». */
+export function ml(mm: number): string {
+  const v = mm / 1000;
+  return `${v >= 10 ? v.toFixed(1) : v.toFixed(2)}`.replace(".", ",") + " ml";
 }

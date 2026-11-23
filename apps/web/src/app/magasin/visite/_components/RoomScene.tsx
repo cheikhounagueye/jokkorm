@@ -271,14 +271,16 @@ function buildScene(host: HTMLDivElement, layout: RoomLayout, emitPick: (p: Scen
   stickerMesh.count = solid.length;
   solidMesh.castShadow = true;
   solidMesh.receiveShadow = true;
-  const ident = new THREE.Vector3(1, 1, 1);
+  // Chaque boîte est mise à l'échelle de son dos réel (dos 8, 10, 15, 20… : pattern 10).
+  const sx = new THREE.Vector3();
+  const widthScale = (b: LayoutBox) => sx.set(b.width / DIM.boxW, 1, 1);
+  const stickerQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
   solid.forEach((b, i) => {
-    solidMesh.setMatrixAt(i, m4.compose(p.set(...b.center), q.identity(), ident));
-    const stickerQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+    solidMesh.setMatrixAt(i, m4.compose(p.set(...b.center), q.identity(), widthScale(b)));
     p.set(b.center[0], b.center[1] + 0.035, b.center[2] - DIM.boxD / 2 - 0.002);
-    stickerMesh.setMatrixAt(i, m4.compose(p, stickerQ, s.set(0.058, 0.1, 1)));
+    stickerMesh.setMatrixAt(i, m4.compose(p, stickerQ, s.set(Math.min(0.058, b.width * 0.64), 0.1, 1)));
   });
-  ghost.forEach((b, i) => ghostMesh.setMatrixAt(i, m4.compose(p.set(...b.center), q.identity(), ident)));
+  ghost.forEach((b, i) => ghostMesh.setMatrixAt(i, m4.compose(p.set(...b.center), q.identity(), widthScale(b))));
   scene.add(solidMesh, ghostMesh, stickerMesh);
 
   const outline = new THREE.LineSegments(
@@ -487,7 +489,10 @@ function buildScene(host: HTMLDivElement, layout: RoomLayout, emitPick: (p: Scen
     setSelectedBox(id) {
       const hit = id ? layout.boxes.find((b) => b.box.id === id) : undefined;
       outline.visible = !!hit;
-      if (hit) outline.position.set(...hit.center);
+      if (hit) {
+        outline.position.set(...hit.center);
+        outline.scale.set(hit.width / DIM.boxW, 1, 1);
+      }
     },
     setEquipmentLabels(all) {
       for (const l of equipmentLabels) l.obj.visible = all || l.overdue;

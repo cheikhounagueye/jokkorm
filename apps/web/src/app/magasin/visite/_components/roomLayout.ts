@@ -15,6 +15,7 @@ import type {
   RoomResponse,
   RoomShelf,
 } from "@/lib/api";
+import { ml } from "@/lib/api";
 
 export type Vec3 = [number, number, number];
 
@@ -60,6 +61,8 @@ export interface LayoutSlot {
 export interface LayoutBox {
   box: RoomBox;
   center: Vec3;
+  /** Largeur visible en m (dos de la boîte moins le jeu entre boîtes). */
+  width: number;
   slot: LayoutSlot;
 }
 
@@ -107,9 +110,12 @@ export interface RoomLayout {
   waypoints: Waypoint[];
 }
 
+/** Échelle réelle (pattern 10) : 1 unité de scène = 1 m, les longueurs arrivent en mm. */
+const MM = 0.001;
+
+/** Un emplacement est aussi large que sa longueur utile (ou que ses boîtes, s'il est surchargé). */
 function positionWidth(p: RoomPosition): number {
-  const cap = Math.max(p.occupancy.capacity, p.boxes.length, 1);
-  return cap * DIM.boxW + (cap - 1) * DIM.boxGap + 2 * DIM.posPad;
+  return Math.max(p.occupancy.lengthMm, p.occupancy.usedMm, 50) * MM;
 }
 
 function rackWidth(r: RoomRack): number {
@@ -128,9 +134,22 @@ function shelvesPerRow(n: number): number {
 }
 
 function sumOccupancy(items: { occupancy: Occupancy }[]): Occupancy {
-  const boxes = items.reduce((s, i) => s + i.occupancy.boxes, 0);
-  const capacity = items.reduce((s, i) => s + i.occupancy.capacity, 0);
-  return { boxes, capacity, rate: capacity === 0 ? 0 : Math.min(1, boxes / capacity) };
+  const sum = (k: keyof Occupancy) => items.reduce((s, i) => s + i.occupancy[k], 0);
+  const usedMm = sum("usedMm");
+  const lengthMm = sum("lengthMm");
+  return {
+    boxes: sum("boxes"),
+    capacity: sum("capacity"),
+    usedMm,
+    lengthMm,
+    placeableMm: sum("placeableMm"),
+    rate: lengthMm === 0 ? 0 : Math.min(1, usedMm / lengthMm),
+  };
+}
+
+/** « 12,8 ml sur 14,4 ml » */
+export function linearText(o: Occupancy): string {
+  return `${ml(o.usedMm)} sur ${ml(o.lengthMm)}`;
 }
 
 export function percent(o: Occupancy): number {
@@ -175,12 +194,16 @@ export function computeRoomLayout(room: RoomResponse): RoomLayout {
           const pw = positionWidth(position);
           const slot: LayoutSlot = { position, shelf, rack, x0: px, x1: px + pw, y, zFront };
           slots.push(slot);
-          position.boxes.forEach((box, i) => {
-            const cx = px + DIM.posPad + DIM.boxW / 2 + i * (DIM.boxW + DIM.boxGap);
+          // Les boîtes se suivent sur la tablette, chacune aussi large que son dos.
+          let bx = px;
+          for (const box of position.boxes) {
+            const w = box.spineMm * MM;
+            const visible = Math.max(0.02, w - DIM.boxGap);
             const cy = y + DIM.boardT / 2 + DIM.boxH / 2;
             const cz = zFront + 0.03 + DIM.boxD / 2;
-            boxes.push({ box, center: [cx, cy, cz], slot });
-          });
+            boxes.push({ box, center: [bx + DIM.boxGap / 2 + visible / 2, cy, cz], width: visible, slot });
+            bx += w;
+          }
           px += pw;
         }
       });
@@ -281,7 +304,7 @@ function buildWaypoints(room: RoomResponse, l: RoomLayout): Waypoint[] {
       wps.push({
         kind: "shelf",
         title: `Travée ${ls.shelf.node.code}${ls.shelf.node.label ? ` — ${ls.shelf.node.label}` : ""}`,
-        subtitle: `${ls.shelf.racks.length} tablettes · ${ls.shelf.occupancy.boxes}/${ls.shelf.occupancy.capacity} boîtes · ${percent(ls.shelf.occupancy)} %`,
+        subtitle: `${ls.shelf.racks.length} tablettes · ${ls.shelf.occupancy.boxes} boîtes · ${linearText(ls.shelf.occupancy)} · ${percent(ls.shelf.occupancy)} %`,
         camera: [cx - 0.35, 1.45, ls.zFront - room_],
         target: [cx, ls.height * 0.48, ls.zFront + 0.1],
         shelfId: ls.shelf.node.id,
@@ -304,7 +327,7 @@ function buildWaypoints(room: RoomResponse, l: RoomLayout): Waypoint[] {
   wps.push({
     kind: "summary",
     title: "Synthèse",
-    subtitle: `${room.occupancy.boxes} boîtes sur ${room.occupancy.capacity} places · ${room.boxesOnLoan} en prêt`,
+    subtitle: `${room.occupancy.boxes} boîtes · ${linearText(room.occupancy)} · encore ${ml(room.occupancy.placeableMm)} rangeables · ${room.boxesOnLoan} en prêt`,
     camera: [W * 1.05, span * 0.7, -D * 0.2],
     target: [W * 0.5, 0.4, D * 0.5],
   });

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Alert, Card, EmptyState, IconTile, PageHeader, Segmented } from "@/components/ui";
-import { getRoom, listStorageTree, type RoomResponse, type StorageLocationTreeResponse } from "@/lib/api";
+import { getRoom, listStorageTree, ml, type RoomResponse, type StorageLocationTreeResponse } from "@/lib/api";
 import { Icons } from "@/lib/icons";
 import { Legend } from "./_components/Legend";
 import { computeRoomLayout, percent, type Waypoint } from "./_components/roomLayout";
@@ -169,7 +169,8 @@ function RoomTour({ roomId, initialStep, initialColor, initialMode }: {
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         <Chip icon="gauge" label="Occupation" value={`${percent(room.occupancy)} %`} />
-        <Chip icon="box" label="Boîtes" value={`${room.occupancy.boxes} / ${room.occupancy.capacity}`} />
+        <Chip icon="box" label="Boîtes" value={String(room.occupancy.boxes)} />
+        <Chip icon="shelf" label="Métrage occupé" value={`${ml(room.occupancy.usedMm)} / ${ml(room.occupancy.lengthMm)}`} />
         <Chip icon="position" label="Emplacements" value={String(room.positions)} />
         <Chip icon="loans" label="En prêt" value={String(room.boxesOnLoan)} />
         <Chip icon="extinguisher" label="Contrôles en retard" value={String(overdue)} alert={overdue > 0} />
@@ -260,7 +261,7 @@ function JumpButton({ icon, label, onClick }: { icon: "compass" | "extinguisher"
 }
 
 function Chip({ icon, label, value, alert }: {
-  icon: "gauge" | "box" | "position" | "loans" | "extinguisher"; label: string; value: string; alert?: boolean;
+  icon: "gauge" | "box" | "shelf" | "position" | "loans" | "extinguisher"; label: string; value: string; alert?: boolean;
 }) {
   const IconCmp = Icons[icon];
   return (

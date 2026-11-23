@@ -14,10 +14,14 @@ import {
   Field,
   IconTile,
   Input,
+  Select,
   StatusBadge,
 } from "@/components/ui";
 import {
+  changeContainerFormat,
+  cm,
   findContainerByBarcode,
+  getStorageSpace,
   listContainersAtPosition,
   placeContainer,
   storeRecord,
@@ -27,6 +31,8 @@ import {
 import { Icons } from "@/lib/icons";
 import { BOX_FINISH, etiquetteHref } from "./kinds";
 import { LinkButton } from "./LinkButton";
+import { SpaceGauge } from "./SpaceGauge";
+import { spineLabel, useBoxFormats } from "./useBoxFormats";
 
 const BOX = 104;       // taille du dessin de boîte
 const PLANK = 16;      // épaisseur de la planche
@@ -37,12 +43,23 @@ export function PositionShelf({ position }: { position: StorageLocationResponse 
     queryKey: ["containers-at", position.id],
     queryFn: () => listContainersAtPosition(position.id),
   });
+  const space = useQuery({
+    queryKey: ["space", position.id],
+    queryFn: () => getStorageSpace(position.id),
+  });
+  const formats = useBoxFormats();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const placeRef = useRef<HTMLDivElement>(null);
-  const refresh = () => qc.invalidateQueries({ queryKey: ["containers-at", position.id] });
+  // Un rangement ou un déplacement change deux emplacements (source et destination) et la salle.
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["containers-at"] });
+    qc.invalidateQueries({ queryKey: ["space"] });
+    qc.invalidateQueries({ queryKey: ["room"] });
+  };
 
   const boxes = query.data ?? [];
   const selected = boxes.find((b) => b.id === selectedId) ?? boxes[0] ?? null;
+  const sp = space.data;
 
   const focusPlaceForm = () => {
     placeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -55,10 +72,23 @@ export function PositionShelf({ position }: { position: StorageLocationResponse 
         <CardHeader
           title="Tablette"
           subtitle={query.data
-            ? `${boxes.length} boîte${boxes.length > 1 ? "s" : ""} rangée${boxes.length > 1 ? "s" : ""} à cette position`
+            ? `${boxes.length} boîte${boxes.length > 1 ? "s" : ""}${sp ? ` · ${cm(sp.usedMm)} sur ${cm(sp.lengthMm)}` : ""}`
             : "Chargement des boîtes…"}
         />
         {query.isError && <Alert tone="danger" title="Boîtes indisponibles">{(query.error as Error).message}</Alert>}
+
+        {sp && (
+          <div style={{ marginBottom: 16 }}>
+            <SpaceGauge
+              lengthMm={sp.lengthMm} usedMm={sp.usedMm} placeableMm={sp.placeableMm} marginPercent={sp.marginPercent}
+              fits={sp.fits}
+              segments={boxes.map((b) => ({
+                key: b.id, spineMm: formats.spineOf(b.boxFormatId), title: b.label || b.barcode, active: selected?.id === b.id,
+              }))}
+              onSegmentClick={setSelectedId}
+            />
+          </div>
+        )}
 
         {query.data && (
           <div style={{
@@ -79,7 +109,7 @@ export function PositionShelf({ position }: { position: StorageLocationResponse 
               {boxes.map((b) => (
                 <ShelfBox key={b.id} box={b} active={selected?.id === b.id} onClick={() => setSelectedId(b.id)} />
               ))}
-              <FreeSlot onClick={focusPlaceForm} />
+              <FreeSlot onClick={focusPlaceForm} placeableMm={sp?.placeableMm} />
             </div>
           </div>
         )}
@@ -135,7 +165,8 @@ function ShelfBox({ box, active, onClick }: { box: PhysicalContainerResponse; ac
   );
 }
 
-function FreeSlot({ onClick }: { onClick: () => void }) {
+function FreeSlot({ onClick, placeableMm }: { onClick: () => void; placeableMm?: number }) {
+  const full = placeableMm !== undefined && placeableMm < 80;
   return (
     <button type="button" onClick={onClick}
       style={{
@@ -153,8 +184,10 @@ function FreeSlot({ onClick }: { onClick: () => void }) {
         <Icons.add size={22} weight="bold" />
       </div>
       <div style={{ height: PLANK + 10 }} />
-      <div style={{ fontSize: 12, fontWeight: 500 }}>Emplacement libre</div>
-      <div style={{ fontSize: 10, marginTop: 2 }}>Ranger une boîte</div>
+      <div style={{ fontSize: 12, fontWeight: 500 }}>{full ? "Plus de place" : "Emplacement libre"}</div>
+      <div style={{ fontSize: 10, marginTop: 2 }}>
+        {placeableMm === undefined ? "Ranger une boîte" : full ? `${cm(placeableMm)} restants` : `${cm(placeableMm)} rangeables`}
+      </div>
     </button>
   );
 }
@@ -166,6 +199,12 @@ function BoxDetails({ box, onStored }: { box: PhysicalContainerResponse; onStore
     onSuccess: () => { setCote(""); onStored(); },
   });
   const locked = box.state === "SEALED" || box.state === "DESTROYED";
+  const formats = useBoxFormats();
+  const current = formats.formatOf(box.boxFormatId);
+  const reformat = useMutation({
+    mutationFn: (formatId: string) => changeContainerFormat(box.id, formatId),
+    onSuccess: onStored,
+  });
 
   return (
     <Card>
@@ -183,6 +222,11 @@ function BoxDetails({ box, onStored }: { box: PhysicalContainerResponse; onStore
             {box.capacity != null && (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <Icons.documents size={16} /> Capacité {box.capacity} dossiers
+              </span>
+            )}
+            {current && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Icons.box size={16} /> {spineLabel(current.spineMm)} · {current.heightMm / 10} cm de haut
               </span>
             )}
             {box.externalReference && (
@@ -205,6 +249,18 @@ function BoxDetails({ box, onStored }: { box: PhysicalContainerResponse; onStore
           </form>
           {mutation.isSuccess && <Alert tone="success" title="Dossier rangé dans la boîte." />}
           {mutation.isError && <Alert tone="danger">{(mutation.error as Error).message}</Alert>}
+
+          {formats.active.length > 0 && box.state !== "DESTROYED" && (
+            <div style={{ marginTop: 12, maxWidth: 360 }}>
+              <Field label="Format de la boîte" hint="Corrige le dos si la boîte n'est pas celle enregistrée : la place est recontrôlée.">
+                <Select value={current?.id ?? ""} disabled={reformat.isPending}
+                  onChange={(e) => e.target.value && e.target.value !== current?.id && reformat.mutate(e.target.value)}>
+                  {formats.active.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                </Select>
+              </Field>
+              {reformat.isError && <Alert tone="danger">{(reformat.error as Error).message}</Alert>}
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
             <LinkButton href={etiquetteHref(box.barcode, box.label)} newTab icon={<Icons.print size={14} />}>
@@ -230,7 +286,10 @@ function PlaceExistingContainer({
   const mutation = useMutation({
     mutationFn: async () => {
       const container = await findContainerByBarcode(barcode.trim());
-      return placeContainer(container.id, position.id);
+      const placed = await placeContainer(container.id, position.id);
+      const moved = container.positionId !== null && container.positionId !== position.id;
+      const stayed = container.positionId === position.id;
+      return { placed, moved, stayed };
     },
     onSuccess: () => { setBarcode(""); onPlaced(); },
   });
@@ -251,7 +310,13 @@ function PlaceExistingContainer({
               </Button>
             </div>
           </Field>
-          {mutation.isSuccess && <Alert tone="success" title="Boîte rangée à cette position." />}
+          {mutation.isSuccess && (
+            <Alert tone="success" title={mutation.data.stayed
+              ? `${mutation.data.placed.barcode} est déjà à cette position.`
+              : mutation.data.moved
+                ? `${mutation.data.placed.barcode} déplacée ici : son ancien emplacement est libéré.`
+                : `${mutation.data.placed.barcode} rangée à cette position.`} />
+          )}
           {mutation.isError && <Alert tone="danger">{(mutation.error as Error).message}</Alert>}
         </form>
       </div>

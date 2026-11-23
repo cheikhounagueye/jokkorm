@@ -1,11 +1,15 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Alert, Button, Card, CardHeader, IconTile, Input } from "@/components/ui";
 import {
+  cm,
   deleteStorageLocation,
+  getStorageSpace,
+  setStorageLength,
   updateStorageLocation,
+  type StorageLocationKind,
   type StorageLocationTreeResponse,
 } from "@/lib/api";
 import { Icons } from "@/lib/icons";
@@ -13,6 +17,10 @@ import { CreateChildForm } from "./CreateChildForm";
 import { KIND_META } from "./kinds";
 import { LinkButton } from "./LinkButton";
 import { PositionShelf } from "./PositionShelf";
+import { SpaceGauge } from "./SpaceGauge";
+
+/** Niveaux qui ont une longueur de rangement (pattern 10). */
+const HAS_LENGTH: StorageLocationKind[] = ["SHELF", "RACK", "POSITION"];
 
 export function NodePanel({
   path,
@@ -32,7 +40,8 @@ export function NodePanel({
   const loc = current.node;
   const meta = KIND_META[loc.kind];
   const childMeta = meta.child ? KIND_META[meta.child] : null;
-  const [mode, setMode] = useState<"view" | "rename" | "delete" | "create">("view");
+  const [mode, setMode] = useState<"view" | "rename" | "delete" | "create" | "length">("view");
+  const hasLength = HAS_LENGTH.includes(loc.kind);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -70,6 +79,7 @@ export function NodePanel({
             <h2 style={{ fontSize: 20, marginTop: 2 }}>{loc.label || `${meta.label} ${loc.code}`}</h2>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
               Code <code>{loc.code}</code> · Chemin <code>{loc.path}</code>
+              {hasLength && <> · Longueur {loc.lengthMm != null ? <strong>{cm(loc.lengthMm)}</strong> : "déduite"}</>}
             </div>
           </div>
           {mode === "view" && (
@@ -82,6 +92,11 @@ export function NodePanel({
               {childMeta && (
                 <Button icon={<Icons.add size={14} weight="bold" />} onClick={() => setMode("create")}>
                   Ajouter {childMeta.label.toLowerCase()}
+                </Button>
+              )}
+              {hasLength && (
+                <Button variant="secondary" icon={<Icons.gauge size={14} />} onClick={() => setMode("length")}>
+                  Longueur
                 </Button>
               )}
               <Button variant="secondary" icon={<Icons.edit size={14} />} onClick={() => setMode("rename")}>
@@ -101,6 +116,12 @@ export function NodePanel({
               onDone={() => { setMode("view"); onRenamed(); }} onCancel={() => setMode("view")} />
           </div>
         )}
+        {mode === "length" && (
+          <div style={{ padding: "0 20px 20px" }}>
+            <LengthForm id={loc.id} kind={loc.kind} initialMm={loc.lengthMm}
+              onDone={() => { setMode("view"); onRenamed(); }} onCancel={() => setMode("view")} />
+          </div>
+        )}
         {mode === "delete" && (
           <div style={{ padding: "0 20px 20px" }}>
             <DeleteConfirm id={loc.id} code={loc.code} path={loc.path}
@@ -117,6 +138,7 @@ export function NodePanel({
         )}
       </Card>
 
+      {loc.kind === "RACK" && <TabletteSpace id={loc.id} />}
       {loc.kind === "POSITION"
         ? <PositionShelf position={loc} />
         : <ChildrenGrid node={current} onSelect={onSelect} onAdd={() => setMode("create")} />}
@@ -225,5 +247,55 @@ function DeleteConfirm({ id, code, path, onDone, onCancel }: {
         <div style={{ marginTop: 8, color: "var(--danger-700)", fontWeight: 500 }}>{(mutation.error as Error).message}</div>
       )}
     </Alert>
+  );
+}
+
+const LENGTH_HINT: Partial<Record<StorageLocationKind, string>> = {
+  SHELF: "Largeur de la travée entre montants. Les tablettes sans longueur propre en héritent.",
+  RACK: "Longueur utile de la tablette. Vide : celle de la travée, sinon 100 cm.",
+  POSITION: "Vide : part égale de la tablette. La somme des emplacements ne dépasse pas la tablette.",
+};
+
+function LengthForm({ id, kind, initialMm, onDone, onCancel }: {
+  id: string; kind: StorageLocationKind; initialMm: number | null; onDone: () => void; onCancel: () => void;
+}) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState(initialMm != null ? String(initialMm / 10) : "");
+  const mutation = useMutation({
+    mutationFn: () => {
+      const v = value.trim().replace(",", ".");
+      return setStorageLength(id, v === "" ? null : Math.round(parseFloat(v) * 10));
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["space"] });
+      qc.invalidateQueries({ queryKey: ["room"] });
+      onDone();
+    },
+  });
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <Input value={value} onChange={(e) => setValue(e.target.value)} autoFocus inputMode="decimal"
+          placeholder="ex. 100" aria-label="Longueur en centimètres" style={{ width: 140 }} />
+        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>cm</span>
+        <Button type="submit" loading={mutation.isPending}>Enregistrer</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>
+      </div>
+      <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 6 }}>{LENGTH_HINT[kind]}</p>
+      {mutation.isError && <Alert tone="danger">{(mutation.error as Error).message}</Alert>}
+    </form>
+  );
+}
+
+function TabletteSpace({ id }: { id: string }) {
+  const space = useQuery({ queryKey: ["space", id], queryFn: () => getStorageSpace(id) });
+  if (!space.data) return null;
+  const sp = space.data;
+  return (
+    <Card>
+      <CardHeader title="Place sur la tablette" subtitle={`${sp.boxes} boîte${sp.boxes > 1 ? "s" : ""} · marge de manipulation ${sp.marginPercent} %`} />
+      <SpaceGauge lengthMm={sp.lengthMm} usedMm={sp.usedMm} placeableMm={sp.placeableMm}
+        marginPercent={sp.marginPercent} fits={sp.fits} segments={[]} />
+    </Card>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, Button, Card, IconTile } from "@/components/ui";
-import type { Occupancy, RoomResponse } from "@/lib/api";
+import { cm, type Occupancy, type RoomResponse } from "@/lib/api";
 import { Icons, type IconName } from "@/lib/icons";
 import { occupancyColor, percent, type RoomLayout, type Waypoint, type WaypointKind } from "./roomLayout";
 import { EQUIPMENT_ICON, EQUIPMENT_NAME } from "./sceneShared";
@@ -23,7 +23,7 @@ export function OccupancyBar({ occupancy, label }: { occupancy: Occupancy; label
       {label !== undefined && (
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
           <span style={{ color: "var(--text-secondary)" }}>{label}</span>
-          <span style={{ fontWeight: 600 }}>{occupancy.boxes}/{occupancy.capacity} · {pct} %</span>
+          <span style={{ fontWeight: 600 }}>{cm(occupancy.usedMm)} / {cm(occupancy.lengthMm)} · {pct} %</span>
         </div>
       )}
       <div style={{ height: 7, borderRadius: 99, background: "var(--surface-sunken)", overflow: "hidden", border: "1px solid var(--border-subtle)" }}>
