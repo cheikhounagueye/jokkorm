@@ -100,4 +100,20 @@ public class RoutingSaeMasterPort implements SaeMasterPort {
     public void publishPhysicalStatus(TenantId tenant, Cote cote, com.jokkorm.domain.master.PhysicalStatus status) {
         adapterFor(tenant).publishPhysicalStatus(tenant, cote, status);
     }
+
+    @Override
+    public boolean publishesEvents(TenantId tenant) {
+        return adapterFor(tenant).publishesEvents(tenant);
+    }
+
+    @Override
+    public List<com.jokkorm.domain.master.MasterEvent> readEvents(
+        TenantId tenant, java.time.Instant from, java.util.Set<com.jokkorm.domain.master.MasterEvent.Kind> kinds) {
+        return adapterFor(tenant).readEvents(tenant, from, kinds);
+    }
+
+    @Override
+    public Optional<com.jokkorm.domain.master.MasterArchiveRef> describe(TenantId tenant, String masterArchiveId) {
+        return adapterFor(tenant).describe(tenant, masterArchiveId);
+    }
 }

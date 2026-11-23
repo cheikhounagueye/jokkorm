@@ -647,6 +647,50 @@ export async function getMasterSync(cote: string): Promise<MasterSyncStatus | nu
   return parse<MasterSyncStatus>(response);
 }
 
+/** Veilleur du journal du maître (étape 1). */
+export interface MasterWatchStatus {
+  available: boolean;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  cursorAt: string | null;
+  lastEvents: number;
+  openActions: number;
+}
+
+export type MasterAlertKind =
+  | "LOCATION_RESTORED" | "LOCATION_MISMATCH" | "FROZEN_WHILE_OUT" | "FROZEN_WITH_REQUEST" | "FROZEN" | "UNFROZEN";
+
+export interface MasterAlertItem {
+  id: string;
+  kind: MasterAlertKind;
+  requiresAction: boolean;
+  cote: string;
+  occurredAt: string;
+  actor: string | null;
+  detail: string | null;
+  createdAt: string;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+}
+
+export async function getMasterWatch(): Promise<MasterWatchStatus> {
+  return parse<MasterWatchStatus>(await fetch(`/api/v1/master/watch`, { headers: headers() }));
+}
+
+export async function listMasterAlerts(scope: "open" | "all"): Promise<MasterAlertItem[]> {
+  return parse<MasterAlertItem[]>(await fetch(`/api/v1/master/alerts?scope=${scope}`, { headers: headers() }));
+}
+
+export async function acknowledgeMasterAlert(id: string): Promise<void> {
+  const r = await fetch(`/api/v1/master/alerts/${encodeURIComponent(id)}/acknowledge`, {
+    method: "POST",
+    headers: accessHeaders(),
+  });
+  if (r.status === 404) throw new Error("Signalement introuvable ou déjà traité");
+  if (!r.ok) await parse<unknown>(r);
+}
+
 export interface DevTenant { id: string; displayName: string }
 
 /** Dev uniquement : liste des espaces (404 si les endpoints de démo sont désactivés). */

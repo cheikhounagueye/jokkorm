@@ -78,10 +78,19 @@ jokkorm:
       # URL de Maarch vue par les navigateurs des agents (bouton « Ouvrir dans Maarch RM »).
       # Vide = base-url. À préciser si JokkoRM joint Maarch par une adresse interne.
       public-url: ${JOKKORM_MAARCHRM_PUBLIC_URL:}
+      # Compte Maarch de JokkoRM, pour reconnaître ses propres écritures dans le journal.
+      # Vide = le login (mode basic) ou « jokkorm » (mode compte de service).
+      connector-account: ${JOKKORM_MAARCHRM_CONNECTOR_ACCOUNT:}
     # File d'envoi de l'état physique vers le maître (tranche 2a).
     sync:
       worker-enabled: ${JOKKORM_MASTER_SYNC_WORKER_ENABLED:true}
       delay-ms: ${JOKKORM_MASTER_SYNC_DELAY_MS:5000}
+    # Veilleur du journal du maître (étape 1) : gel, emplacement modifié à la main.
+    watch:
+      enabled: ${JOKKORM_MASTER_WATCH_ENABLED:true}
+      delay-ms: ${JOKKORM_MASTER_WATCH_DELAY_MS:60000}
+      # Premier démarrage : relire la dernière journée du journal (rien n'est rejoué deux fois).
+      initial-lookback-hours: ${JOKKORM_MASTER_WATCH_INITIAL_LOOKBACK_HOURS:24}
   physical:
     # Pattern 10 : longueur de tablette par défaut et marge de manipulation (validés 2026-11-23).
     default-tablette-length-mm: ${JOKKORM_DEFAULT_TABLETTE_LENGTH_MM:1000}

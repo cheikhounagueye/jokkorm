@@ -34,6 +34,15 @@ public class ApplyLegalHoldUseCase {
 
     @Transactional
     public PhysicalArchiveRecord execute(TenantId tenant, Cote cote, Action action) {
+        return execute(tenant, cote, action, "master-event", null);
+    }
+
+    /**
+     * @param actor qui applique (ex. {@code veilleur-maarch})
+     * @param note  référence croisée ajoutée à l'audit (ex. {@code evenement-maitre=…}), sans données personnelles
+     */
+    @Transactional
+    public PhysicalArchiveRecord execute(TenantId tenant, Cote cote, Action action, String actor, String note) {
         PhysicalArchiveRecord record = repository.findByCote(tenant, cote)
             .orElseThrow(() -> new RecordNotFoundException(
                 "No physical archive record for cote=%s (tenant=%s)"
@@ -52,8 +61,8 @@ public class ApplyLegalHoldUseCase {
             auditAction,
             AuditTargetType.PHYSICAL_ARCHIVE_RECORD,
             saved.id(),
-            "master-event",
-            "cote=" + cote.value());
+            actor,
+            "cote=" + cote.value() + (note == null ? "" : "; " + note));
 
         return saved;
     }

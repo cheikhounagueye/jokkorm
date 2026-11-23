@@ -94,7 +94,7 @@ class MaarchRmSaeMasterAdapterTest {
     void page_url_uses_public_url_and_encodes_id() {
         adapter = new MaarchRmSaeMasterAdapter(new MaarchRmProperties(
             "http://maarch:80", "service", "basic", "ccharles", "maarch", null, 2000, null,
-            "https://archives.acme.example/"), CLOCK);
+            "https://archives.acme.example/", null), CLOCK);
 
         assertThat(adapter.pageUrl("maarchRM_a b/c"))
             .isEqualTo("https://archives.acme.example/recordsManagement/archiveDescription/maarchRM_a%20b%2Fc");
@@ -108,7 +108,7 @@ class MaarchRmSaeMasterAdapterTest {
         assertThat(new MaarchRmProperties("http://localhost:8088/", "service", "basic", null, null, null, 0)
             .publicUrl()).isEqualTo("http://localhost:8088");
         assertThatThrownBy(() -> new MaarchRmProperties("http://maarch", "service", "basic", null, null, null, 0,
-            null, "javascript:alert(1)"))
+            null, "javascript:alert(1)", null))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -316,5 +316,117 @@ class MaarchRmSaeMasterAdapterTest {
             .willReturn(aResponse().withStatus(503).withBody("down")));
         assertThatThrownBy(() -> adapter.publishPhysicalStatus(TENANT, COTE, STATUS))
             .isInstanceOf(MasterUnreachableException.class);
+    }
+
+    // ─── Journal (veilleur, étape 1) ─────────────────────────────────────────────
+
+    private static final String MOD = "recordsManagement/metadataModification";
+    private static final java.util.Set<com.jokkorm.domain.master.MasterEvent.Kind> ALL_KINDS =
+        java.util.EnumSet.allOf(com.jokkorm.domain.master.MasterEvent.Kind.class);
+
+    /** Événement tel que Maarch le renvoie, avec un eventInfo qui ne doit jamais être lu. */
+    private static String ev(String id, String ts, String account) {
+        return "{\"eventId\":\"" + id + "\",\"eventType\":\"" + MOD + "\",\"timestamp\":\"" + ts + "\","
+            + "\"objectClass\":\"recordsManagement/archive\",\"objectId\":\"arc-1\",\"accountName\":\"" + account + "\","
+            + "\"eventInfo\":\"[\\\"donnee personnelle\\\"]\",\"description\":\"donnee personnelle\"}";
+    }
+
+    private void stubJournal(String maxDate, String body) {
+        wireMock.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search"))
+            .withQueryParam("eventType", equalTo(MOD)).withQueryParam("maxDate", equalTo(maxDate))
+            .willReturn(json(body)));
+    }
+
+    @Test
+    @DisplayName("journal : tous les paramètres envoyés, dates UTC sans fuseau, du plus ancien au plus récent, auteur reconnu")
+    void reads_journal_events() {
+        wireMock.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(json("[]")));
+        stubJournal("", "[" + ev("e2", "2026-11-23T16:49:01+00:00", "ggrand") + ","
+            + ev("e1", "2026-11-23T14:45:29+00:00", "ccharles") + "]");
+
+        var events = adapter.readEvents(TENANT, Instant.parse("2026-11-23T14:00:00Z"), ALL_KINDS);
+
+        assertThat(events).extracting(com.jokkorm.domain.master.MasterEvent::id).containsExactly("e1", "e2");
+        assertThat(events.get(0).byConnector()).as("ccharles = compte de JokkoRM en mode basic").isTrue();
+        assertThat(events.get(1).byConnector()).isFalse();
+        assertThat(events.get(1).actor()).isEqualTo("ggrand");
+        assertThat(events.get(1).masterArchiveId()).isEqualTo("arc-1");
+        assertThat(events.get(1).occurredAt()).isEqualTo(Instant.parse("2026-11-23T16:49:01Z"));
+        assertThat(events.toString()).doesNotContain("donnee personnelle");
+        wireMock.verify(getRequestedFor(urlPathEqualTo("/lifeCycle/event/Search"))
+            .withQueryParam("eventType", equalTo(MOD))
+            .withQueryParam("objectClass", equalTo("recordsManagement/archive"))
+            .withQueryParam("objectId", equalTo(""))
+            .withQueryParam("minDate", equalTo("2026-11-23T14:00:00"))
+            .withQueryParam("maxDate", equalTo(""))
+            .withQueryParam("org", equalTo("")));
+        wireMock.verify(3, getRequestedFor(urlPathEqualTo("/lifeCycle/event/Search")));  // un appel par type
+    }
+
+    @Test
+    @DisplayName("journal : page pleine → plus anciens redemandés avec maxDate décalé de 23 h 59 min 59 s")
+    void paginates_with_shifted_max_date() {
+        adapter.journalPage = 2;
+        wireMock.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(json("[]")));
+        stubJournal("", "[" + ev("e3", "2026-11-23T16:49:01+00:00", "ggrand") + ","
+            + ev("e2", "2026-11-23T16:11:09+00:00", "ggrand") + "]");
+        // borne voulue 16:11:10 → Maarch ajoutera 23:59:59
+        stubJournal("2026-11-22T16:11:11", "[" + ev("e2", "2026-11-23T16:11:09+00:00", "ggrand") + ","
+            + ev("e1", "2026-11-23T14:45:29+00:00", "ggrand") + "]");
+        stubJournal("2026-11-22T14:45:31", "[" + ev("e1", "2026-11-23T14:45:29+00:00", "ggrand") + "]");
+
+        var events = adapter.readEvents(TENANT, Instant.parse("2026-11-01T00:00:00Z"), ALL_KINDS);
+
+        assertThat(events).extracting(com.jokkorm.domain.master.MasterEvent::id).containsExactly("e1", "e2", "e3");
+    }
+
+    @Test
+    @DisplayName("journal : si le plus ancien lu ne revient pas, Maarch a changé → arrêt, rien n'est perdu")
+    void pagination_self_check() {
+        adapter.journalPage = 2;
+        wireMock.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(json("[]")));
+        stubJournal("", "[" + ev("e3", "2026-11-23T16:49:01+00:00", "ggrand") + ","
+            + ev("e2", "2026-11-23T16:11:09+00:00", "ggrand") + "]");
+        stubJournal("2026-11-22T16:11:11", "[" + ev("e0", "2026-11-22T10:00:00+00:00", "ggrand") + "]");
+
+        assertThatThrownBy(() -> adapter.readEvents(TENANT, Instant.parse("2026-11-01T00:00:00Z"), ALL_KINDS))
+            .isInstanceOf(MasterUnreachableException.class)
+            .hasMessageContaining("maxDate");
+    }
+
+    @Test
+    @DisplayName("journal : droit manquant (403) → message qui nomme le droit à ajouter")
+    void journal_forbidden_names_the_right() {
+        wireMock.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(aResponse().withStatus(403)
+            .withHeader("Content-Type", "application/json")
+            .withHeader("X-Laabs-Exception", "bundle\\auth\\Exception\\forbiddenException; Forbidden")
+            .withBody("{\"message\":\"Forbidden\"}")));
+
+        assertThatThrownBy(() -> adapter.readEvents(TENANT, Instant.parse("2026-11-23T14:00:00Z"), ALL_KINDS))
+            .isInstanceOf(MasterUnreachableException.class)
+            .hasMessageContaining("lifeCycle/event/readSearch");
+    }
+
+    @Test
+    @DisplayName("describe : cote et emplacement affiché ; inconnue (404) ou invisible (accessDenied) → vide ; panne → exception")
+    void describe_archive() {
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/arc-1")).willReturn(json(
+            "{\"archiverArchiveId\":\"" + COTE.value() + "\",\"description\":{\"nom\":\"x\",\"localisation_physique\":\"Salle A\"}}")));
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/inconnue")).willReturn(aResponse()
+            .withStatus(404).withHeader("Content-Type", "application/json")
+            .withHeader("X-Laabs-Exception", "core\\Exception\\NotFoundException; not found").withBody("{}")));
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/autre-service")).willReturn(aResponse()
+            .withStatus(200).withHeader("Content-Type", "application/json")
+            .withHeader("X-Laabs-Exception", "bundle\\recordsManagement\\Exception\\accessDeniedException; Permission denied")
+            .withBody("{\"message\":\"Permission denied\"}")));
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/panne"))
+            .willReturn(aResponse().withStatus(503).withBody("down")));
+
+        var ref = adapter.describe(TENANT, "arc-1").orElseThrow();
+        assertThat(ref.cote()).isEqualTo(COTE.value());
+        assertThat(ref.displayedPhysicalStatus()).isEqualTo("Salle A");
+        assertThat(adapter.describe(TENANT, "inconnue")).isEmpty();
+        assertThat(adapter.describe(TENANT, "autre-service")).isEmpty();
+        assertThatThrownBy(() -> adapter.describe(TENANT, "panne")).isInstanceOf(MasterUnreachableException.class);
     }
 }

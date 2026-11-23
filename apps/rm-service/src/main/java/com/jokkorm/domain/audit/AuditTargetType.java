@@ -26,5 +26,8 @@ public enum AuditTargetType {
     ACCESS_REQUEST,
 
     /** Format du catalogue de boîtes — phase 5T. */
-    BOX_FORMAT
+    BOX_FORMAT,
+
+    /** Signalement du veilleur du journal maître. */
+    MASTER_ALERT
 }

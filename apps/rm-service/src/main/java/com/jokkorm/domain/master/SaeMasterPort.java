@@ -61,4 +61,31 @@ public interface SaeMasterPort {
      */
     default void publishPhysicalStatus(TenantId tenant, Cote cote, PhysicalStatus status) {
     }
+
+    // --- Journal du maître (veilleur, étape 1) ---
+
+    /** Ce maître publie-t-il un journal que JokkoRM peut lire ? (noop et démo : non) */
+    default boolean publishesEvents(TenantId tenant) {
+        return false;
+    }
+
+    /**
+     * Tous les événements des types demandés survenus depuis {@code from} (inclus), du plus ancien
+     * au plus récent, sans doublon. Liste complète ou exception : jamais une liste tronquée.
+     *
+     * @throws MasterUnreachableException maître injoignable, droit manquant ou rattrapage impossible
+     */
+    default List<MasterEvent> readEvents(TenantId tenant, java.time.Instant from, java.util.Set<MasterEvent.Kind> kinds) {
+        return List.of();
+    }
+
+    /**
+     * Cote et état physique affiché d'une archive désignée par son identifiant interne au maître.
+     * {@code empty()} si l'archive n'existe pas ou n'est pas visible du compte de connexion.
+     *
+     * @throws MasterUnreachableException maître injoignable
+     */
+    default Optional<MasterArchiveRef> describe(TenantId tenant, String masterArchiveId) {
+        return Optional.empty();
+    }
 }

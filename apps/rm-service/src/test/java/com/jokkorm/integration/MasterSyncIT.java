@@ -2,6 +2,7 @@ package com.jokkorm.integration;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.put;
@@ -15,6 +16,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.jokkorm.application.loan.MarkLoanOutUseCase;
 import com.jokkorm.application.loan.RequestLoanUseCase;
 import com.jokkorm.application.master.MasterSyncService;
+import com.jokkorm.application.master.MasterWatchService;
 import com.jokkorm.application.physical.BoxFormatAdminUseCase;
 import com.jokkorm.application.physical.CreatePhysicalContainerUseCase;
 import com.jokkorm.application.physical.CreateStorageLocationUseCase;
@@ -26,6 +28,7 @@ import com.jokkorm.commons.role.RoleContext;
 import com.jokkorm.commons.role.UserRole;
 import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.commons.tenancy.TenantId;
+import com.jokkorm.domain.master.MasterAlert;
 import com.jokkorm.domain.master.MasterSync;
 import com.jokkorm.domain.physical.BoxFormat;
 import com.jokkorm.domain.physical.PhysicalContainer;
@@ -34,6 +37,9 @@ import com.jokkorm.domain.physical.StorageLocationKind;
 import com.jokkorm.domain.record.Cote;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -95,6 +101,7 @@ class MasterSyncIT {
         registry.add("jokkorm.master.maarchrm.login", () -> "svc");
         registry.add("jokkorm.master.maarchrm.password", () -> "x");
         registry.add("jokkorm.master.sync.worker-enabled", () -> "false");
+        registry.add("jokkorm.master.watch.enabled", () -> "false");
     }
 
     @Autowired JdbcTemplate jdbc;
@@ -107,6 +114,7 @@ class MasterSyncIT {
     @Autowired RequestLoanUseCase requestLoan;
     @Autowired MarkLoanOutUseCase markOut;
     @Autowired MasterSyncService sync;
+    @Autowired MasterWatchService watcher;
 
     private static final String COTE = "FR-IT-0001";
     private TenantId tenant;
@@ -124,6 +132,7 @@ class MasterSyncIT {
             "{\"archiveId\":\"arc-1\",\"archiverArchiveId\":\"" + COTE + "\",\"originatorArchiveId\":\"123\","
                 + "\"archiveName\":\"Dossier\",\"originatingDate\":\"2026-01-02\",\"description\":{\"service\":\"RH\"}}")));
         MAARCH.stubFor(put(urlPathEqualTo("/recordsManagement/archives/Metadata")).willReturn(json("true")));
+        MAARCH.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(json("[]")));
 
         tenant = TenantId.of("sync-" + UUID.randomUUID().toString().substring(0, 8));
         jdbc.update("INSERT INTO tenant (id, display_name) VALUES (?, ?)", tenant.value(), "IT " + tenant.value());
@@ -240,8 +249,158 @@ class MasterSyncIT {
 
         // Le geste suivant redemande un envoi.
         MAARCH.stubFor(put(urlPathEqualTo("/recordsManagement/archives/Metadata")).willReturn(json("true")));
+        MAARCH.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(json("[]")));
         as(() -> place.execute(box.id(), p1.id(), "it"));
         sync.drain(100);
         assertThat(row().status()).isEqualTo(MasterSync.Status.SENT);
+    }
+
+    // ─── Veilleur du journal (étape 1) ───────────────────────────────────────────
+
+    private static final String MOD = "recordsManagement/metadataModification";
+    private static final String FREEZE = "recordsManagement/freeze";
+    private static final String UNFREEZE = "recordsManagement/unfreeze";
+
+    private void stubEvent(String type, String id, Instant at, String account) {
+        MAARCH.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).withQueryParam("eventType", equalTo(type))
+            .willReturn(json("[{\"eventId\":\"" + id + "\",\"eventType\":\"" + type + "\",\"timestamp\":\""
+                + OffsetDateTime.ofInstant(at, ZoneOffset.UTC) + "\",\"objectClass\":\"recordsManagement/archive\","
+                + "\"objectId\":\"arc-1\",\"accountName\":\"" + account + "\"}]")));
+    }
+
+    /** Ce que Maarch affiche dans le champ de localisation de l'archive. */
+    private void stubDisplayed(String displayed) {
+        String field;
+        try {
+            field = displayed == null ? "" : ",\"localisation_physique\":"
+                + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(displayed);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+        MAARCH.stubFor(get(urlPathMatching("/recordsManagement/archive/Metadata/.*")).willReturn(json(
+            "{\"archiveId\":\"arc-1\",\"archiverArchiveId\":\"" + COTE + "\",\"originatorArchiveId\":\"123\","
+                + "\"archiveName\":\"Dossier\",\"originatingDate\":\"2026-01-02\",\"description\":{\"service\":\"RH\"" + field + "}}")));
+    }
+
+    private java.util.List<MasterAlert> alerts(boolean openOnly) {
+        return watcher.alerts(tenant, openOnly, 50);
+    }
+
+    private int audits(String action) {
+        Integer n = jdbc.queryForObject("SELECT count(*) FROM audit_event WHERE tenant_id = ? AND action = ?",
+            Integer.class, tenant.value(), action);
+        return n == null ? 0 : n;
+    }
+
+    private String recordStatus() {
+        return jdbc.queryForObject("SELECT status FROM physical_archive_record WHERE tenant_id = ? AND cote = ?",
+            String.class, tenant.value(), COTE);
+    }
+
+    @Test
+    @DisplayName("Veilleur : emplacement modifié à la main dans Maarch → rétabli, signalé une seule fois, curseur = heure Maarch")
+    void manual_location_edit_is_restored_and_reported_once() {
+        Instant at = Instant.now().minusSeconds(90).truncatedTo(ChronoUnit.SECONDS);
+        stubDisplayed("Bureau du DRH, armoire du fond");
+        stubEvent(MOD, "ev-mod-1", at, "ggrand");
+
+        MasterWatchService.Run run = watcher.watch(tenant);
+
+        assertThat(run.ok()).isTrue();
+        assertThat(run.raised()).isEqualTo(1);
+        assertThat(row().status()).as("réécriture demandée").isEqualTo(MasterSync.Status.PENDING);
+        MasterAlert alert = alerts(true).get(0);
+        assertThat(alert.kind()).isEqualTo(MasterAlert.Kind.LOCATION_RESTORED);
+        assertThat(alert.actor()).isEqualTo("ggrand");
+        assertThat(alert.masterEventId()).isEqualTo("ev-mod-1");
+        assertThat(alert.detail()).contains("modifié à la main").doesNotContain("Bureau du DRH");
+        assertThat(audits("MASTER_LOCATION_RESTORED")).isEqualTo(1);
+        assertThat(watcher.status(tenant).cursorAt()).isEqualTo(at);
+
+        // Relire le même événement ne rejoue rien.
+        assertThat(watcher.watch(tenant).raised()).isZero();
+        assertThat(alerts(false)).hasSize(1);
+        assertThat(audits("MASTER_LOCATION_RESTORED")).isEqualTo(1);
+
+        // Le travailleur réécrit l'emplacement de JokkoRM.
+        sync.drain(100);
+        MAARCH.verify(putRequestedFor(urlPathEqualTo("/recordsManagement/archives/Metadata"))
+            .withRequestBody(matchingJsonPath("$.description.localisation_physique", containing("Tablette 1"))));
+    }
+
+    @Test
+    @DisplayName("Veilleur : même emplacement aux espaces près (nom modifié, par ex.) → aucun signalement")
+    void same_location_with_whitespace_is_not_a_discrepancy() {
+        String sent = row().lastPayload();
+        stubDisplayed("  " + sent.replace(" · ", "  ·   ") + "\n");
+        stubEvent(MOD, "ev-mod-2", Instant.now().minusSeconds(30), "ggrand");
+
+        MasterWatchService.Run run = watcher.watch(tenant);
+
+        assertThat(run.raised()).isZero();
+        assertThat(alerts(false)).isEmpty();
+        assertThat(row().status()).isEqualTo(MasterSync.Status.SENT);
+    }
+
+    @Test
+    @DisplayName("Veilleur : valeur différente juste après une écriture de JokkoRM → à vérifier, jamais de réécriture (pas de boucle)")
+    void own_write_mismatch_is_reported_without_rewrite() {
+        stubDisplayed("valeur retouchée par Maarch");
+        stubEvent(MOD, "ev-mod-3", Instant.now().minusSeconds(30), "svc");  // svc = compte de JokkoRM dans ce test
+
+        watcher.watch(tenant);
+
+        assertThat(alerts(true)).extracting(MasterAlert::kind).containsExactly(MasterAlert.Kind.LOCATION_MISMATCH);
+        assertThat(row().status()).isEqualTo(MasterSync.Status.SENT);
+        assertThat(audits("MASTER_LOCATION_RESTORED")).isZero();
+    }
+
+    @Test
+    @DisplayName("Veilleur : gel posé dans Maarch pendant un prêt → archive gelée, alerte « demander le retour » ; levée → dégelée")
+    void freeze_while_on_loan_then_unfreeze() {
+        as(() -> {
+            var loan = requestLoan.execute(box.id(), "Awa Diop", "DRH", "Audit", Instant.now().plus(Duration.ofDays(10)), "it");
+            return markOut.execute(loan.id(), "it");
+        });
+        stubEvent(FREEZE, "ev-freeze-1", Instant.now().minusSeconds(120), "jjonasz");
+
+        watcher.watch(tenant);
+
+        assertThat(recordStatus()).isEqualTo("FROZEN");
+        MasterAlert alert = alerts(true).get(0);
+        assertThat(alert.kind()).isEqualTo(MasterAlert.Kind.FROZEN_WHILE_OUT);
+        assertThat(alert.detail()).contains("demander son retour");
+        Integer traced = jdbc.queryForObject("SELECT count(*) FROM audit_event WHERE tenant_id = ? AND action = 'LEGAL_HOLD_APPLIED' "
+            + "AND actor = 'veilleur' AND metadata LIKE '%evenement-maitre=ev-freeze-1%'", Integer.class, tenant.value());
+        assertThat(traced).isEqualTo(1);
+
+        stubEvent(UNFREEZE, "ev-unfreeze-1", Instant.now().minusSeconds(60), "jjonasz");
+        watcher.watch(tenant);
+
+        assertThat(recordStatus()).isEqualTo("STORED");
+        assertThat(alerts(false)).extracting(MasterAlert::kind).contains(MasterAlert.Kind.UNFROZEN);
+        assertThat(alerts(true)).extracting(MasterAlert::kind).doesNotContain(MasterAlert.Kind.UNFROZEN);
+        assertThat(watcher.acknowledge(tenant, alert.id(), "archiviste-it")).isTrue();
+        assertThat(watcher.acknowledge(tenant, alert.id(), "archiviste-it")).isFalse();
+        assertThat(audits("MASTER_ALERT_ACKNOWLEDGED")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Veilleur : Maarch injoignable → passage en échec visible, curseur inchangé, rien de perdu")
+    void outage_keeps_the_cursor() {
+        Instant at = Instant.now().minusSeconds(200).truncatedTo(ChronoUnit.SECONDS);
+        stubDisplayed(row().lastPayload());
+        stubEvent(MOD, "ev-mod-4", at, "ggrand");
+        watcher.watch(tenant);
+        assertThat(watcher.status(tenant).cursorAt()).isEqualTo(at);
+
+        MAARCH.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(aResponse().withStatus(503).withBody("down")));
+        MasterWatchService.Run run = watcher.watch(tenant);
+
+        assertThat(run.ok()).isFalse();
+        MasterWatchService.Status status = watcher.status(tenant);
+        assertThat(status.lastError()).contains("503");
+        assertThat(status.cursorAt()).isEqualTo(at);
+        assertThat(status.lastSuccessAt()).isNotNull();
     }
 }

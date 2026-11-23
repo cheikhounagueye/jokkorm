@@ -14,6 +14,9 @@ Maître = Maarch RM (framework laabs), lu par son API JSON. Vérifié contre Maa
 | `JOKKORM_MAARCHRM_TIMEOUT_MS` | Délai max d'un appel. | `10000` |
 | `JOKKORM_MAARCHRM_LOCATION_FIELD` | Champ de description qui affiche l'état physique (tranche 2a). | `localisation_physique` |
 | `JOKKORM_MAARCHRM_PUBLIC_URL` | URL de Maarch vue par les navigateurs des agents (bouton « Ouvrir dans Maarch RM »). À préciser si JokkoRM joint Maarch par une adresse interne. | = `BASE_URL` |
+| `JOKKORM_MAARCHRM_CONNECTOR_ACCOUNT` | Compte Maarch de JokkoRM, pour reconnaître ses propres écritures dans le journal. | login (basic) ou `jokkorm` |
+| `JOKKORM_MASTER_WATCH_ENABLED` / `_DELAY_MS` | Veilleur du journal : actif, intervalle. | `true` / `60000` |
+| `JOKKORM_MASTER_WATCH_INITIAL_LOOKBACK_HOURS` | Au tout premier passage, profondeur relue dans le journal. | `24` |
 
 Puis router un tenant vers ce maître : `JOKKORM_MASTER_TENANTS_<TENANT>=maarchrm`.
 
@@ -102,6 +105,44 @@ Script : `~/maarchrm-test/jokkorm-setup-2a.sh` (sauvegarde de la base Maarch pri
    Ses écritures apparaissent sous son nom dans le journal Maarch.
 3. Jeton du compte → `JOKKORM_MAARCHRM_AUTH_MODE=service-token` +
    `JOKKORM_MAARCHRM_SERVICE_TOKEN`.
+4. Veilleur : `~/maarchrm-test/jokkorm-setup-veilleur.sh` ajoute un 5ᵉ droit,
+   `lifeCycle/event/readSearch` (lire le journal).
+   - Maarch **efface tous les droits** d'un compte avant de réécrire sa liste. Le script écrit donc
+     la liste complète en clair, après une sauvegarde des comptes et des droits.
+   - Il vérifie ensuite que le jeton marche toujours.
+
+## Veilleur du journal (étape 1)
+
+Maarch ne prévient personne : JokkoRM lit son journal du cycle de vie **chaque minute**
+(`GET /lifeCycle/event/Search`, droit `lifeCycle/event/readSearch` donné par
+`~/maarchrm-test/jokkorm-setup-veilleur.sh`). Écran : **Signalements**.
+
+| Événement Maarch | Réaction de JokkoRM |
+|---|---|
+| `metadataModification` par un autre compte que JokkoRM | relit l'archive ; si l'emplacement affiché n'est plus celui envoyé (aux espaces près), il est **rétabli** et un signalement « Emplacement rétabli » est créé (qui, quand) |
+| `metadataModification` par JokkoRM lui-même, valeur différente | signalement « à vérifier », **jamais de réécriture** (pas de boucle) |
+| `freeze` | l'archive passe à « gelée » ; signalement « demander le retour » si la boîte est en prêt, « prévenir le demandeur » si un prêt est demandé |
+| `unfreeze` | l'archive redevient « en magasin » ; signalement d'information |
+
+- **Rien n'est perdu.** Le curseur est l'horodatage **Maarch** du dernier événement traité, et
+  la lecture suivante repart 2 minutes avant. Maarch injoignable, ou droit manquant : le
+  passage est marqué « en erreur » avec la raison, et le curseur ne bouge pas.
+- **Rien n'est rejoué.** Un signalement est unique par événement Maarch et par type. C'est aussi
+  le marqueur « déjà traité » : une relecture ne refait ni l'action, ni la ligne d'audit.
+- **Traçabilité croisée.** Chaque action est inscrite dans l'audit de JokkoRM au nom de
+  `veilleur`, avec l'identifiant de l'événement Maarch (`evenement-maitre=…`).
+- **Données personnelles.** JokkoRM ne lit que le type, l'archive, l'auteur et la date de
+  l'événement, jamais `eventInfo` ni `description`. Il ne garde pas non plus la valeur tapée
+  dans Maarch, seulement « modifié » ou « effacé ».
+- **Vérifié en réel le 2026-11-23**, en lecture seule (`MaarchRmLiveReadTest`, variables
+  `MAARCHRM_LIVE_*`) :
+  - la lecture par pages de 2 retrouve exactement les 5 modifications d'une seule grande page ;
+  - sur les 4 modifications de l'archive `FR094080_2026_AE0002`, dont le renommage par un
+    agent de la DRH, aucun faux écart.
+- **Limites connues** :
+  - au-delà de 20 000 événements d'un même type à rattraper d'un coup, le veilleur s'arrête en
+    erreur ;
+  - un gel levé remet l'archive « en magasin » même si elle n'avait pas encore de boîte.
 
 ## Montées de version de Maarch RM
 
@@ -118,7 +159,17 @@ JokkoRM s'appuie. Du plus au moins grave :
    silencieux : si une version ajoute un champ que JokkoRM ne renvoie pas, il serait vidé.
 2. **Particularités de laabs** : jeton dans le User-Agent, en-tête `X-Laabs-Exception`, cookie
    `LAABS-AUTH`. Une rupture serait visible : l'adapter la traite en panne ou en refus.
-3. **Les routes lues** (`archives`, `archives/Count`, `archive/Metadata/{id}`) et la page
+3. **Le journal**, lu par le veilleur. Ces comportements de Maarch 2.7 sont pris en compte
+   un par un :
+   - tous les paramètres sont obligatoires, même vides (sinon 400) ;
+   - les dates sont comparées en UTC, le fuseau envoyé est ignoré ;
+   - les résultats viennent du plus récent au plus ancien, et la limite garde les plus récents ;
+   - `maxDate` reçoit 23 h 59 min 59 s de plus ;
+   - une archive invisible pour le compte répond 200 + `accessDenied`.
+
+   Une rupture serait visible : la pagination se contrôle elle-même, et le veilleur passe
+   « en erreur » sans avancer.
+4. **Les routes lues** (`archives`, `archives/Count`, `archive/Metadata/{id}`) et la page
    `archiveDescription/{archiveId}` du bouton (au pire : page d'erreur Maarch).
 
 **Après chaque montée de version, sur une archive de test :**
@@ -128,6 +179,8 @@ JokkoRM s'appuie. Du plus au moins grave :
 2. Faire un geste physique réel (déplacer sa boîte) et vérifier « À jour » sur la fiche JokkoRM.
 3. Reprendre l'empreinte : elle doit être identique, seul `localisation_physique` change.
 4. Cliquer sur « Ouvrir dans Maarch RM ».
+5. Modifier l'emplacement à la main dans Maarch : il doit être rétabli en une minute environ,
+   avec un signalement. Relancer `MaarchRmLiveReadTest` (lecture seule).
 
 Les tests automatiques (`MasterSyncIT`, `MaarchRmSaeMasterAdapterTest`) tournent contre un faux
 Maarch (WireMock) : ils ne détectent pas un changement de comportement d'une nouvelle version.

@@ -21,6 +21,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param publicUrl          URL de Maarch telle que la voient les navigateurs des agents (lien
  *                           « Ouvrir dans Maarch RM »). Par défaut {@code baseUrl} ; à préciser
  *                           quand JokkoRM joint Maarch par une adresse interne (réseau Docker).
+ * @param connectorAccount   nom du compte Maarch utilisé par JokkoRM, pour reconnaître ses propres
+ *                           écritures dans le journal. Par défaut : le login en mode basic,
+ *                           {@code jokkorm} en mode compte de service.
  */
 @ConfigurationProperties(prefix = "jokkorm.master.maarchrm")
 public record MaarchRmProperties(
@@ -32,7 +35,8 @@ public record MaarchRmProperties(
     String serviceToken,
     int timeoutMs,
     String locationField,
-    String publicUrl) {
+    String publicUrl,
+    String connectorAccount) {
 
     public enum AuthMode { BASIC, SERVICE_TOKEN }
 
@@ -47,12 +51,19 @@ public record MaarchRmProperties(
         if (!publicUrl.isEmpty() && !publicUrl.matches("(?i)https?://.+")) {
             throw new IllegalArgumentException("jokkorm.master.maarchrm.public-url doit commencer par http:// ou https://");
         }
+        connectorAccount = connectorAccount == null || connectorAccount.isBlank() ? null : connectorAccount.trim();
     }
 
-    /** Sans champ de localisation ni URL publique précisés : valeurs par défaut. */
+    /** Sans champ de localisation, URL publique ni compte précisés : valeurs par défaut. */
     public MaarchRmProperties(String baseUrl, String serviceClientToken, String authMode, String login,
                               String password, String serviceToken, int timeoutMs) {
-        this(baseUrl, serviceClientToken, authMode, login, password, serviceToken, timeoutMs, null, null);
+        this(baseUrl, serviceClientToken, authMode, login, password, serviceToken, timeoutMs, null, null, null);
+    }
+
+    /** Le compte dont les écritures sont celles de JokkoRM lui-même. */
+    public String connectorAccountName() {
+        if (connectorAccount != null) return connectorAccount;
+        return mode() == AuthMode.BASIC && login != null && !login.isBlank() ? login.trim() : "jokkorm";
     }
 
     public AuthMode mode() {

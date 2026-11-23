@@ -15,6 +15,12 @@ public enum AuditAction {
     /** Gel contentieux levé par le maître. */
     LEGAL_HOLD_RELEASED,
 
+    /** Emplacement modifié à la main dans le maître, rétabli par le veilleur (étape 1). */
+    MASTER_LOCATION_RESTORED,
+
+    /** Signalement du veilleur marqué traité par un archiviste. */
+    MASTER_ALERT_ACKNOWLEDGED,
+
     /** Un dossier a été rangé dans une boîte à une position physique — phase 5C. */
     RECORD_STORED,
 

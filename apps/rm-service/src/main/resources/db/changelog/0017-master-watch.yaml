@@ -1,0 +1,54 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0017-master-watch
+      author: jokkorm
+      comment: >
+        Veilleur du journal du maître (étape 1). master_watch : une ligne par tenant, avec le
+        curseur (horodatage MAARCH du dernier événement traité, jamais l'horloge de JokkoRM) et
+        l'état du dernier passage. master_alert : signalements à l'archiviste (gel, emplacement
+        modifié à la main dans le maître). Unicité (tenant, événement maître, type) = marqueur
+        « déjà traité » : relire le journal ne rejoue ni une action ni une ligne d'audit.
+        Aucun contenu de l'événement n'est stocké (pas de description, pas de valeur saisie).
+      changes:
+        - createTable:
+            tableName: master_watch
+            columns:
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { primaryKey: true, primaryKeyName: pk_master_watch, nullable: false,
+                                 foreignKeyName: fk_master_watch_tenant, references: tenant(id) }
+              - column: { name: cursor_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: last_run_at, type: TIMESTAMP WITH TIME ZONE }
+              - column: { name: last_success_at, type: TIMESTAMP WITH TIME ZONE }
+              - column: { name: last_error, type: VARCHAR(1000) }
+              - column: { name: last_events, type: INT, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+        - createTable:
+            tableName: master_alert
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, primaryKeyName: pk_master_alert, nullable: false } }
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { nullable: false, foreignKeyName: fk_master_alert_tenant, references: tenant(id) }
+              - column: { name: kind, type: VARCHAR(32), constraints: { nullable: false } }
+              - column: { name: cote, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: record_id, type: UUID }
+              - column: { name: master_event_id, type: VARCHAR(128), constraints: { nullable: false } }
+              - column: { name: occurred_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: actor, type: VARCHAR(255) }
+              - column: { name: detail, type: VARCHAR(500) }
+              - column: { name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: acknowledged_at, type: TIMESTAMP WITH TIME ZONE }
+              - column: { name: acknowledged_by, type: VARCHAR(255) }
+        - addUniqueConstraint:
+            tableName: master_alert
+            columnNames: tenant_id, master_event_id, kind
+            constraintName: uq_master_alert_event
+        - createIndex:
+            tableName: master_alert
+            indexName: ix_master_alert_tenant_created
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: created_at }

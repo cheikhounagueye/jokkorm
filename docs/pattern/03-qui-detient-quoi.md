@@ -25,9 +25,12 @@ Ce tableau **engage celui qui construira le module** — équipe interne ou pres
 
 - **Ligne « Maître »** : essaie de modifier le champ côté JokkoRM → doit retourner `403 master-owned-field`.
 - **Ligne « JokkoRM »** : ~~essaie de modifier le champ côté maître → doit retourner l'équivalent 403 côté maître~~.
-  *Amendement proposé le 2026-11-23, à valider* : avec Maarch RM, un champ verrouillé (immuable) bloque aussi
-  JokkoRM. Le champ d'affichage reste donc modifiable dans Maarch ; la recette vérifie que **le geste
-  physique suivant le réécrit** avec la valeur de JokkoRM (JokkoRM reste la seule source).
+  *Amendement retenu le 2026-11-23* : avec Maarch RM, un champ verrouillé (immuable) bloque aussi
+  JokkoRM. Le champ d'affichage reste donc modifiable dans Maarch. La recette modifie ce champ à la
+  main dans le maître et vérifie deux choses :
+  - le **veilleur du journal** le rétablit en une minute environ, avec la valeur de JokkoRM, qui
+    reste la seule source ;
+  - un **signalement** nomme l'auteur et l'heure de la modification.
 - **Ligne « Les deux »** : vérifie que la modification propagée par le SSO est visible des deux côtés dans les 30 secondes.
 
 Un échec sur une ligne bloque la livraison. C'est la règle.

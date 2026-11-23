@@ -20,18 +20,27 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import com.jokkorm.domain.master.MasterArchiveRef;
+import com.jokkorm.domain.master.MasterEvent;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.Period;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -227,6 +236,143 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
         }
     }
 
+    // ─── Journal de Maarch (veilleur, étape 1) ───────────────────────────────────
+    //
+    // Pièges Maarch 2.7 (vérifiés sur instance réelle le 2026-11-23) :
+    //  - tous les paramètres doivent être envoyés, même vides, sinon 400 ;
+    //  - dates comparées en UTC sans fuseau (un « +01:00 » est ignoré) ;
+    //  - résultats du plus récent au plus ancien, la limite garde les plus récents ;
+    //  - maxDate reçoit 23 h 59 min 59 s de plus (filtre pensé « jusqu'à tel jour ») ;
+    //  - compte sans le droit lifeCycle/event/readSearch : 403.
+
+    private static final String JOURNAL = "/lifeCycle/event/Search";
+    static final int JOURNAL_PAGE = 500;
+    /** Taille de page du journal ; réduite par les tests pour éprouver la pagination. */
+    int journalPage = JOURNAL_PAGE;
+    static final int JOURNAL_MAX_PAGES = 40;
+    private static final DateTimeFormatter MAARCH_UTC =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss").withZone(ZoneOffset.UTC);
+    private static final Duration MAARCH_MAXDATE_SHIFT = Duration.ofHours(23).plusMinutes(59).plusSeconds(59);
+    private static final Map<MasterEvent.Kind, String> EVENT_TYPES = Map.of(
+        MasterEvent.Kind.METADATA_MODIFIED, "recordsManagement/metadataModification",
+        MasterEvent.Kind.FROZEN, "recordsManagement/freeze",
+        MasterEvent.Kind.UNFROZEN, "recordsManagement/unfreeze");
+    private static final String JOURNAL_FORBIDDEN = "Maarch RM refuse la lecture du journal (HTTP 403) : il manque "
+        + "au compte de JokkoRM le droit lifeCycle/event/readSearch (script jokkorm-setup-veilleur.sh)";
+
+    @Override
+    public boolean publishesEvents(TenantId tenant) {
+        return true;
+    }
+
+    @Override
+    public List<MasterEvent> readEvents(TenantId tenant, Instant from, Set<MasterEvent.Kind> kinds) {
+        Map<String, MasterEvent> all = new LinkedHashMap<>();
+        for (MasterEvent.Kind kind : kinds) {
+            String type = EVENT_TYPES.get(kind);
+            if (type == null) continue;
+            for (MasterEvent e : readEventType(kind, type, from)) all.putIfAbsent(e.id(), e);
+        }
+        List<MasterEvent> sorted = new ArrayList<>(all.values());
+        sorted.sort(Comparator.comparing(MasterEvent::occurredAt).thenComparing(MasterEvent::id));
+        return sorted;
+    }
+
+    /**
+     * Une requête par type (sinon les contrôles d'intégrité périodiques, un par archive, rempliraient
+     * les pages). Page pleine : on redemande les plus anciens en bornant maxDate, et on vérifie que
+     * le plus ancien déjà lu revient bien. Sinon Maarch a changé de comportement : on s'arrête sans
+     * rien perdre (le curseur ne bouge pas).
+     */
+    private List<MasterEvent> readEventType(MasterEvent.Kind kind, String type, Instant from) {
+        List<MasterEvent> events = new ArrayList<>();
+        Instant upper = null;
+        String mustReappear = null;
+        for (int page = 0; page < JOURNAL_MAX_PAGES; page++) {
+            Map<String, String> p = new LinkedHashMap<>();
+            p.put("eventType", type);
+            p.put("objectClass", "recordsManagement/archive");
+            p.put("objectId", "");
+            p.put("minDate", MAARCH_UTC.format(from));
+            p.put("maxDate", upper == null ? "" : MAARCH_UTC.format(upper.minus(MAARCH_MAXDATE_SHIFT)));
+            p.put("org", "");
+            p.put("maxResults", String.valueOf(journalPage));
+            JsonNode arr = send("GET", JOURNAL + "?" + query(p), null, false, JOURNAL_FORBIDDEN);
+            if (arr == null || !arr.isArray()) {
+                throw new MasterUnreachableException("Réponse inattendue du journal Maarch RM : une liste était attendue");
+            }
+            boolean reappeared = mustReappear == null;
+            MasterEvent previous = null;
+            for (JsonNode n : arr) {
+                MasterEvent e = event(kind, n);
+                if (e == null) continue;
+                if (previous != null && e.occurredAt().isAfter(previous.occurredAt())) {
+                    throw new MasterUnreachableException("Journal Maarch RM : ordre des événements inattendu, "
+                        + "rattrapage arrêté sans rien perdre (voir docs/adapters/maarchrm.md, montées de version)");
+                }
+                if (e.id().equals(mustReappear)) reappeared = true;
+                events.add(e);
+                previous = e;
+            }
+            if (!reappeared) {
+                throw new MasterUnreachableException("Journal Maarch RM : la borne maxDate ne se comporte plus comme "
+                    + "prévu, rattrapage arrêté sans rien perdre (voir docs/adapters/maarchrm.md, montées de version)");
+            }
+            if (arr.size() < journalPage) return events;
+            if (previous == null) {
+                throw new MasterUnreachableException("Journal Maarch RM : page pleine mais illisible");
+            }
+            Instant next = previous.occurredAt().truncatedTo(ChronoUnit.SECONDS).plusSeconds(1);
+            if (upper != null && !next.isBefore(upper)) {
+                throw new MasterUnreachableException("Journal Maarch RM : plus de " + journalPage + " événements « "
+                    + type + " » dans la même seconde, rattrapage impossible");
+            }
+            upper = next;
+            mustReappear = previous.id();
+        }
+        throw new MasterUnreachableException("Journal Maarch RM : plus de " + (journalPage * JOURNAL_MAX_PAGES)
+            + " événements « " + type + " » à rattraper d'un coup (voir docs/adapters/maarchrm.md)");
+    }
+
+    /** Type, archive, qui, quand. Jamais eventInfo ni description : ils peuvent porter des données personnelles. */
+    private MasterEvent event(MasterEvent.Kind kind, JsonNode n) {
+        String id = text(n, "eventId");
+        Instant at = instant(text(n, "timestamp"));
+        String objectId = text(n, "objectId");
+        if (!notBlank(id) || at == null || !notBlank(objectId)) {
+            LOG.warn("[maarchrm] événement de journal incomplet ignoré ({})", id);
+            return null;
+        }
+        String actor = text(n, "accountName");
+        boolean byConnector = actor != null && actor.equalsIgnoreCase(config.connectorAccountName());
+        return new MasterEvent(id, kind, at, objectId, actor, byConnector);
+    }
+
+    static Instant instant(String value) {
+        if (!notBlank(value)) return null;
+        try {
+            return OffsetDateTime.parse(value).toInstant();
+        } catch (DateTimeParseException e) {
+            try {
+                return LocalDateTime.parse(value).toInstant(ZoneOffset.UTC);
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
+        }
+    }
+
+    @Override
+    public Optional<MasterArchiveRef> describe(TenantId tenant, String masterArchiveId) {
+        // La réponse contient toute la description (données personnelles comprises) : jamais journalisée.
+        JsonNode meta = send("GET", "/recordsManagement/archive/Metadata/"
+            + URLEncoder.encode(masterArchiveId, StandardCharsets.UTF_8), null, true, null);
+        if (meta == null || !meta.isObject()) return Optional.empty();
+        String cote = text(meta, "archiverArchiveId");
+        if (cote == null || !isValidCote(cote)) return Optional.empty();
+        JsonNode field = meta.path("description").path(config.locationField());
+        return Optional.of(new MasterArchiveRef(cote, field.isMissingNode() || field.isNull() ? null : field.asText()));
+    }
+
     @Override
     public void notifyDestructionExecuted(TenantId tenant, Cote cote, DestructionAttestation attestation) {
         LOG.info("[maarchrm] destruction de {} non transmise à Maarch RM (écriture prévue en tranche 2)", cote.value());
@@ -259,6 +405,16 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
     }
 
     private JsonNode send(String method, String pathAndQuery, String jsonBody) {
+        return send(method, pathAndQuery, jsonBody, false, null);
+    }
+
+    /**
+     * @param absentIsNull     vrai : une archive inconnue (404) ou invisible pour ce compte
+     *                         (« accessDenied » laabs) donne {@code null} au lieu d'une panne
+     * @param forbiddenMessage message en cas de 403 en lecture (droit manquant), sinon message général
+     */
+    private JsonNode send(String method, String pathAndQuery, String jsonBody, boolean absentIsNull,
+                          String forbiddenMessage) {
         HttpRequest.Builder req = HttpRequest.newBuilder()
             .uri(URI.create(config.baseUrl() + pathAndQuery))
             .timeout(Duration.ofMillis(config.timeoutMs()))
@@ -286,11 +442,16 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
         }
 
         int status = response.statusCode();
+        String laabsException = response.headers().firstValue("X-Laabs-Exception").orElse("");
+        if (absentIsNull && (status == 404 || laabsException.contains("accessDenied"))) {
+            return null;
+        }
         if (status == 401) {
             throw new MasterUnreachableException("Maarch RM refuse la connexion (HTTP 401) : vérifier le compte");
         }
         if (status == 403 && jsonBody == null) {
-            throw new MasterUnreachableException("Maarch RM refuse la connexion (HTTP 403) : vérifier le compte et son rattachement au service d'archives");
+            throw new MasterUnreachableException(forbiddenMessage != null ? forbiddenMessage
+                : "Maarch RM refuse la connexion (HTTP 403) : vérifier le compte et son rattachement au service d'archives");
         }
         if (jsonBody != null && status >= 400 && status < 500 && status != 408 && status != 429) {
             // Écriture refusée par Maarch (champ inconnu du profil, droits…) : refus durable.
@@ -301,7 +462,6 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
             throw new MasterUnreachableException("Maarch RM a répondu HTTP " + status);
         }
         // Piège laabs : une exception sans code HTTP part en « 200 {} », le vrai message est dans cet en-tête.
-        String laabsException = response.headers().firstValue("X-Laabs-Exception").orElse("");
         if (!laabsException.isBlank()) {
             String detail = laabsException.length() > 300 ? laabsException.substring(0, 300) + "…" : laabsException;
             if (jsonBody != null) {
