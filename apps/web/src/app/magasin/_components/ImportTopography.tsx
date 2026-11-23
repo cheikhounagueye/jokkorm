@@ -60,7 +60,7 @@ export function useTopographyImport(onImported: () => void) {
       {report && (
         <Alert
           tone={report.errors.length ? "warning" : "success"}
-          title={`Import terminé : ${report.created} créé${report.created > 1 ? "s" : ""}, ${report.skippedExisting} déjà présent${report.skippedExisting > 1 ? "s" : ""}${report.errors.length ? `, ${report.errors.length} erreur${report.errors.length > 1 ? "s" : ""}` : ""}`}
+          title={`Import terminé : ${report.created} créé${report.created > 1 ? "s" : ""}, ${report.updated ?? 0} complété${(report.updated ?? 0) > 1 ? "s" : ""}, ${report.skippedExisting} déjà présent${report.skippedExisting > 1 ? "s" : ""}${report.errors.length ? `, ${report.errors.length} erreur${report.errors.length > 1 ? "s" : ""}` : ""}`}
           action={<CloseButton onClick={() => setReport(null)} />}
         >
           {report.errors.length > 0 && (

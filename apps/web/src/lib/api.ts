@@ -207,6 +207,41 @@ export interface RoomSpecView {
   limits: { areaM2: number | null; footprintM2: number; measuredShelves: number; shelves: number; warnings: string[] };
 }
 
+/** Gabarit du générateur de topographie (5T.C) ; mesures en mm, null = non mesuré. */
+export interface ShelvingTemplate {
+  aisles: number;
+  ranksPerFace: number;
+  faces: 1 | 2;
+  tablettesPerTravee: number;
+  positionsPerTablette: number;
+  lengthMm: number | null;
+  furnitureType: FurnitureType | null;
+  depthMm: number | null;
+  clearanceMm: number | null;
+  heightMm: number | null;
+}
+
+export interface ShelvingPlan {
+  travees: number;
+  tablettes: number;
+  positions: number;
+  installedMm: number;
+  aisleCodes: string[];
+  firstTravee: string;
+  lastTravee: string;
+  applied: boolean;
+}
+
+/** Plan (dryRun) ou création des épis, travées, tablettes et emplacements d'une salle. */
+export async function generateShelving(storehouseId: string, template: ShelvingTemplate, dryRun: boolean): Promise<ShelvingPlan> {
+  const response = await fetch(`/api/v1/physical/rooms/${storehouseId}/generate?dryRun=${dryRun}`, {
+    method: "POST",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(template),
+  });
+  return parse<ShelvingPlan>(response);
+}
+
 export async function getRoomSpec(storehouseId: string): Promise<RoomSpecView> {
   const response = await fetch(`/api/v1/physical/rooms/${storehouseId}/spec`, { headers: headers() });
   return parse<RoomSpecView>(response);
@@ -578,6 +613,8 @@ export async function listDevTenants(): Promise<DevTenant[]> {
 
 export interface ImportTopographyReport {
   created: number;
+  /** Nœuds existants dont les mesures ont été complétées (5T.C). */
+  updated: number;
   skippedExisting: number;
   errors: string[];
 }
@@ -606,7 +643,8 @@ export async function importTopographyExcel(file: File): Promise<ImportTopograph
   formData.append("file", file);
   const response = await fetch(`/api/v1/physical/locations/import`, {
     method: "POST",
-    headers: headers(), // ne pas ajouter Content-Type, FormData le fait avec boundary
+    // Rôle requis (l'import peut changer des dimensions). Pas de Content-Type : FormData met le boundary.
+    headers: accessHeaders(),
     body: formData,
   });
   return parse<ImportTopographyReport>(response);

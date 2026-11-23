@@ -112,7 +112,7 @@ export function FurnitureCard({ node }: { node: StorageLocationTreeResponse }) {
         <>
           <div style={statGrid}>
             <Stat icon="width" label="Longueur" value={n.lengthMm != null ? cm(n.lengthMm) : null} empty="déduite" />
-            <Stat icon="boxFormats" label="Profondeur" value={n.depthMm != null ? cm(n.depthMm) : null} />
+            <Stat icon="boxFormats" label="Profondeur d'une face" value={n.depthMm != null ? cm(n.depthMm) : null} />
             <Stat icon="height" label="Hauteur libre / tablette" value={n.clearanceMm != null ? cm(n.clearanceMm) : null} />
             <Stat icon="height" label="Hauteur du meuble" value={n.heightMm != null ? meters(n.heightMm) : null} />
           </div>
@@ -153,27 +153,10 @@ function FurnitureForm({ n, onDone }: { n: StorageLocationResponse; onDone: () =
   return (
     <form onSubmit={(e) => { e.preventDefault(); if (!invalid) mutation.mutate(); }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Type de mobilier</div>
-      <div role="radiogroup" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))", gap: 8, marginBottom: 16 }}>
-        {FURNITURE_ORDER.map((t) => {
-          const m = FURNITURE[t];
-          const on = type === t;
-          return (
-            <button key={t} type="button" role="radio" aria-checked={on} onClick={() => setType(on ? null : t)} title={m.hint}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "10px 6px",
-                borderRadius: "var(--radius-md)", cursor: "pointer", color: "var(--text-primary)",
-                border: on ? "2px solid var(--brand-500)" : "1px solid var(--border-subtle)",
-                background: on ? "color-mix(in srgb, var(--brand-500) 8%, var(--surface-card))" : "var(--surface-card)",
-              }}>
-              <IconTile name={m.icon} tone={m.tone} size={36} variant={on ? "solid" : "soft"} />
-              <span style={{ fontSize: 12, fontWeight: on ? 700 : 500, textAlign: "center" }}>{m.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <FurnitureTypePicker value={type} onChange={setType} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
-        <Field label="Profondeur (cm)" hint="Une boîte plus profonde est refusée">
+        <Field label="Profondeur d'une face (cm)" hint="Une boîte plus profonde est refusée">
           <Input value={depth} onChange={(e) => setDepth(e.target.value)} inputMode="decimal" placeholder="non mesurée" />
         </Field>
         <Field label="Hauteur libre par tablette (cm)" hint="Une boîte plus haute est refusée">
@@ -210,6 +193,30 @@ function FurnitureForm({ n, onDone }: { n: StorageLocationResponse; onDone: () =
         <Button type="button" variant="ghost" onClick={onDone}>Annuler</Button>
       </div>
     </form>
+  );
+}
+
+/** Choix du type de mobilier en tuiles (un second clic désélectionne). */
+export function FurnitureTypePicker({ value, onChange }: { value: FurnitureType | null; onChange: (t: FurnitureType | null) => void }) {
+  return (
+    <div role="radiogroup" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))", gap: 8, marginBottom: 16 }}>
+      {FURNITURE_ORDER.map((t) => {
+        const m = FURNITURE[t];
+        const on = value === t;
+        return (
+          <button key={t} type="button" role="radio" aria-checked={on} onClick={() => onChange(on ? null : t)} title={m.hint}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "10px 6px",
+              borderRadius: "var(--radius-md)", cursor: "pointer", color: "var(--text-primary)",
+              border: on ? "2px solid var(--brand-500)" : "1px solid var(--border-subtle)",
+              background: on ? "color-mix(in srgb, var(--brand-500) 8%, var(--surface-card))" : "var(--surface-card)",
+            }}>
+            <IconTile name={m.icon} tone={m.tone} size={36} variant={on ? "solid" : "soft"} />
+            <span style={{ fontSize: 12, fontWeight: on ? 700 : 500, textAlign: "center" }}>{m.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

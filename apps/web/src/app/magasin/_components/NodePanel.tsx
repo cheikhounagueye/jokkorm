@@ -15,6 +15,7 @@ import {
 import { Icons } from "@/lib/icons";
 import { CreateChildForm } from "./CreateChildForm";
 import { aisleLabel, FurnitureCard, RoomSpecCard, TabletteDimsCard } from "./FurniturePanel";
+import { ShelvingGenerator } from "./ShelvingGenerator";
 import { KIND_META } from "./kinds";
 import { LinkButton } from "./LinkButton";
 import { PositionShelf } from "./PositionShelf";
@@ -41,7 +42,7 @@ export function NodePanel({
   const loc = current.node;
   const meta = KIND_META[loc.kind];
   const childMeta = meta.child ? KIND_META[meta.child] : null;
-  const [mode, setMode] = useState<"view" | "rename" | "delete" | "create" | "length">("view");
+  const [mode, setMode] = useState<"view" | "rename" | "delete" | "create" | "length" | "generate">("view");
   const hasLength = HAS_LENGTH.includes(loc.kind);
   // Adresse de terrain (pattern 10) : « SALLE-A · Épi E1 · rang 3 · face A · Travée T01 · Tablette 2 »
   const travee = path.find((p) => p.node.kind === "SHELF")?.node ?? null;
@@ -104,8 +105,13 @@ export function NodePanel({
                   Visite 3D
                 </LinkButton>
               )}
+              {loc.kind === "STOREHOUSE" && (
+                <Button icon={<Icons.sparkle size={14} weight="duotone" />} onClick={() => setMode("generate")}>
+                  Générer des travées
+                </Button>
+              )}
               {childMeta && (
-                <Button icon={<Icons.add size={14} weight="bold" />} onClick={() => setMode("create")}>
+                <Button variant={loc.kind === "STOREHOUSE" ? "secondary" : undefined} icon={<Icons.add size={14} weight="bold" />} onClick={() => setMode("create")}>
                   Ajouter {childMeta.label.toLowerCase()}
                 </Button>
               )}
@@ -153,6 +159,9 @@ export function NodePanel({
         )}
       </Card>
 
+      {mode === "generate" && loc.kind === "STOREHOUSE" && (
+        <ShelvingGenerator storehouseId={loc.id} onDone={() => { setMode("view"); onCreated(); }} onCancel={() => setMode("view")} />
+      )}
       {loc.kind === "STOREHOUSE" && <RoomSpecCard storehouseId={loc.id} />}
       {loc.kind === "SHELF" && <FurnitureCard node={current} />}
       {loc.kind === "RACK" && <TabletteDimsCard node={loc} travee={travee} />}
@@ -198,6 +207,9 @@ function ChildrenGrid({
                 <span style={{ fontFamily: "var(--font-mono)" }}>{c.node.code}</span>
                 {childMeta.child && ` · ${c.children.length} ${KIND_META[childMeta.child].plural}`}
               </div>
+              {aisleLabel(c.node) && (
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", marginTop: 2 }}>{aisleLabel(c.node)}</div>
+              )}
             </div>
           </button>
         ))}
