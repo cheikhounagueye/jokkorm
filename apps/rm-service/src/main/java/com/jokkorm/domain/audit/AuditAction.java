@@ -59,6 +59,8 @@ public enum AuditAction {
 
     /** Import Excel topographie exécuté — phase 5I. */
     STORAGE_LOCATIONS_IMPORTED,
+    /** Travées, tablettes et emplacements créés par le générateur à gabarit (pattern 10, 5T.C). */
+    STORAGE_LOCATIONS_GENERATED,
 
     /** Prêt de boîte demandé (phase 5E). */
     LOAN_REQUESTED,

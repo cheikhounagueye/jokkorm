@@ -127,6 +127,75 @@ public class ShelfSpaceService {
             effective(tablette, travee, true), effective(tablette, travee, false));
     }
 
+    /**
+     * Ce qui ne tiendrait plus si {@code node} (travée, tablette ou emplacement) recevait cette
+     * longueur et ces dimensions. Lecture seule : l'import Excel (5T.C) vérifie ainsi une ligne
+     * avant d'écrire quoi que ce soit, pour qu'une ligne refusée ne laisse aucune trace.
+     */
+    public List<String> problemsIf(TenantId tenant, StorageLocation node, Integer newLengthMm,
+                                   com.jokkorm.domain.physical.PhysicalSpec newSpec) {
+        var spec = newSpec == null ? com.jokkorm.domain.physical.PhysicalSpec.EMPTY : newSpec;
+        switch (node.kind()) {
+            case RACK -> {
+                StorageLocation travee = node.parentId().flatMap(id -> locations.findById(tenant, id)).orElse(null);
+                return rackProblems(tenant, node, newLengthMm, spec,
+                    travee == null ? null : travee.lengthMm().orElse(null),
+                    travee == null ? com.jokkorm.domain.physical.PhysicalSpec.EMPTY : travee.spec());
+            }
+            case SHELF -> {
+                List<String> all = new java.util.ArrayList<>();
+                for (StorageLocation rack : locations.findChildren(tenant, node.id())) {
+                    if (rack.kind() != StorageLocationKind.RACK) continue;
+                    all.addAll(rackProblems(tenant, rack, rack.lengthMm().orElse(null), rack.spec(), newLengthMm, spec));
+                }
+                return all;
+            }
+            case POSITION -> {
+                if (newLengthMm == null) return List.of();
+                TabletteSpace t = tabletteOf(tenant, node, false, null);
+                List<String> out = new java.util.ArrayList<>();
+                if (t.usedMm(node.id()) > newLengthMm) {
+                    out.add("Emplacement %s : les boîtes rangées occupent %s, plus que %s"
+                        .formatted(node.path(), LinearCapacity.cm(t.usedMm(node.id())), LinearCapacity.cm(newLengthMm)));
+                }
+                int explicit = t.positions().stream()
+                    .mapToInt(p -> p.id().equals(node.id()) ? newLengthMm : p.lengthMm().orElse(0)).sum();
+                if (explicit > t.lengthMm()) {
+                    out.add("Tablette %s : ses emplacements totaliseraient %s pour %s"
+                        .formatted(t.tablette() == null ? "?" : t.tablette().path(), LinearCapacity.cm(explicit),
+                            LinearCapacity.cm(t.lengthMm())));
+                }
+                return out;
+            }
+            default -> {
+                return List.of();
+            }
+        }
+    }
+
+    private List<String> rackProblems(TenantId tenant, StorageLocation rack, Integer rackLength,
+                                      com.jokkorm.domain.physical.PhysicalSpec rackSpec, Integer traveeLength,
+                                      com.jokkorm.domain.physical.PhysicalSpec traveeSpec) {
+        TabletteSpace base = tablette(tenant, rack);
+        int length = rackLength != null ? rackLength : traveeLength != null ? traveeLength : defaultTabletteMm;
+        Integer clearance = rackSpec.clearanceMm() != null ? rackSpec.clearanceMm() : traveeSpec.clearanceMm();
+        Integer depth = rackSpec.depthMm() != null ? rackSpec.depthMm() : traveeSpec.depthMm();
+        TabletteSpace t = new TabletteSpace(rack, base.positions(), base.boxes(), base.spines(), length,
+            LinearCapacity.fillableMm(length, marginPercent), clearance, depth);
+        List<String> out = new java.util.ArrayList<>();
+        t.boxes().stream().map(t::sizeProblem).flatMap(java.util.Optional::stream).findFirst().ifPresent(out::add);
+        int explicit = t.positions().stream().mapToInt(p -> p.lengthMm().orElse(0)).sum();
+        if (explicit > length) {
+            out.add("Tablette %s : ses emplacements totaliseraient %s pour %s"
+                .formatted(rack.path(), LinearCapacity.cm(explicit), LinearCapacity.cm(length)));
+        }
+        if (t.usedMm() > length) {
+            out.add("Tablette %s : les boîtes rangées occupent déjà %s, plus que %s"
+                .formatted(rack.path(), LinearCapacity.cm(t.usedMm()), LinearCapacity.cm(length)));
+        }
+        return out;
+    }
+
     /** Hauteur libre ({@code clearance}) ou profondeur : celle de la tablette, sinon de sa travée. */
     static Integer effective(StorageLocation tablette, StorageLocation travee, boolean clearance) {
         Integer own = tablette == null ? null

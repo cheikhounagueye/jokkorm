@@ -44,10 +44,13 @@ public class RoomController {
     private final GetRoomViewUseCase viewUseCase;
     private final RoomEquipmentUseCase equipmentUseCase;
     private final com.jokkorm.application.physical.RoomSpecUseCase specUseCase;
+    private final com.jokkorm.application.physical.GenerateShelvingUseCase generator;
 
     public RoomController(GetRoomViewUseCase viewUseCase, RoomEquipmentUseCase equipmentUseCase,
-                          com.jokkorm.application.physical.RoomSpecUseCase specUseCase) {
+                          com.jokkorm.application.physical.RoomSpecUseCase specUseCase,
+                          com.jokkorm.application.physical.GenerateShelvingUseCase generator) {
         this.specUseCase = specUseCase;
+        this.generator = generator;
         this.viewUseCase = viewUseCase;
         this.equipmentUseCase = equipmentUseCase;
     }
@@ -73,6 +76,18 @@ public class RoomController {
         @org.springframework.web.bind.annotation.RequestBody com.jokkorm.application.physical.RoomSpecUseCase.Input body,
         @org.springframework.web.bind.annotation.RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
         return specUseCase.set(storehouseId, body, actor);
+    }
+
+    @PostMapping("/{storehouseId}/generate")
+    @Operation(summary = "Générateur à gabarit : crée des épis de travées, tablettes et emplacements (5T.C).",
+        description = "dryRun=true : renvoie le plan (codes, totaux) sans rien écrire. Archiviste. "
+            + "Convention double face : une travée par rang et par face (A/B).")
+    public com.jokkorm.application.physical.GenerateShelvingUseCase.Plan generate(
+        @PathVariable UUID storehouseId,
+        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean dryRun,
+        @org.springframework.web.bind.annotation.RequestBody com.jokkorm.application.physical.GenerateShelvingUseCase.Template body,
+        @org.springframework.web.bind.annotation.RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        return generator.execute(storehouseId, body, dryRun, actor);
     }
 
     public record AddEquipmentRequest(
