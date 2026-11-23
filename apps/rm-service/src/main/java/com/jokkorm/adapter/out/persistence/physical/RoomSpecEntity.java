@@ -49,6 +49,9 @@ public class RoomSpecEntity {
     @Column(name = "rh_max_pct")
     private Integer rhMaxPct;
 
+    @Column(name = "avg_weight_kg_per_ml", precision = 6, scale = 1)
+    private BigDecimal avgWeightKgPerMl;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -80,6 +83,7 @@ public class RoomSpecEntity {
         tempMaxC = s.tempMaxC() == null ? null : BigDecimal.valueOf(s.tempMaxC());
         rhMinPct = s.rhMinPct();
         rhMaxPct = s.rhMaxPct();
+        avgWeightKgPerMl = s.avgWeightKgPerMl() == null ? null : BigDecimal.valueOf(s.avgWeightKgPerMl());
         updatedAt = at;
     }
 
@@ -87,6 +91,6 @@ public class RoomSpecEntity {
         return new RoomSpec(storehouseId, TenantId.of(tenantId), lengthMm, widthMm, ceilingHeightMm,
             usableAreaM2 == null ? null : usableAreaM2.doubleValue(), floorLoadKgM2,
             tempMinC == null ? null : tempMinC.doubleValue(), tempMaxC == null ? null : tempMaxC.doubleValue(),
-            rhMinPct, rhMaxPct);
+            rhMinPct, rhMaxPct, avgWeightKgPerMl == null ? null : avgWeightKgPerMl.doubleValue());
     }
 }

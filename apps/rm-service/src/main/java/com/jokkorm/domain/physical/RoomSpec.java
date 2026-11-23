@@ -18,6 +18,8 @@ import java.util.UUID;
  * @param tempMaxC        consigne de température haute (°C)
  * @param rhMinPct        consigne d'humidité relative basse (%)
  * @param rhMaxPct        consigne d'humidité relative haute (%)
+ * @param avgWeightKgPerMl poids moyen au mètre linéaire (kg/ml), mesuré sur place ; sert à la
+ *                         charge au sol estimée (indicative, à faire confirmer par un bureau d'études)
  */
 public record RoomSpec(
     UUID storehouseId,
@@ -30,7 +32,8 @@ public record RoomSpec(
     Double tempMinC,
     Double tempMaxC,
     Integer rhMinPct,
-    Integer rhMaxPct) {
+    Integer rhMaxPct,
+    Double avgWeightKgPerMl) {
 
     public RoomSpec {
         Objects.requireNonNull(storehouseId, "storehouseId");
@@ -49,6 +52,9 @@ public record RoomSpec(
         }
         range(rhMinPct, 0, 100, "humidité relative basse (%)");
         range(rhMaxPct, 0, 100, "humidité relative haute (%)");
+        if (avgWeightKgPerMl != null && (avgWeightKgPerMl <= 0 || avgWeightKgPerMl > 1000)) {
+            throw new IllegalArgumentException("poids moyen au ml : entre 0 et 1000 kg, reçu " + avgWeightKgPerMl);
+        }
         if (rhMinPct != null && rhMaxPct != null && rhMinPct > rhMaxPct) {
             throw new IllegalArgumentException("L'humidité basse dépasse l'humidité haute");
         }

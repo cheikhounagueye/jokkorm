@@ -27,3 +27,5 @@ databaseChangeLog:
       file: db/changelog/0013-box-formats-and-lengths.yaml
   - include:
       file: db/changelog/0014-furniture-and-room-spec.yaml
+  - include:
+      file: db/changelog/0015-room-average-weight.yaml

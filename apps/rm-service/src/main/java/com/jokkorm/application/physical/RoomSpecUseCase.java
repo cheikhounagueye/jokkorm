@@ -27,10 +27,11 @@ public class RoomSpecUseCase {
 
     /** Valeurs saisies ; toutes facultatives. */
     public record Input(Integer lengthMm, Integer widthMm, Integer ceilingHeightMm, Double usableAreaM2,
-                        Integer floorLoadKgM2, Double tempMinC, Double tempMaxC, Integer rhMinPct, Integer rhMaxPct) {
+                        Integer floorLoadKgM2, Double tempMinC, Double tempMaxC, Integer rhMinPct, Integer rhMaxPct,
+                        Double avgWeightKgPerMl) {
         static Input of(RoomSpec s) {
             return s == null ? null : new Input(s.lengthMm(), s.widthMm(), s.ceilingHeightMm(), s.usableAreaM2(),
-                s.floorLoadKgM2(), s.tempMinC(), s.tempMaxC(), s.rhMinPct(), s.rhMaxPct());
+                s.floorLoadKgM2(), s.tempMinC(), s.tempMaxC(), s.rhMinPct(), s.rhMaxPct(), s.avgWeightKgPerMl());
         }
     }
 
@@ -63,7 +64,8 @@ public class RoomSpecUseCase {
         TenantId tenant = TenantContext.current();
         StorageLocation room = requireRoom(tenant, storehouseId);
         RoomSpec saved = specs.save(new RoomSpec(room.id(), tenant, in.lengthMm(), in.widthMm(), in.ceilingHeightMm(),
-            in.usableAreaM2(), in.floorLoadKgM2(), in.tempMinC(), in.tempMaxC(), in.rhMinPct(), in.rhMaxPct()),
+            in.usableAreaM2(), in.floorLoadKgM2(), in.tempMinC(), in.tempMaxC(), in.rhMinPct(), in.rhMaxPct(),
+            in.avgWeightKgPerMl()),
             clock.instant());
         audit.record(AuditAction.ROOM_SPEC_SET, AuditTargetType.STORAGE_LOCATION, room.id(), actor,
             "path=%s spec=%s".formatted(room.path(), saved));

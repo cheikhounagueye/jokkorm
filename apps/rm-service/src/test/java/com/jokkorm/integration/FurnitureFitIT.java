@@ -226,7 +226,7 @@ class FurnitureFitIT {
         spec(b.shelf(), new PhysicalSpec(FurnitureType.FIXED_SHELVING, 400, 350, 2000, 2, "E1", 1, "A"));
 
         var view = as(() -> roomSpec.set(room.id(), new RoomSpecUseCase.Input(
-            1500, 1200, 2200, null, null, 18.0, 22.0, 45, 55), "it"));
+            1500, 1200, 2200, null, null, 18.0, 22.0, 45, 55, null), "it"));
 
         assertThat(view.spec().ceilingHeightMm()).isEqualTo(2200);
         assertThat(view.limits().footprintM2()).isEqualTo(0.8);        // 2 × 1 m × 0,4 m
@@ -241,7 +241,7 @@ class FurnitureFitIT {
     @DisplayName("Consignes climatiques incohérentes (min > max) refusées")
     void inconsistent_climate_is_refused() {
         assertThatThrownBy(() -> as(() -> roomSpec.set(room.id(), new RoomSpecUseCase.Input(
-            null, null, null, null, null, 25.0, 18.0, null, null), "it")))
+            null, null, null, null, null, 25.0, 18.0, null, null, null), "it")))
             .isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -45,10 +45,13 @@ public class RoomController {
     private final RoomEquipmentUseCase equipmentUseCase;
     private final com.jokkorm.application.physical.RoomSpecUseCase specUseCase;
     private final com.jokkorm.application.physical.GenerateShelvingUseCase generator;
+    private final com.jokkorm.application.physical.GetRoomIndicatorsUseCase indicators;
 
     public RoomController(GetRoomViewUseCase viewUseCase, RoomEquipmentUseCase equipmentUseCase,
                           com.jokkorm.application.physical.RoomSpecUseCase specUseCase,
-                          com.jokkorm.application.physical.GenerateShelvingUseCase generator) {
+                          com.jokkorm.application.physical.GenerateShelvingUseCase generator,
+                          com.jokkorm.application.physical.GetRoomIndicatorsUseCase indicators) {
+        this.indicators = indicators;
         this.specUseCase = specUseCase;
         this.generator = generator;
         this.viewUseCase = viewUseCase;
@@ -59,7 +62,16 @@ public class RoomController {
     @Operation(summary = "Structure complète d'un magasin avec boîtes, prêts actifs, équipements et occupation.")
     public RoomResponse view(@PathVariable UUID storehouseId) {
         boolean reveal = RoleContext.hasAny(UserRole.ARCHIVIST, UserRole.ARCHIVES_HEAD, UserRole.AUDITOR);
-        return RoomResponse.from(viewUseCase.execute(storehouseId), reveal);
+        var spec = specUseCase.get(storehouseId).spec();
+        return RoomResponse.from(viewUseCase.execute(storehouseId), reveal,
+            spec == null ? null : new RoomDims(spec.lengthMm(), spec.widthMm(), spec.ceilingHeightMm()));
+    }
+
+    @GetMapping("/{storehouseId}/indicators")
+    @Operation(summary = "Indicateurs en mètres linéaires : installés, occupés, par épi, capacité par format, "
+        + "densité, charge estimée, date de saturation (5T.D).")
+    public com.jokkorm.application.physical.GetRoomIndicatorsUseCase.Indicators indicators(@PathVariable UUID storehouseId) {
+        return indicators.execute(storehouseId);
     }
 
     @GetMapping("/{storehouseId}/spec")
@@ -144,9 +156,24 @@ public class RoomController {
 
     public record PositionDto(Node node, Occupancy occupancy, List<BoxDto> boxes) {}
 
-    public record RackDto(Node node, Occupancy occupancy, List<PositionDto> positions) {}
+    /** {@code clearanceMm} : hauteur libre propre à la tablette (null = celle de la travée). */
+    public record RackDto(Node node, Occupancy occupancy, List<PositionDto> positions, Integer clearanceMm) {}
 
-    public record ShelfDto(Node node, Occupancy occupancy, List<RackDto> racks) {}
+    /** Mobilier et épi de la travée (pattern 10, 5T.B) : la visite 3D place les épis à l'échelle. */
+    public record Furniture(com.jokkorm.domain.physical.FurnitureType furnitureType, Integer depthMm,
+                            Integer clearanceMm, Integer heightMm, Integer faces, String aisleCode,
+                            Integer aisleOrder, String aisleSide) {
+        static Furniture from(StorageLocation l) {
+            var s = l.spec();
+            return new Furniture(s.furnitureType(), s.depthMm(), s.clearanceMm(), s.heightMm(), s.faces(),
+                s.aisleCode(), s.aisleOrder(), s.aisleSide());
+        }
+    }
+
+    public record ShelfDto(Node node, Occupancy occupancy, List<RackDto> racks, Furniture furniture) {}
+
+    /** Dimensions réelles de la salle, si elles ont été mesurées. */
+    public record RoomDims(Integer lengthMm, Integer widthMm, Integer ceilingHeightMm) {}
 
     public record EquipmentResponse(UUID id, EquipmentKind kind, String label, double x, double z,
                                     boolean ceilingMounted, LocalDate lastInspectionOn,
@@ -160,9 +187,10 @@ public class RoomController {
 
     public record RoomResponse(Node room, Occupancy occupancy, int positions, int boxesOnLoan,
                                boolean detailsRevealed, List<ShelfDto> shelves,
-                               List<EquipmentResponse> equipment, int defaultSpineMm, int marginPercent) {
+                               List<EquipmentResponse> equipment, int defaultSpineMm, int marginPercent,
+                               RoomDims dims) {
 
-        static RoomResponse from(RoomView v, boolean reveal) {
+        static RoomResponse from(RoomView v, boolean reveal, RoomDims dims) {
             int[] positions = {0};
             int[] onLoan = {0};
             List<ShelfDto> shelves = v.shelves().stream().map(s -> new ShelfDto(
@@ -181,11 +209,11 @@ public class RoomController {
                                     c.state(), b.spineMm(), b.formatCode(),
                                     b.onLoan(), b.overdue(), b.expectedReturnAt());
                             }).toList());
-                    }).toList())).toList())).toList();
+                    }).toList(), r.rack().spec().clearanceMm())).toList(), Furniture.from(s.shelf()))).toList();
             List<EquipmentResponse> equipment = v.equipment().stream()
                 .map(e -> EquipmentResponse.from(e, v.today())).toList();
             return new RoomResponse(Node.from(v.storehouse()), Occupancy.from(v.occupancy()),
-                positions[0], onLoan[0], reveal, shelves, equipment, v.defaultSpineMm(), v.marginPercent());
+                positions[0], onLoan[0], reveal, shelves, equipment, v.defaultSpineMm(), v.marginPercent(), dims);
         }
     }
 }

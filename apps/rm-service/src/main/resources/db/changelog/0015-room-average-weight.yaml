@@ -1,0 +1,12 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0015-room-average-weight
+      author: jokkorm
+      comment: >
+        Phase 5T.D (pattern 10 § 3) — poids moyen au mètre linéaire, saisi par salle, pour la
+        charge au sol estimée. Aucune valeur par défaut : sans saisie, la charge n'est pas calculée.
+      changes:
+        - addColumn:
+            tableName: room_spec
+            columns:
+              - column: { name: avg_weight_kg_per_ml, type: "NUMERIC(6,1)" }
