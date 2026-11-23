@@ -18,6 +18,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param serviceToken       jeton du compte de service en mode service-token (jamais loggé)
  * @param timeoutMs          délai max d'un appel
  * @param locationField      champ de description Maarch où s'affiche l'état physique (tranche 2a)
+ * @param publicUrl          URL de Maarch telle que la voient les navigateurs des agents (lien
+ *                           « Ouvrir dans Maarch RM »). Par défaut {@code baseUrl} ; à préciser
+ *                           quand JokkoRM joint Maarch par une adresse interne (réseau Docker).
  */
 @ConfigurationProperties(prefix = "jokkorm.master.maarchrm")
 public record MaarchRmProperties(
@@ -28,7 +31,8 @@ public record MaarchRmProperties(
     String password,
     String serviceToken,
     int timeoutMs,
-    String locationField) {
+    String locationField,
+    String publicUrl) {
 
     public enum AuthMode { BASIC, SERVICE_TOKEN }
 
@@ -39,12 +43,16 @@ public record MaarchRmProperties(
         authMode = authMode == null || authMode.isBlank() ? "basic" : authMode.trim();
         if (timeoutMs <= 0) timeoutMs = 10_000;
         locationField = locationField == null || locationField.isBlank() ? "localisation_physique" : locationField.trim();
+        publicUrl = publicUrl == null || publicUrl.isBlank() ? baseUrl : publicUrl.trim().replaceAll("/+$", "");
+        if (!publicUrl.isEmpty() && !publicUrl.matches("(?i)https?://.+")) {
+            throw new IllegalArgumentException("jokkorm.master.maarchrm.public-url doit commencer par http:// ou https://");
+        }
     }
 
-    /** Sans champ de localisation précisé : {@code localisation_physique}. */
+    /** Sans champ de localisation ni URL publique précisés : valeurs par défaut. */
     public MaarchRmProperties(String baseUrl, String serviceClientToken, String authMode, String login,
                               String password, String serviceToken, int timeoutMs) {
-        this(baseUrl, serviceClientToken, authMode, login, password, serviceToken, timeoutMs, null);
+        this(baseUrl, serviceClientToken, authMode, login, password, serviceToken, timeoutMs, null, null);
     }
 
     public AuthMode mode() {

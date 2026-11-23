@@ -156,7 +156,7 @@ class RecordControllerTest {
             Cote.of("DMG/MP/2024/047"),
             "Marché public n° 2024-047",
             "finances/marches/2024",
-            10, "VERSEMENT_AN", false);
+            10, "VERSEMENT_AN", false, "https://ged.example/archive/42");
         when(getConsolidated.execute(eq(TENANT), any()))
             .thenReturn(new GetConsolidatedRecordUseCase.Result(local, masterView, MasterStatus.AVAILABLE));
 
@@ -170,7 +170,8 @@ class RecordControllerTest {
                     .andExpect(jsonPath("$.master.title").value("Marché public n° 2024-047"))
                     .andExpect(jsonPath("$.master.duaYears").value(10))
                     .andExpect(jsonPath("$.master.finalFate").value("VERSEMENT_AN"))
-                    .andExpect(jsonPath("$.master.legalHold").value(false));
+                    .andExpect(jsonPath("$.master.legalHold").value(false))
+                    .andExpect(jsonPath("$.master.masterPageUrl").value("https://ged.example/archive/42"));
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }

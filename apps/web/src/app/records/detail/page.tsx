@@ -221,7 +221,10 @@ function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
 
   return (
     <Card>
-      <PanelHeader icon="cloudUpload" tone="brand" title="Partie numérique" owner={`Détenue par ${name}`} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <PanelHeader icon="cloudUpload" tone="brand" title="Partie numérique" owner={`Détenue par ${name}`} />
+        <OpenInMasterLink url={data.masterPageUrl} name={name} />
+      </div>
       {source}
       <dl style={{ margin: 0 }}>
         {data.title && <InfoRow label="Titre"><span style={{ fontWeight: 600 }}>{data.title}</span></InfoRow>}
@@ -248,6 +251,27 @@ function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
         </InfoRow>
       </dl>
     </Card>
+  );
+}
+
+/**
+ * Ouvre la fiche complète chez le maître, dans un nouvel onglet. Le maître y applique ses
+ * propres droits : JokkoRM ne copie pas la description (nom, matricule, adresse…).
+ */
+function OpenInMasterLink({ url, name }: { url?: string | null; name: string }) {
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+      title={`Fiche complète dans ${name}, selon vos droits ${name}`}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px",
+        fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-md)", textDecoration: "none",
+        background: "var(--surface-card)", color: "var(--brand-600)",
+        border: "1px solid var(--border-strong)", whiteSpace: "nowrap",
+      }}>
+      <Icons.external size={16} weight="duotone" />
+      Ouvrir dans {name}
+    </a>
   );
 }
 

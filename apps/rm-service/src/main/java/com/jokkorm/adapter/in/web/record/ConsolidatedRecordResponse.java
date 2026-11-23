@@ -32,11 +32,12 @@ public record ConsolidatedRecordResponse(
         String classificationPath,
         Integer duaYears,
         String finalFate,
-        Boolean legalHold) {
+        Boolean legalHold,
+        String masterPageUrl) {
 
         public static Master from(MasterArchiveView view, MasterStatus status) {
             if (view == null) {
-                return new Master(status, null, null, null, null, null);
+                return new Master(status, null, null, null, null, null, null);
             }
             return new Master(
                 status,
@@ -44,7 +45,8 @@ public record ConsolidatedRecordResponse(
                 view.classificationPath(),
                 view.duaYears(),
                 view.finalFate(),
-                view.legalHold());
+                view.legalHold(),
+                view.masterPageUrl());
         }
     }
 }

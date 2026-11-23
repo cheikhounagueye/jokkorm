@@ -121,6 +121,8 @@ export interface ConsolidatedRecordResponse {
     duaYears?: number | null;
     finalFate?: string | null;
     legalHold?: boolean | null;
+    /** Page de l'archive dans l'interface du maître (ses propres droits s'y appliquent). */
+    masterPageUrl?: string | null;
   };
 }
 

@@ -12,6 +12,8 @@ Maître = Maarch RM (framework laabs), lu par son API JSON. Vérifié contre Maa
 | `JOKKORM_MAARCHRM_LOGIN` / `_PASSWORD` | Mode basic. | — |
 | `JOKKORM_MAARCHRM_SERVICE_TOKEN` | Mode service-token : jeton du compte de service, envoyé en cookie `LAABS-AUTH`. | — |
 | `JOKKORM_MAARCHRM_TIMEOUT_MS` | Délai max d'un appel. | `10000` |
+| `JOKKORM_MAARCHRM_LOCATION_FIELD` | Champ de description qui affiche l'état physique (tranche 2a). | `localisation_physique` |
+| `JOKKORM_MAARCHRM_PUBLIC_URL` | URL de Maarch vue par les navigateurs des agents (bouton « Ouvrir dans Maarch RM »). À préciser si JokkoRM joint Maarch par une adresse interne. | = `BASE_URL` |
 
 Puis router un tenant vers ce maître : `JOKKORM_MASTER_TENANTS_<TENANT>=maarchrm`.
 
@@ -37,6 +39,24 @@ Cote partagée (ADR-0004) = `archiverArchiveId`, l'identifiant attribué par le 
 | recherche : texte, service, typologie, dates, cote | `archiveName`, `originatorOrgRegNumber`, `profileReference`, `originatingStartDate/EndDate`, `archiverArchiveId` |
 
 Endpoints utilisés : `GET /recordsManagement/archives` (recherche, par cote) et `GET /recordsManagement/archives/Count` (contrôle au démarrage).
+
+## Ce que JokkoRM garde, et le bouton « Ouvrir dans Maarch RM »
+
+JokkoRM ne garde que la cote et la partie physique. Titre, plan de classement, DUA, sort final et
+gel sont **lus à chaque ouverture** de la fiche, jamais stockés. La description (nom complet,
+matricule, adresse…) n'est ni lue ni copiée : une seule version de chaque information, et pas de
+copie de données personnelles.
+
+Pour la voir, la fiche JokkoRM propose **« Ouvrir dans Maarch RM »**, qui ouvre dans un nouvel
+onglet `{PUBLIC_URL}/recordsManagement/archiveDescription/{archiveId}`. C'est Maarch qui décide :
+
+- **Vérifié le 2026-11-23** :
+  - un agent de la DRH connecté à Maarch voit la fiche ;
+  - un agent du Marketing voit « Accès refusé » ;
+  - sans session Maarch, l'écran de connexion s'affiche, puis l'accueil : il faut recliquer sur
+    le bouton.
+- `archiveId` est l'identifiant interne de Maarch, encodé dans l'adresse. Le lien n'apparaît que
+  s'il commence par `http(s)://`.
 
 ## Entrée des archives dans JokkoRM
 
@@ -82,6 +102,35 @@ Script : `~/maarchrm-test/jokkorm-setup-2a.sh` (sauvegarde de la base Maarch pri
    Ses écritures apparaissent sous son nom dans le journal Maarch.
 3. Jeton du compte → `JOKKORM_MAARCHRM_AUTH_MODE=service-token` +
    `JOKKORM_MAARCHRM_SERVICE_TOKEN`.
+
+## Montées de version de Maarch RM
+
+**Aucun fichier du code de Maarch n'est modifié** : vérifié le 2026-11-23 (dossier `custom/`
+vide, aucun écart de contenu avec le code livré). JokkoRM ajoute seulement deux éléments, par
+l'API d'administration officielle et supprimables depuis l'interface de Maarch : le champ
+`localisation_physique` et le compte de service `jokkorm`. Une nouvelle version de Maarch les
+reprend comme toute autre donnée.
+
+Ce qu'une nouvelle version peut casser, ce sont les comportements de Maarch sur lesquels
+JokkoRM s'appuie. Du plus au moins grave :
+
+1. **`PUT /recordsManagement/archives/Metadata` remplace toute la description.** Risque
+   silencieux : si une version ajoute un champ que JokkoRM ne renvoie pas, il serait vidé.
+2. **Particularités de laabs** : jeton dans le User-Agent, en-tête `X-Laabs-Exception`, cookie
+   `LAABS-AUTH`. Une rupture serait visible : l'adapter la traite en panne ou en refus.
+3. **Les routes lues** (`archives`, `archives/Count`, `archive/Metadata/{id}`) et la page
+   `archiveDescription/{archiveId}` du bouton (au pire : page d'erreur Maarch).
+
+**Après chaque montée de version, sur une archive de test :**
+
+1. Prendre l'empreinte de l'archive (champs de description et identifiants, sans données
+   personnelles).
+2. Faire un geste physique réel (déplacer sa boîte) et vérifier « À jour » sur la fiche JokkoRM.
+3. Reprendre l'empreinte : elle doit être identique, seul `localisation_physique` change.
+4. Cliquer sur « Ouvrir dans Maarch RM ».
+
+Les tests automatiques (`MasterSyncIT`, `MaarchRmSaeMasterAdapterTest`) tournent contre un faux
+Maarch (WireMock) : ils ne détectent pas un changement de comportement d'une nouvelle version.
 
 ## Tranche 2b (à étudier)
 

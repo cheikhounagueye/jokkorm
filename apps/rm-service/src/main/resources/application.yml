@@ -75,6 +75,9 @@ jokkorm:
       # Champ de description Maarch qui affiche l'état physique (à créer dans Maarch et à
       # ajouter, non immuable, aux profils d'archivage utilisés).
       location-field: ${JOKKORM_MAARCHRM_LOCATION_FIELD:localisation_physique}
+      # URL de Maarch vue par les navigateurs des agents (bouton « Ouvrir dans Maarch RM »).
+      # Vide = base-url. À préciser si JokkoRM joint Maarch par une adresse interne.
+      public-url: ${JOKKORM_MAARCHRM_PUBLIC_URL:}
     # File d'envoi de l'état physique vers le maître (tranche 2a).
     sync:
       worker-enabled: ${JOKKORM_MASTER_SYNC_WORKER_ENABLED:true}

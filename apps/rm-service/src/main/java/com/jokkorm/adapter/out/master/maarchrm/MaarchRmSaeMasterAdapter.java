@@ -120,7 +120,18 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
             classificationPath(a),
             durationYears(text(a, "retentionDuration")),
             finalFate(text(a, "finalDisposition")),
-            "frozen".equals(text(a, "status"))));
+            "frozen".equals(text(a, "status")),
+            pageUrl(text(a, "archiveId"))));
+    }
+
+    /**
+     * Page de l'archive dans l'interface Maarch (description, métadonnées de gestion, cycle de
+     * vie). Maarch y contrôle lui-même qui peut voir l'archive.
+     */
+    String pageUrl(String archiveId) {
+        if (archiveId == null || archiveId.isBlank()) return null;
+        String segment = URLEncoder.encode(archiveId, StandardCharsets.UTF_8).replace("+", "%20");
+        return config.publicUrl() + "/recordsManagement/archiveDescription/" + segment;
     }
 
     @Override

@@ -85,6 +85,31 @@ class MaarchRmSaeMasterAdapterTest {
         assertThat(view.duaYears()).isEqualTo(90);
         assertThat(view.finalFate()).isEqualTo("DESTRUCTION");
         assertThat(view.legalHold()).isFalse();
+        assertThat(view.masterPageUrl())
+            .isEqualTo(wireMock.baseUrl() + "/recordsManagement/archiveDescription/maarchRM_tnxjz4-6z99-jrdsfm");
+    }
+
+    @Test
+    @DisplayName("lien « Ouvrir dans Maarch RM » : adresse vue par les navigateurs, identifiant encodé")
+    void page_url_uses_public_url_and_encodes_id() {
+        adapter = new MaarchRmSaeMasterAdapter(new MaarchRmProperties(
+            "http://maarch:80", "service", "basic", "ccharles", "maarch", null, 2000, null,
+            "https://archives.acme.example/"), CLOCK);
+
+        assertThat(adapter.pageUrl("maarchRM_a b/c"))
+            .isEqualTo("https://archives.acme.example/recordsManagement/archiveDescription/maarchRM_a%20b%2Fc");
+        assertThat(adapter.pageUrl(null)).isNull();
+        assertThat(adapter.pageUrl(" ")).isNull();
+    }
+
+    @Test
+    @DisplayName("URL publique : par défaut l'URL du connecteur ; javascript: refusé au démarrage")
+    void public_url_defaults_and_rejects_non_http() {
+        assertThat(new MaarchRmProperties("http://localhost:8088/", "service", "basic", null, null, null, 0)
+            .publicUrl()).isEqualTo("http://localhost:8088");
+        assertThatThrownBy(() -> new MaarchRmProperties("http://maarch", "service", "basic", null, null, null, 0,
+            null, "javascript:alert(1)"))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
