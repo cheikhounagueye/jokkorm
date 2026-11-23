@@ -1,0 +1,45 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0012-position-capacity-room-equipment
+      author: jokkorm
+      comment: >
+        Phase 5S — visite 3D de la salle d'archives. Capacité en boîtes d'une
+        POSITION (null = valeur par défaut applicative) et équipements de sécurité
+        d'un magasin (extincteurs, détecteurs, issues, thermo-hygromètres) placés en
+        coordonnées normalisées 0..1 sur le plan de la salle.
+      changes:
+        - addColumn:
+            tableName: storage_location
+            columns:
+              - column: { name: capacity, type: INT }
+        - createTable:
+            tableName: room_equipment
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { nullable: false, foreignKeyName: fk_room_equipment_tenant, references: tenant(id) }
+              - column:
+                  name: storehouse_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_room_equipment_storehouse
+                    references: storage_location(id)
+                    deleteCascade: true
+              - column: { name: kind, type: VARCHAR(32), constraints: { nullable: false } }
+              - column: { name: label, type: VARCHAR(255) }
+              - column: { name: pos_x, type: DOUBLE PRECISION, constraints: { nullable: false } }
+              - column: { name: pos_z, type: DOUBLE PRECISION, constraints: { nullable: false } }
+              - column: { name: last_inspection_on, type: DATE }
+              - column: { name: next_inspection_on, type: DATE }
+              - column: { name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+        - createIndex:
+            tableName: room_equipment
+            indexName: ix_room_equipment_tenant_storehouse
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: storehouse_id }

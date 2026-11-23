@@ -21,6 +21,9 @@ public interface PhysicalContainerRepository {
     /** Boîtes rangées à une position donnée. */
     List<PhysicalContainer> findByPosition(TenantId tenant, UUID positionId);
 
+    /** Boîtes rangées sur un ensemble de positions, en une requête (vue d'une salle entière). */
+    List<PhysicalContainer> findByPositions(TenantId tenant, java.util.Collection<UUID> positionIds);
+
     Page<PhysicalContainer> findAll(TenantId tenant, PageRequest pageRequest);
 
     /**

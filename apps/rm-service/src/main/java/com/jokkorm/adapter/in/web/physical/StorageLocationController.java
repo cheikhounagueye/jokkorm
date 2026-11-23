@@ -51,6 +51,7 @@ public class StorageLocationController {
     private final DeleteStorageLocationUseCase deleteUseCase;
     private final ImportTopographyFromExcelUseCase importUseCase;
     private final TopographyExcelTemplateGenerator templateGenerator;
+    private final com.jokkorm.application.physical.SetPositionCapacityUseCase capacityUseCase;
 
     public StorageLocationController(
         CreateStorageLocationUseCase createUseCase,
@@ -58,13 +59,28 @@ public class StorageLocationController {
         UpdateStorageLocationUseCase updateUseCase,
         DeleteStorageLocationUseCase deleteUseCase,
         ImportTopographyFromExcelUseCase importUseCase,
-        TopographyExcelTemplateGenerator templateGenerator) {
+        TopographyExcelTemplateGenerator templateGenerator,
+        com.jokkorm.application.physical.SetPositionCapacityUseCase capacityUseCase) {
         this.createUseCase = createUseCase;
         this.treeUseCase = treeUseCase;
         this.updateUseCase = updateUseCase;
         this.deleteUseCase = deleteUseCase;
         this.importUseCase = importUseCase;
         this.templateGenerator = templateGenerator;
+        this.capacityUseCase = capacityUseCase;
+    }
+
+    public record CapacityRequest(Integer capacity) {}
+
+    @PutMapping("/{id}/capacity")
+    @Operation(
+        summary = "Fixe la capacité en boîtes d'une POSITION (null = valeur par défaut).",
+        description = "Refusé (409) si la position contient déjà plus de boîtes que la capacité demandée.")
+    public StorageLocationResponse setCapacity(
+        @PathVariable UUID id,
+        @RequestBody CapacityRequest request,
+        @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
+        return StorageLocationResponse.from(capacityUseCase.execute(id, request.capacity(), actor));
     }
 
     @GetMapping(value = "/import/template.xlsx",

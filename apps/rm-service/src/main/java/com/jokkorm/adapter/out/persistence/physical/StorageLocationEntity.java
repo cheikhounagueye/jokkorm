@@ -40,6 +40,9 @@ public class StorageLocationEntity {
     @Column(name = "path", length = 512, nullable = false)
     private String path;
 
+    @Column(name = "capacity")
+    private Integer capacity;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -61,6 +64,7 @@ public class StorageLocationEntity {
         e.label = d.label();
         e.parentId = d.parentId().orElse(null);
         e.path = d.path();
+        e.capacity = d.capacity().orElse(null);
         e.createdAt = d.createdAt();
         e.updatedAt = d.updatedAt();
         return e;
@@ -68,12 +72,13 @@ public class StorageLocationEntity {
 
     public StorageLocation toDomain() {
         return StorageLocation.rehydrate(
-            id, TenantId.of(tenantId), kind, code, label, parentId, path, createdAt, updatedAt);
+            id, TenantId.of(tenantId), kind, code, label, parentId, path, capacity, createdAt, updatedAt);
     }
 
     public void copyMutableStateFrom(StorageLocation d) {
         this.label = d.label();
         this.path = d.path();
+        this.capacity = d.capacity().orElse(null);
         this.updatedAt = d.updatedAt();
     }
 

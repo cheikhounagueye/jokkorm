@@ -75,6 +75,12 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "container-conflict", e.getMessage(), request);
     }
 
+    @ExceptionHandler(com.jokkorm.application.physical.RoomEquipmentNotFoundException.class)
+    public ResponseEntity<ProblemDetail> roomEquipmentNotFound(
+        com.jokkorm.application.physical.RoomEquipmentNotFoundException e, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "room-equipment-not-found", e.getMessage(), request);
+    }
+
     @ExceptionHandler(BatchNotFoundException.class)
     public ResponseEntity<ProblemDetail> batchNotFound(
         BatchNotFoundException e, HttpServletRequest request) {

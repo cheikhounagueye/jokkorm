@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/dev")
 @Tag(name = "Dev seeding", description = "Endpoints DEV UNIQUEMENT — désactivés en prod.")
-@ConditionalOnProperty(name = "jokkorm.dev.seeding-enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "jokkorm.dev.seeding-enabled", havingValue = "true")
 public class DevSeedingController {
 
     private static final Logger LOG = LoggerFactory.getLogger(DevSeedingController.class);

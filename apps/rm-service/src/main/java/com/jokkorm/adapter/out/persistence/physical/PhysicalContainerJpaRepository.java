@@ -18,6 +18,9 @@ public interface PhysicalContainerJpaRepository extends JpaRepository<PhysicalCo
 
     boolean existsByTenantIdAndBarcode(String tenantId, String barcode);
 
+    List<PhysicalContainerEntity> findByTenantIdAndPositionIdInOrderByBarcodeAsc(
+        String tenantId, java.util.Collection<UUID> positionIds);
+
     List<PhysicalContainerEntity> findByTenantIdAndPositionIdOrderByBarcodeAsc(
         String tenantId, UUID positionId);
 

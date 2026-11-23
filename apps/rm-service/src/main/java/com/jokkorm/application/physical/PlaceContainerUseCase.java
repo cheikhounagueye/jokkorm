@@ -49,6 +49,15 @@ public class PlaceContainerUseCase {
                     .formatted(position.kind(), position.path()));
         }
 
+        long alreadyThere = containers.findByPosition(tenant, positionId).stream()
+            .filter(c -> !c.id().equals(containerId))
+            .count();
+        if (alreadyThere >= position.effectiveCapacity()) {
+            throw new PhysicalContainerConflictException(
+                "Position %s pleine : %d/%d boîtes".formatted(
+                    position.path(), alreadyThere, position.effectiveCapacity()));
+        }
+
         container.placeAt(positionId, clock.instant());
         return containers.save(container);
     }

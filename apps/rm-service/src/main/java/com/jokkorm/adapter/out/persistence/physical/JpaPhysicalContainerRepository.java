@@ -57,6 +57,13 @@ public class JpaPhysicalContainerRepository implements PhysicalContainerReposito
     }
 
     @Override
+    public List<PhysicalContainer> findByPositions(TenantId tenant, java.util.Collection<UUID> positionIds) {
+        if (positionIds.isEmpty()) return List.of();
+        return jpa.findByTenantIdAndPositionIdInOrderByBarcodeAsc(tenant.value(), positionIds)
+            .stream().map(PhysicalContainerEntity::toDomain).toList();
+    }
+
+    @Override
     public List<PhysicalContainer> findByPosition(TenantId tenant, UUID positionId) {
         return jpa.findByTenantIdAndPositionIdOrderByBarcodeAsc(tenant.value(), positionId)
             .stream().map(PhysicalContainerEntity::toDomain).toList();

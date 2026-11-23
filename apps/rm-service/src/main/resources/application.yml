@@ -60,3 +60,6 @@ jokkorm:
   # See docs/adr/0003-sae-master-port.md.
   master:
     kind: ${JOKKORM_MASTER_KIND:noop}
+  dev:
+    # Endpoints /api/v1/dev/* (données de démo). Jamais en prod.
+    seeding-enabled: ${JOKKORM_DEV_SEEDING_ENABLED:false}
