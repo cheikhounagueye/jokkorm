@@ -1,5 +1,6 @@
 package com.jokkorm.adapter.out.master.demo;
 
+import com.jokkorm.adapter.out.master.MasterAdapter;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.master.AgentIdentity;
 import com.jokkorm.domain.master.ArchiveSearchCriteria;
@@ -20,7 +21,6 @@ import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -46,11 +46,11 @@ import org.springframework.stereotype.Component;
  *   <li><b>legalHold</b> — {@code true} si la cote contient {@code GEL}, {@code LITIGE} ou {@code HOLD}</li>
  * </ul>
  *
- * <p>Activation : {@code jokkorm.master.kind=demo}.
+ * <p>Activation : {@code jokkorm.master.kind=demo} ou {@code jokkorm.master.tenants.<tenant>=demo}.
+ * Le bean existe toujours ; seul le routage par tenant décide s'il sert (voir RoutingSaeMasterPort).
  */
 @Component
-@ConditionalOnProperty(name = "jokkorm.master.kind", havingValue = "demo")
-public class DemoSaeMasterAdapter implements SaeMasterPort {
+public class DemoSaeMasterAdapter implements MasterAdapter {
 
     private static final Logger LOG = LoggerFactory.getLogger(DemoSaeMasterAdapter.class);
 
@@ -67,10 +67,11 @@ public class DemoSaeMasterAdapter implements SaeMasterPort {
     private static final Prefix DEFAULT_PREFIX =
         new Prefix("Dossier",                 "non classé",                    10, "VERSEMENT_AN");
 
-    public DemoSaeMasterAdapter() {
-        LOG.warn("DemoSaeMasterAdapter active — master data is SYNTHETIC. Never use this adapter "
-            + "in production: show the demo banner in the UI when kind=demo.");
-    }
+    @Override
+    public String kind() { return "demo"; }
+
+    @Override
+    public String displayName() { return "Maître de démonstration"; }
 
     @Override
     public Optional<MasterArchiveView> fetchByCote(TenantId tenant, Cote cote) {

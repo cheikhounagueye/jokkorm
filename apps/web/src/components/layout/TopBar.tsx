@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Icons } from "@/lib/icons";
+import { SpaceSwitcher } from "./SpaceSwitcher";
 
 const { chevronDown: ChevronDown, moon: Moon, sun: Sun, user: User2 } = Icons;
 import {
@@ -32,6 +33,7 @@ export function TopBar() {
       padding: "0 24px",
       position: "sticky", top: 0, zIndex: 5,
     }}>
+      <SpaceSwitcher />
       <DarkModeToggle />
       <RoleDropdown />
     </header>

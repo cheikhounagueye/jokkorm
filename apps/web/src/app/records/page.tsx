@@ -19,7 +19,9 @@ import {
 import { listRecords, type PhysicalArchiveStatus } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
 import { Icons } from "@/lib/icons";
+import { useRole } from "../demandes/_components/useRole";
 import { ARCHIVE_STATUS, ARCHIVE_STATUSES } from "./_components/archiveStatus";
+import { ImportFromMaster } from "./_components/ImportFromMaster";
 
 type Filter = PhysicalArchiveStatus | "ALL";
 
@@ -29,6 +31,8 @@ export default function RecordsPage() {
   const [size] = useState(20);
   const [statusFilter, setStatusFilter] = useState<PhysicalArchiveStatus | undefined>();
   const [search, setSearch] = useState("");
+  const role = useRole();
+  const canImport = role === "ARCHIVIST" || role === "ARCHIVES_HEAD";
 
   const query = useQuery({
     queryKey: ["records", page, size, statusFilter ?? "all"],
@@ -83,6 +87,8 @@ export default function RecordsPage() {
           />
         </div>
       </Card>
+
+      {canImport && <ImportFromMaster />}
 
       {query.isError && (
         <div style={{ marginBottom: 16 }}>

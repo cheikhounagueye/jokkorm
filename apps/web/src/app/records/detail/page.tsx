@@ -23,6 +23,7 @@ import {
 } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
 import { Icons } from "@/lib/icons";
+import { masterLook, useMasterInfo } from "@/lib/useMasterInfo";
 import { ARCHIVE_STATUS } from "../_components/archiveStatus";
 
 /**
@@ -153,12 +154,27 @@ function PhysicalPanel({ data }: { data: RecordResponse }) {
   );
 }
 
+const FINAL_FATE: Record<string, string> = {
+  DESTRUCTION: "Destruction",
+  CONSERVATION: "Conservation définitive",
+  VERSEMENT_AN: "Versement aux Archives nationales",
+};
+
 function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
+  const info = useMasterInfo();
+  const name = info.data?.displayName ?? "la GED maître";
+  const look = masterLook(info.data?.kind);
+  const source = info.data && (
+    <div style={{ marginBottom: 12 }}>
+      <Badge tone={look.tone}>{look.source}</Badge>
+    </div>
+  );
   if (data.status !== "AVAILABLE") {
     return (
       <Card>
-        <PanelHeader icon="cloudUpload" tone="slate" title="Partie numérique" owner="Détenue par la GED maître" />
-        <MasterStatusBanner status={data.status} />
+        <PanelHeader icon="cloudUpload" tone="slate" title="Partie numérique" owner={`Détenue par ${name}`} />
+        {source}
+        <MasterStatusBanner status={data.status} kind={info.data?.kind} name={name} />
         <p style={{ marginTop: 14, color: "var(--text-secondary)", fontSize: 13 }}>
           Titre, plan de classement, DUA, sort final et gel contentieux sont <strong>détenus par la
           GED/SAE maître</strong>. La partie physique reste valide et utilisable seule.
@@ -169,7 +185,8 @@ function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
 
   return (
     <Card>
-      <PanelHeader icon="cloudUpload" tone="brand" title="Partie numérique" owner="Détenue par la GED maître (Maarch RM)" />
+      <PanelHeader icon="cloudUpload" tone="brand" title="Partie numérique" owner={`Détenue par ${name}`} />
+      {source}
       <dl style={{ margin: 0 }}>
         {data.title && <InfoRow label="Titre"><span style={{ fontWeight: 600 }}>{data.title}</span></InfoRow>}
         {data.classificationPath && (
@@ -187,7 +204,7 @@ function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
             </Badge>
           </InfoRow>
         )}
-        {data.finalFate && <InfoRow label="Sort final">{data.finalFate}</InfoRow>}
+        {data.finalFate && <InfoRow label="Sort final">{FINAL_FATE[data.finalFate] ?? data.finalFate}</InfoRow>}
         <InfoRow label="Gel contentieux">
           {data.legalHold
             ? <Badge tone="danger" icon={<Icons.locked size={12} weight="bold" />}>Actif · sortie bloquée</Badge>
@@ -198,18 +215,21 @@ function MasterPanel({ data }: { data: ConsolidatedRecordResponse["master"] }) {
   );
 }
 
-function MasterStatusBanner({ status }: { status: MasterStatus }) {
+function MasterStatusBanner({ status, kind, name }: { status: MasterStatus; kind?: string; name: string }) {
   if (status === "UNAVAILABLE") {
-    return (
-      <Alert tone="warning" title="Information maître indisponible">
-        Soit la cote n&apos;existe pas (encore) côté GED maître, soit le déploiement est en mode
-        {" "}<em>standalone</em> (adapter <code>noop</code>).
+    return kind === "noop" ? (
+      <Alert tone="warning" title="Pas de GED maître">
+        Cet espace fonctionne en autonome : JokkoRM ne gère que la partie physique.
+      </Alert>
+    ) : (
+      <Alert tone="warning" title={`Cote inconnue de ${name}`}>
+        Cette cote n&apos;existe pas (ou pas encore) dans {name}, ou le compte de connexion ne la voit pas.
       </Alert>
     );
   }
   return (
-    <Alert tone="danger" title="GED maître injoignable">
-      Erreur réseau, délai dépassé ou authentification : détails dans les logs backend.
+    <Alert tone="danger" title={`${name} injoignable`}>
+      Erreur réseau, délai dépassé ou authentification refusée : détails dans les journaux du backend.
       Réessayer dans quelques instants.
     </Alert>
   );

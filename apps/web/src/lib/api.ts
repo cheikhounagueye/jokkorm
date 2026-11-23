@@ -43,14 +43,28 @@ export interface ProblemDetail {
   fieldErrors?: Record<string, string>;
 }
 
-const DEFAULT_TENANT =
-  (typeof window !== "undefined" && window.localStorage.getItem("jokkorm.tenant")) ||
-  "demo";
+const TENANT_KEY = "jokkorm.tenant";
+const TENANT_SLUG = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
+
+/**
+ * Espace (tenant) courant. Dev : `?tenant=acme` dans l'URL le fixe, comme `?as=` pour le
+ * rôle. Chaque espace a son propre maître (ex. demo = maître de démo, acme = Maarch RM).
+ */
+export function currentTenant(): string {
+  if (typeof window === "undefined") return "demo";
+  const fromUrl = new URLSearchParams(window.location.search).get("tenant");
+  if (fromUrl && TENANT_SLUG.test(fromUrl)) window.localStorage.setItem(TENANT_KEY, fromUrl);
+  return window.localStorage.getItem(TENANT_KEY) || "demo";
+}
+
+export function setCurrentTenant(id: string) {
+  if (typeof window !== "undefined" && TENANT_SLUG.test(id)) window.localStorage.setItem(TENANT_KEY, id);
+}
 
 function headers(extra: Record<string, string> = {}): HeadersInit {
   return {
     "Accept": "application/json",
-    "X-Tenant-Id": DEFAULT_TENANT,
+    "X-Tenant-Id": currentTenant(),
     ...extra,
   };
 }
@@ -60,7 +74,7 @@ function headers(extra: Record<string, string> = {}): HeadersInit {
  * lien <a href> ne peuvent pas porter X-Tenant-Id : passer par ici puis un blob.
  */
 export async function fetchTenantBlob(url: string, signal?: AbortSignal): Promise<Blob> {
-  const response = await fetch(url, { headers: { "X-Tenant-Id": DEFAULT_TENANT }, signal });
+  const response = await fetch(url, { headers: { "X-Tenant-Id": currentTenant() }, signal });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.blob();
 }
@@ -461,6 +475,39 @@ export async function masterSearch(criteria: MasterSearchCriteria): Promise<Mast
     body: JSON.stringify(criteria),
   });
   return parse<MasterSearchResult[]>(response);
+}
+
+// ─── GED maître du tenant (ADR-0003) ──────────────────────────────────────────
+
+export type MasterKind = "noop" | "demo" | "maarch" | "maarchrm" | string;
+
+export interface MasterInfo { tenant: string; kind: MasterKind; displayName: string }
+
+/** Maître qui sert l'espace courant, ou celui d'un autre espace si `tenant` est donné. */
+export async function getMasterInfo(tenant?: string): Promise<MasterInfo> {
+  const h = tenant ? { "Accept": "application/json", "X-Tenant-Id": tenant } : headers();
+  const response = await fetch(`/api/v1/master/info`, { headers: h });
+  return parse<MasterInfo>(response);
+}
+
+export interface ImportFromMasterResponse { recordId: string; cote: string; title: string | null; created: boolean }
+
+/** L'archiviste fait entrer une archive du maître dans JokkoRM (idempotent). */
+export async function importFromMaster(cote: string): Promise<ImportFromMasterResponse> {
+  const response = await fetch(`/api/v1/master/import`, {
+    method: "POST",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ cote }),
+  });
+  return parse<ImportFromMasterResponse>(response);
+}
+
+export interface DevTenant { id: string; displayName: string }
+
+/** Dev uniquement : liste des espaces (404 si les endpoints de démo sont désactivés). */
+export async function listDevTenants(): Promise<DevTenant[]> {
+  const response = await fetch(`/api/v1/dev/tenants`, { headers: headers() });
+  return parse<DevTenant[]>(response);
 }
 
 // ─── Import Excel topographie (phase 5I) ──────────────────────────────────────

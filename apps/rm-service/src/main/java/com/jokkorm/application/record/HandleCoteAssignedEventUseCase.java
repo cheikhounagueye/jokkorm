@@ -32,6 +32,12 @@ public class HandleCoteAssignedEventUseCase {
 
     @Transactional
     public PhysicalArchiveRecord execute(TenantId tenant, Cote cote) {
+        return execute(tenant, cote, resolveActor());
+    }
+
+    /** Même enregistrement idempotent, avec l'auteur réel (archiviste qui importe depuis le maître). */
+    @Transactional
+    public PhysicalArchiveRecord execute(TenantId tenant, Cote cote, String actor) {
         var existing = repository.findByCote(tenant, cote);
         if (existing.isPresent()) {
             return existing.get();
@@ -42,7 +48,7 @@ public class HandleCoteAssignedEventUseCase {
             AuditAction.COTE_ASSIGNED,
             AuditTargetType.PHYSICAL_ARCHIVE_RECORD,
             saved.id(),
-            resolveActor(),
+            actor,
             "cote=" + cote.value());
         return saved;
     }

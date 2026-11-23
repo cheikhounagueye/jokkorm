@@ -1,5 +1,6 @@
 package com.jokkorm.adapter.out.master.noop;
 
+import com.jokkorm.adapter.out.master.MasterAdapter;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.master.AgentIdentity;
 import com.jokkorm.domain.master.DestructionAttestation;
@@ -11,7 +12,6 @@ import com.jokkorm.domain.record.Cote;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,10 +24,15 @@ import org.springframework.stereotype.Component;
  * <p>Voir ADR-0003 et docs/adapters/README.md.
  */
 @Component
-@ConditionalOnProperty(name = "jokkorm.master.kind", havingValue = "noop", matchIfMissing = true)
-public class NoopSaeMasterAdapter implements SaeMasterPort {
+public class NoopSaeMasterAdapter implements MasterAdapter {
 
     private static final Logger LOG = LoggerFactory.getLogger(NoopSaeMasterAdapter.class);
+
+    @Override
+    public String kind() { return "noop"; }
+
+    @Override
+    public String displayName() { return "Aucun maître (autonome)"; }
 
     @Override
     public Optional<MasterArchiveView> fetchByCote(TenantId tenant, Cote cote) {

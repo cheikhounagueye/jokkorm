@@ -125,6 +125,13 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "access-denied", e.getMessage(), request);
     }
 
+    @ExceptionHandler(com.jokkorm.domain.master.MasterUnreachableException.class)
+    public ResponseEntity<ProblemDetail> masterUnreachable(
+        com.jokkorm.domain.master.MasterUnreachableException e, HttpServletRequest request) {
+        // Le maître (Maarch RM…) n'a pas répondu de façon exploitable : 502, jamais « inconnue ».
+        return problem(HttpStatus.BAD_GATEWAY, "master-unreachable", e.getMessage(), request);
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ProblemDetail> illegalState(IllegalStateException e, HttpServletRequest request) {
         // Les transitions de statut invalides (destruction d'un FROZEN, …) remontent ici

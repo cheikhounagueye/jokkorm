@@ -1,0 +1,24 @@
+[
+  {
+    "archiveId": "maarchRM_tnxjz4-6z99-jrdsfm",
+    "archiveName": "CONNU",
+    "archiverArchiveId": "FR094080_2026_AE0002",
+    "originatorArchiveId": "123",
+    "originatorOrgRegNumber": "DIP",
+    "archiverOrgRegNumber": "GIC",
+    "archivalProfileReference": "DOSIP",
+    "retentionRuleCode": "DIP",
+    "retentionDuration": "P90Y",
+    "retentionStartDate": "2026-11-04",
+    "disposalDate": "2116-11-04",
+    "finalDisposition": "destruction",
+    "status": "preserved",
+    "filePlanPosition": null,
+    "parentArchiveId": null,
+    "depositDate": "2026-11-03T14:23:28+00:00",
+    "originatingDate": "2026-11-04",
+    "accessRuleCode": null,
+    "accessRuleComDate": null,
+    "descriptionClass": null
+  }
+]

@@ -56,10 +56,22 @@ logging:
 
 jokkorm:
   # Which SAE master this instance is paired with.
-  # Supported values: noop (standalone), maarch, generic.
+  # See RoutingSaeMasterPort : un maître par tenant, défaut = kind.
   # See docs/adr/0003-sae-master-port.md.
   master:
+    # Maître par défaut des tenants : noop (autonome), demo, maarch (Courrier), maarchrm.
     kind: ${JOKKORM_MASTER_KIND:noop}
+    # Maître par tenant (map jokkorm.master.tenants.<tenant>), en env :
+    # JOKKORM_MASTER_TENANTS_ACME=maarchrm. Un seul maître par tenant, pas de repli.
+    # Maarch RM 2.x (API JSON laabs). Le connecteur n'existe que si l'URL est renseignée.
+    maarchrm:
+      base-url: ${JOKKORM_MAARCHRM_BASE_URL:}
+      service-client-token: ${JOKKORM_MAARCHRM_SERVICE_CLIENT_TOKEN:service}
+      auth-mode: ${JOKKORM_MAARCHRM_AUTH_MODE:basic}
+      login: ${JOKKORM_MAARCHRM_LOGIN:}
+      password: ${JOKKORM_MAARCHRM_PASSWORD:}
+      service-token: ${JOKKORM_MAARCHRM_SERVICE_TOKEN:}
+      timeout-ms: ${JOKKORM_MAARCHRM_TIMEOUT_MS:10000}
   physical:
     # Pattern 10 : longueur de tablette par défaut et marge de manipulation (validés 2026-11-23).
     default-tablette-length-mm: ${JOKKORM_DEFAULT_TABLETTE_LENGTH_MM:1000}

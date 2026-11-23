@@ -2,6 +2,7 @@ package com.jokkorm.adapter.out.master.maarch;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jokkorm.adapter.out.master.MasterAdapter;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.master.AgentIdentity;
 import com.jokkorm.domain.master.DestructionAttestation;
@@ -57,7 +58,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(name = "jokkorm.master.kind", havingValue = "maarch")
 @EnableConfigurationProperties(MaarchProperties.class)
-public class MaarchSaeMasterAdapter implements SaeMasterPort {
+public class MaarchSaeMasterAdapter implements MasterAdapter {
 
     private static final Logger LOG = LoggerFactory.getLogger(MaarchSaeMasterAdapter.class);
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -76,6 +77,13 @@ public class MaarchSaeMasterAdapter implements SaeMasterPort {
                 "jokkorm.master.kind=maarch but jokkorm.master.maarch.base-url is empty");
         }
     }
+
+    @Override
+    public String kind() { return "maarch"; }
+
+    /** Maarch Courrier (API /rest/resources), pas Maarch RM : voir le kind « maarchrm ». */
+    @Override
+    public String displayName() { return "Maarch Courrier"; }
 
     @Override
     public Optional<MasterArchiveView> fetchByCote(TenantId tenant, Cote cote) {
