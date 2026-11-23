@@ -14,6 +14,7 @@ import {
 import type { AccessRequestResponse } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
 import { Icons, type IconName } from "@/lib/icons";
+import { RequestProgress } from "./FourEyes";
 
 /** Ligne d'une demande dans une liste (type, demandeur, motif, à droite un contenu libre). */
 export function RequestRow({
@@ -96,7 +97,8 @@ export function QueueHeader({
 export function DetailHeader({ r }: { r: AccessRequestResponse }) {
   const meta = REQUEST_TYPE[r.type];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+    <div style={{ marginBottom: 18 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
       <IconTile name={meta.icon} tone={meta.tone} size={48} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -106,6 +108,13 @@ export function DetailHeader({ r }: { r: AccessRequestResponse }) {
         <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>{r.requesterDept ?? "Service non précisé"}</div>
       </div>
       <StatusBadge meta={ACCESS_STATUS[r.status]} />
+    </div>
+    <div style={{
+      display: "flex", justifyContent: "center", padding: "12px 8px 10px",
+      background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)",
+    }}>
+      <RequestProgress r={r} labels />
+    </div>
     </div>
   );
 }

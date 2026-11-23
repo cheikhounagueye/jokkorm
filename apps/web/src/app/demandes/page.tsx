@@ -18,6 +18,7 @@ import {
   type AccessRequestResponse,
 } from "@/lib/api";
 import { Icons, type IconName } from "@/lib/icons";
+import { FourEyesBanner, RequestProgress } from "./_components/FourEyes";
 import { QueueHeader, RequestRow } from "./_components/RequestBits";
 import { useRole } from "./_components/useRole";
 
@@ -46,6 +47,8 @@ export default function DemandesPage() {
           </Link>
         )}
       />
+
+      <FourEyesBanner role={role} />
 
       {role === "REQUESTER" && (
         <Queue icon="inbox" title="Mes demandes" query={mine}
@@ -115,7 +118,12 @@ function Queue({
         </div>
       )}
       {items.map((r) => (
-        <RequestRow key={r.id} r={r} right={<StatusBadge meta={ACCESS_STATUS[r.status]} />} />
+        <RequestRow key={r.id} r={r} right={
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <RequestProgress r={r} />
+            <StatusBadge meta={ACCESS_STATUS[r.status]} />
+          </div>
+        } />
       ))}
     </Card>
   );
