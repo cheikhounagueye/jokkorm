@@ -250,3 +250,40 @@ Les seuils chiffrés non cités ci-dessus (climat, poids au ml, marges) restent 
 
 Les migrations sont **additives** (nouvelle migration 0013 et suivantes, la 0012 déjà
 appliquée n'est pas modifiée) et la phase 5S reste fonctionnelle à chaque étape.
+
+## 9. Décisions de mise en œuvre (5T.B, validées le 2026-11-23)
+
+Le texte ci-dessus laissait plusieurs points ouverts. Voici ce qui a été retenu.
+
+1. **Deux hauteurs sur la travée.** La *hauteur libre par tablette* (espace entre deux
+   tablettes) sert au contrôle des boîtes et se transmet aux tablettes. La *hauteur du meuble*
+   (hors tout) sert seulement à l'avertissement de plafond.
+2. **Le nombre de tablettes n'est pas saisi** : il est compté dans l'arbre, pour qu'il n'y ait
+   jamais deux chiffres contradictoires.
+3. **La profondeur est contrôlée au rangement**, comme la longueur et la hauteur (§ 2.2 :
+   « doit tenir dans la profondeur de tablette »).
+4. **L'épi n'est qu'une adresse.** Code, rang et face A/B s'affichent (« Salle A · Épi 3 ·
+   rang 2 · face A · Travée T12 ») ; chemins et codes-barres ne changent pas.
+5. **Non mesuré = non contrôlé.** Aucune valeur par défaut de hauteur ou de profondeur : les
+   salles existantes continuent de fonctionner tant qu'on ne les mesure pas.
+6. **Les avertissements de salle ne bloquent jamais** (emprise estimée, plafond, épi plus long
+   que la salle, doublon d'épi/rang/face).
+7. **Aucune valeur préremplie** pour le climat, la charge au sol ou les dimensions (§ 6).
+8. **Gel et numérisation** : simple avertissement (rien ne sort de la salle) ; prêt et
+   extraction restent bloqués par un gel.
+
+### Convention « double face » (5T.C, 5T.D)
+
+Un épi double face porte **une travée par rang et par face**. Les deux travées d'un même rang
+ont le même code d'épi et le même rang, l'une face A, l'autre face B, et toutes deux
+`faces = 2`. La **profondeur saisie est celle d'une face**, l'espace que voit une boîte.
+
+```
+            face A  →  T01   T02   T03   T04   T05      ← l'archiviste se tient dans l'allée A
+  Épi E1   ═══════════════════════════════════════
+            face B  →  T06   T07   T08   T09   T10      ← allée B
+             rang :     1     2     3     4     5
+```
+
+Ainsi l'emprise au sol s'additionne sans double compte (A + B), et le contrôle de profondeur
+reste exact. Exemple de générateur : 2 épis × 5 rangs × 2 faces = **20 travées**.

@@ -14,5 +14,6 @@ JokkoRM n'invente pas un modèle fonctionnel : il applique un pattern déjà pr�
 | [08 — Recherche métier côté user, barcode côté archiviste](08-recherche-metier-vs-barcode-technique.md) | Formulaire critères métier, pas de barcode côté user (confidentialité), résolution cote→container en coulisse |
 | [09 — Design system + salle d'archives virtuelle](09-design-system-salle-archives.md) | Direction UI : Lucide icons, tokens cohérents, dark mode, vue isométrique du magasin, drill-down salle → travée → position |
 | [10 — Mètres linéaires, reprise de l'existant, tableaux de gestion](10-dimensionnement-reprise-tableaux-de-gestion.md) | Capacité en longueur (formats de boîtes, mobilier, salle), reprise en deux passes, fonds en vrac, propriété des tableaux de gestion, normes ISO 11799 / NF Z40-350 / ISO 15489 |
+| [11 — Droits : le contenu chez le maître, les gestes chez JokkoRM](11-droits-contenu-et-gestes.md) | Pas de copie des droits ; un geste qui touche au contenu exige les deux autorisations ; maître muet = refus |
 
 Ces pages sont destinées à un lecteur archiviste ou DSI, pas à un développeur. Pour la vue API, voir `docs/api/`. Pour les adapters, voir `docs/adapters/`.
