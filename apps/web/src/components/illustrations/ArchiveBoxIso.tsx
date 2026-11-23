@@ -4,7 +4,8 @@
  */
 export type BoxFinish = "kraft" | "sealed" | "loaned" | "empty" | "destroyed" | "stale";
 
-const FINISHES: Record<BoxFinish, { top: string; left: string; right: string; label: string }> = {
+/** Couleurs des faces, partagées avec la salle 3D pour que les boîtes 2D et 3D se ressemblent. */
+export const BOX_FINISHES: Record<BoxFinish, { top: string; left: string; right: string; label: string }> = {
   kraft:     { top: "#e9cb9d", left: "#c99b62", right: "#a77942", label: "#fbf6ec" },
   sealed:    { top: "#f5d27a", left: "#d9a531", right: "#b5841c", label: "#fff8e1" },
   loaned:    { top: "#9fb4ff", left: "#6f88e6", right: "#4d66c4", label: "#eef2ff" },
@@ -22,7 +23,7 @@ export function ArchiveBoxIso({
   finish?: BoxFinish;
   title?: string;
 }) {
-  const f = FINISHES[finish];
+  const f = BOX_FINISHES[finish];
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={title ?? "Boîte d'archives"}>
       {title && <title>{title}</title>}

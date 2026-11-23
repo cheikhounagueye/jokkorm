@@ -11,6 +11,7 @@ import {
 import { Icons } from "@/lib/icons";
 import { CreateChildForm } from "./CreateChildForm";
 import { KIND_META } from "./kinds";
+import { LinkButton } from "./LinkButton";
 import { PositionShelf } from "./PositionShelf";
 
 export function NodePanel({
@@ -73,6 +74,11 @@ export function NodePanel({
           </div>
           {mode === "view" && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {loc.kind === "STOREHOUSE" && (
+                <LinkButton href={`/magasin/visite?room=${loc.id}`} variant="primary" icon={<Icons.virtualTour size={14} />}>
+                  Visite 3D
+                </LinkButton>
+              )}
               {childMeta && (
                 <Button icon={<Icons.add size={14} weight="bold" />} onClick={() => setMode("create")}>
                   Ajouter {childMeta.label.toLowerCase()}

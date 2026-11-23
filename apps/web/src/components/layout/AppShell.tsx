@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/demandes",     label: "Demandes",         icon: "requests",    section: "Travail" },
   { href: "/prets",        label: "Prêts",            icon: "loans",       section: "Travail" },
   { href: "/magasin",      label: "Salle d'archives", icon: "archiveRoom", section: "Gestion" },
+  { href: "/magasin/visite", label: "Visite 3D",      icon: "virtualTour", section: "Gestion" },
   { href: "/magasin/lots", label: "Lots de boîtes",   icon: "batches",     section: "Gestion" },
   { href: "/records",      label: "Archives",         icon: "archives",    section: "Référence" },
 ];

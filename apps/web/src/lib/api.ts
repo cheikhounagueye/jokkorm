@@ -137,6 +137,8 @@ export interface StorageLocationResponse {
   label: string | null;
   parentId: string | null;
   path: string;
+  /** Boîtes acceptées (POSITION uniquement), null pour les autres niveaux. */
+  capacity: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -651,4 +653,59 @@ export async function downloadBatchLabelsPdf(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ─── Salle d'archives / visite 3D (phase 5S) ───────────────────────────────────
+
+export type EquipmentKind = "FIRE_EXTINGUISHER" | "SMOKE_DETECTOR" | "EMERGENCY_EXIT" | "THERMO_HYGROMETER";
+
+export interface Occupancy { boxes: number; capacity: number; rate: number }
+export interface RoomNode { id: string; code: string; label: string | null; path: string }
+
+export interface RoomBox {
+  id: string;
+  /** null hors archiviste / responsable / auditeur (pattern 08). */
+  barcode: string | null;
+  label: string | null;
+  state: ContainerState;
+  onLoan: boolean;
+  overdue: boolean;
+  expectedReturnAt: string | null;
+}
+export interface RoomPosition { node: RoomNode; occupancy: Occupancy; boxes: RoomBox[] }
+export interface RoomRack { node: RoomNode; occupancy: Occupancy; positions: RoomPosition[] }
+export interface RoomShelf { node: RoomNode; occupancy: Occupancy; racks: RoomRack[] }
+export interface RoomEquipment {
+  id: string;
+  kind: EquipmentKind;
+  label: string | null;
+  x: number;
+  z: number;
+  ceilingMounted: boolean;
+  lastInspectionOn: string | null;
+  nextInspectionOn: string | null;
+  inspectionOverdue: boolean;
+}
+export interface RoomResponse {
+  room: RoomNode;
+  occupancy: Occupancy;
+  positions: number;
+  boxesOnLoan: number;
+  detailsRevealed: boolean;
+  shelves: RoomShelf[];
+  equipment: RoomEquipment[];
+}
+
+export async function getRoom(storehouseId: string): Promise<RoomResponse> {
+  const response = await fetch(`/api/v1/physical/rooms/${storehouseId}`, { headers: accessHeaders() });
+  return parse<RoomResponse>(response);
+}
+
+export async function setPositionCapacity(positionId: string, capacity: number | null): Promise<StorageLocationResponse> {
+  const response = await fetch(`/api/v1/physical/locations/${positionId}/capacity`, {
+    method: "PUT",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ capacity }),
+  });
+  return parse<StorageLocationResponse>(response);
 }
