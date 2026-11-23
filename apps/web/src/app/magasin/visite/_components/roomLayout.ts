@@ -2,8 +2,10 @@
  * Disposition 3D d'une salle, calculée à partir de la structure renvoyée par l'API.
  * Fonction pure, sans dépendance à three.js : testable et déterministe.
  *
- * Le modèle ne stocke ni rangées ni allées : on regroupe les travées (triées par code)
- * en rangées, chaque rangée fait face à l'entrée et une allée court devant elle.
+ * Avec des épis (pattern 10, 5T.B/D) : une rangée par épi, face A tournée vers l'entrée,
+ * face B dos à dos derrière elle, travées alignées par rang, profondeur et hauteur libre
+ * mesurées, salle et plafond à leurs dimensions réelles quand elles sont saisies.
+ * Sans épi : les travées (triées par code) sont regroupées en rangées comme avant.
  * Repère : x de l'ouest (0) à l'est, z de l'entrée (0) vers le fond, y vers le haut, en mètres.
  */
 import type {
@@ -41,6 +43,10 @@ export const DIM = {
 export interface LayoutShelf {
   shelf: RoomShelf;
   row: number;
+  /** Profondeur du meuble (m). */
+  depth: number;
+  /** 1 : ouvert vers l'entrée (face A) ; -1 : ouvert vers le fond (face B, dos à dos). */
+  facing: 1 | -1;
   x0: number;
   x1: number;
   zFront: number;
@@ -56,6 +62,7 @@ export interface LayoutSlot {
   x1: number;
   y: number;
   zFront: number;
+  depth: number;
 }
 
 export interface LayoutBox {
@@ -64,10 +71,13 @@ export interface LayoutBox {
   /** Largeur visible en m (dos de la boîte moins le jeu entre boîtes). */
   width: number;
   slot: LayoutSlot;
+  facing: 1 | -1;
 }
 
 export interface LayoutAisle {
   index: number;
+  /** « Épi E1 » ou « Allée 2 ». */
+  label: string;
   z: number;
   x0: number;
   x1: number;
@@ -156,70 +166,124 @@ export function percent(o: Occupancy): number {
   return Math.round(o.rate * 100);
 }
 
-export function computeRoomLayout(room: RoomResponse): RoomLayout {
-  const perRow = shelvesPerRow(room.shelves.length);
-  const rows: RoomShelf[][] = [];
-  room.shelves.forEach((s, i) => {
-    const r = Math.floor(i / perRow);
-    (rows[r] ??= []).push(s);
-  });
+/** Une rangée à poser : colonnes alignées par rang, face A devant, face B derrière. */
+interface PlannedRow {
+  label: string;
+  front: (RoomShelf | null)[];
+  back: (RoomShelf | null)[];
+}
 
-  const rowWidths = rows.map((row) =>
-    row.reduce((w, s) => w + shelfWidth(s), 0) + DIM.shelfGap * Math.max(0, row.length - 1));
-  const width = Math.max(6, ...rowWidths.map((w) => w + 2 * DIM.sideMargin));
-  const rowCount = Math.max(rows.length, 1);
-  const depth = DIM.entrance + (rowCount - 1) * (DIM.unitDepth + DIM.aisle) + DIM.unitDepth + DIM.backMargin;
-  const height = DIM.roomH;
+function unitDepth(s: RoomShelf | null): number {
+  return s?.furniture?.depthMm ? s.furniture.depthMm * MM : DIM.unitDepth;
+}
+
+/** E2 avant E10. */
+function aisleOrderKey(code: string): string {
+  const d = code.replace(/\D/g, "");
+  return d ? code.replace(/\d/g, "") + d.padStart(6, "0") : code;
+}
+
+function planRows(room: RoomResponse): PlannedRow[] {
+  const withAisle = room.shelves.filter((s) => s.furniture?.aisleCode);
+  const without = room.shelves.filter((s) => !s.furniture?.aisleCode);
+  const rows: PlannedRow[] = [];
+  const groups = new Map<string, RoomShelf[]>();
+  for (const s of withAisle) {
+    const k = s.furniture.aisleCode!;
+    (groups.get(k) ?? groups.set(k, []).get(k)!).push(s);
+  }
+  for (const code of [...groups.keys()].sort((a, b) => aisleOrderKey(a).localeCompare(aisleOrderKey(b)))) {
+    const list = groups.get(code)!;
+    const rankOf = (s: RoomShelf, i: number) => s.furniture.aisleOrder ?? i + 1;
+    const a = list.filter((s) => s.furniture.aisleSide !== "B").sort((x, y) => (x.furniture.aisleOrder ?? 0) - (y.furniture.aisleOrder ?? 0) || x.node.code.localeCompare(y.node.code));
+    const b = list.filter((s) => s.furniture.aisleSide === "B").sort((x, y) => (x.furniture.aisleOrder ?? 0) - (y.furniture.aisleOrder ?? 0) || x.node.code.localeCompare(y.node.code));
+    const ranks = [...new Set([...a.map(rankOf), ...b.map(rankOf)])].sort((x, y) => x - y);
+    const at = (side: RoomShelf[], r: number) => side.find((s, i) => rankOf(s, i) === r) ?? null;
+    rows.push({ label: `Épi ${code}`, front: ranks.map((r) => at(a, r)), back: b.length ? ranks.map((r) => at(b, r)) : [] });
+  }
+  const perRow = shelvesPerRow(without.length);
+  for (let i = 0; i < without.length; i += perRow) {
+    rows.push({ label: rows.length ? "Sans épi" : `Allée ${rows.length + 1}`, front: without.slice(i, i + perRow), back: [] });
+  }
+  if (!withAisle.length) rows.forEach((r, i) => { r.label = `Allée ${i + 1}`; });
+  return rows;
+}
+
+export function computeRoomLayout(room: RoomResponse): RoomLayout {
+  const rows = planRows(room);
+  const colWidths = rows.map((row) => row.front.map((f, k) =>
+    Math.max(f ? shelfWidth(f) : 0, row.back[k] ? shelfWidth(row.back[k]!) : 0, 0.3)));
+  const rowWidths = colWidths.map((cols) => cols.reduce((w, c) => w + c, 0) + DIM.shelfGap * Math.max(0, cols.length - 1));
+  const dims = room.dims;
+  const width = Math.max(6, ...rowWidths.map((w) => w + 2 * DIM.sideMargin), dims?.widthMm ? dims.widthMm * MM : 0);
+  const height = dims?.ceilingHeightMm ? dims.ceilingHeightMm * MM : DIM.roomH;
 
   const shelves: LayoutShelf[] = [];
   const slots: LayoutSlot[] = [];
   const boxes: LayoutBox[] = [];
   const aisles: LayoutAisle[] = [];
 
-  rows.forEach((row, r) => {
-    const zFront = DIM.entrance + r * (DIM.unitDepth + DIM.aisle);
-    let x = (width - rowWidths[r]) / 2;
-
-    for (const shelf of row) {
-      const w = shelfWidth(shelf);
-      const levels = Math.max(shelf.racks.length, 1);
-      const boardYs = Array.from({ length: levels }, (_, i) => DIM.firstLevelY + i * DIM.levelH);
-      const shelfHeight = DIM.firstLevelY + levels * DIM.levelH + 0.08;
-      shelves.push({ shelf, row: r, x0: x, x1: x + w, zFront, height: shelfHeight, boardYs });
-
-      shelf.racks.forEach((rack, level) => {
-        const y = boardYs[level];
-        let px = x + DIM.uprightW;
-        for (const position of rack.positions) {
-          const pw = positionWidth(position);
-          const slot: LayoutSlot = { position, shelf, rack, x0: px, x1: px + pw, y, zFront };
-          slots.push(slot);
-          // Les boîtes se suivent sur la tablette, chacune aussi large que son dos.
-          let bx = px;
-          for (const box of position.boxes) {
-            const w = box.spineMm * MM;
-            const visible = Math.max(0.02, w - DIM.boxGap);
-            const cy = y + DIM.boardT / 2 + DIM.boxH / 2;
-            const cz = zFront + 0.03 + DIM.boxD / 2;
-            boxes.push({ box, center: [bx + DIM.boxGap / 2 + visible / 2, cy, cz], width: visible, slot });
-            bx += w;
-          }
-          px += pw;
-        }
-      });
-      x += w + DIM.shelfGap;
+  const place = (shelf: RoomShelf, row: number, x: number, zFront: number, depth: number, facing: 1 | -1) => {
+    const w = shelfWidth(shelf);
+    const levels = Math.max(shelf.racks.length, 1);
+    const clearanceOf = (rack: RoomRack | undefined) =>
+      (rack?.clearanceMm ?? shelf.furniture?.clearanceMm) ? (rack?.clearanceMm ?? shelf.furniture.clearanceMm)! * MM : DIM.levelH - DIM.boardT;
+    const boardYs: number[] = [];
+    let y = DIM.firstLevelY;
+    for (let i = 0; i < levels; i++) {
+      boardYs.push(y);
+      y += clearanceOf(shelf.racks[i]) + DIM.boardT;
     }
+    const measured = shelf.furniture?.heightMm ? shelf.furniture.heightMm * MM : 0;
+    const shelfHeight = Math.max(y + 0.06, measured);
+    shelves.push({ shelf, row, depth, facing, x0: x, x1: x + w, zFront, height: shelfHeight, boardYs });
 
-    const aisleZ = r === 0 ? zFront - DIM.entrance * 0.45 : zFront - DIM.aisle / 2;
+    shelf.racks.forEach((rack, level) => {
+      const by = boardYs[level];
+      let px = x + DIM.uprightW;
+      for (const position of rack.positions) {
+        const pw = positionWidth(position);
+        const slot: LayoutSlot = { position, shelf, rack, x0: px, x1: px + pw, y: by, zFront, depth };
+        slots.push(slot);
+        // Les boîtes se suivent sur la tablette, chacune aussi large que son dos, côté allée.
+        let bx = px;
+        for (const box of position.boxes) {
+          const bw = box.spineMm * MM;
+          const visible = Math.max(0.02, bw - DIM.boxGap);
+          const cy = by + DIM.boardT / 2 + DIM.boxH / 2;
+          const cz = facing === 1 ? zFront + 0.03 + DIM.boxD / 2 : zFront + depth - 0.03 - DIM.boxD / 2;
+          boxes.push({ box, center: [bx + DIM.boxGap / 2 + visible / 2, cy, cz], width: visible, slot, facing });
+          bx += bw;
+        }
+        px += pw;
+      }
+    });
+  };
+
+  let z = DIM.entrance;
+  rows.forEach((row, r) => {
+    const depthA = Math.max(...row.front.map(unitDepth));
+    const depthB = row.back.length ? Math.max(...row.back.map(unitDepth)) : 0;
+    let x = (width - rowWidths[r]) / 2;
+    row.front.forEach((f, k) => {
+      if (f) place(f, r, x, z, unitDepth(f), 1);
+      const b = row.back[k];
+      if (b) place(b, r, x, z + depthA, unitDepth(b), -1);
+      x += colWidths[r][k] + DIM.shelfGap;
+    });
+    const rowShelves = [...row.front, ...row.back].filter((s): s is RoomShelf => s !== null);
     aisles.push({
       index: r,
-      z: aisleZ,
+      label: row.label,
+      z: r === 0 ? z - DIM.entrance * 0.45 : z - DIM.aisle / 2,
       x0: DIM.sideMargin * 0.4,
       x1: width - DIM.sideMargin * 0.4,
-      shelves: row,
-      occupancy: sumOccupancy(row),
+      shelves: rowShelves,
+      occupancy: sumOccupancy(rowShelves),
     });
+    z += depthA + depthB + DIM.aisle;
   });
+  const depth = Math.max(z - DIM.aisle + DIM.backMargin, dims?.lengthMm ? dims.lengthMm * MM : 0);
 
   const equipment = room.equipment.map((e) => placeEquipment(e, width, depth, height));
   const entrance = room.equipment.find((e) => e.kind === "EMERGENCY_EXIT" && e.z <= 0.02);
@@ -292,7 +356,7 @@ function buildWaypoints(room: RoomResponse, l: RoomLayout): Waypoint[] {
     const codes = aisle.shelves.map((s) => s.node.code).join(", ");
     wps.push({
       kind: "aisle",
-      title: `Allée ${aisle.index + 1}`,
+      title: aisle.label,
       subtitle: `Travées ${codes} · ${percent(aisle.occupancy)} % occupé`,
       camera: [W - 0.55, 1.7, aisle.z],
       target: [0.6, 0.95, aisle.z + 0.9],
@@ -300,13 +364,19 @@ function buildWaypoints(room: RoomResponse, l: RoomLayout): Waypoint[] {
     });
     for (const ls of l.shelves.filter((s) => s.row === aisle.index)) {
       const cx = (ls.x0 + ls.x1) / 2;
-      const room_ = aisle.index === 0 ? DIM.entrance - 0.35 : DIM.aisle - 0.25;
+      const f = ls.shelf.furniture;
+      const where = f?.aisleCode ? ` · épi ${f.aisleCode}${f.aisleOrder ? `, rang ${f.aisleOrder}` : ""}${f.aisleSide ? `, face ${f.aisleSide}` : ""}` : "";
+      // Face B : on se place dans l'allée de derrière (jusqu'à la rangée suivante ou au mur du fond).
+      const back = ls.zFront + ls.depth;
+      const next = l.shelves.filter((o) => o.row === aisle.index + 1 && o.facing === 1).map((o) => o.zFront);
+      const behind = Math.max(0.6, (next.length ? Math.min(...next) : l.depth) - back - 0.25);
+      const front = aisle.index === 0 ? DIM.entrance - 0.35 : DIM.aisle - 0.25;
       wps.push({
         kind: "shelf",
         title: `Travée ${ls.shelf.node.code}${ls.shelf.node.label ? ` — ${ls.shelf.node.label}` : ""}`,
-        subtitle: `${ls.shelf.racks.length} tablettes · ${ls.shelf.occupancy.boxes} boîtes · ${linearText(ls.shelf.occupancy)} · ${percent(ls.shelf.occupancy)} %`,
-        camera: [cx - 0.35, 1.45, ls.zFront - room_],
-        target: [cx, ls.height * 0.48, ls.zFront + 0.1],
+        subtitle: `${ls.shelf.racks.length} tablettes · ${ls.shelf.occupancy.boxes} boîtes · ${linearText(ls.shelf.occupancy)} · ${percent(ls.shelf.occupancy)} %${where}`,
+        camera: ls.facing === 1 ? [cx - 0.35, 1.45, ls.zFront - front] : [cx + 0.35, 1.45, back + behind],
+        target: ls.facing === 1 ? [cx, ls.height * 0.48, ls.zFront + 0.1] : [cx, ls.height * 0.48, back - 0.1],
         shelfId: ls.shelf.node.id,
         aisleIndex: aisle.index,
       });

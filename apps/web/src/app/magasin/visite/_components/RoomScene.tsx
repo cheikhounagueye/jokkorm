@@ -213,10 +213,10 @@ function buildScene(host: HTMLDivElement, layout: RoomLayout, emitPick: (p: Scen
     if (row.length === 0) continue;
     const x0 = Math.min(...row.map((s) => s.x0)) - 0.2;
     const x1 = Math.max(...row.map((s) => s.x1)) + 0.2;
-    const zf = row[0].zFront;
+    const zf = Math.min(...row.filter((s) => s.facing === 1).map((s) => s.zFront).concat(row[0].zFront));
     scene.add(flat(mat.stripe, x1 - x0, 0.07, [(x0 + x1) / 2, 0.004, zf - 0.22]));
     lamps.add(block(mat.lamp, [Math.min(W * 0.7, x1 - x0), 0.04, 0.12], [(x0 + x1) / 2, H - 0.06, aisle.z], false));
-    const label = new CSS2DObject(aisleLabel(`Allée ${aisle.index + 1}`, `${percent(aisle.occupancy)} %`,
+    const label = new CSS2DObject(aisleLabel(aisle.label, `${percent(aisle.occupancy)} %`,
       occupancyColor(aisle.occupancy.rate, aisle.occupancy.boxes)));
     label.position.set(Math.max(aisle.x0, aisle.x1) - 0.15, 0.05, aisle.z);
     scene.add(label);
@@ -225,19 +225,21 @@ function buildScene(host: HTMLDivElement, layout: RoomLayout, emitPick: (p: Scen
   // Rayonnages : montants, tablettes, enseigne de travée.
   for (const ls of layout.shelves) {
     const w = ls.x1 - ls.x0;
-    const cz = ls.zFront + DIM.unitDepth / 2;
+    const cz = ls.zFront + ls.depth / 2;
     const n = Math.max(1, Math.round(w / 1.2));
     for (let i = 0; i <= n; i++) {
       const ux = ls.x0 + DIM.uprightW / 2 + ((w - DIM.uprightW) * i) / n;
-      scene.add(block(mat.metal, [DIM.uprightW, ls.height, DIM.unitDepth], [ux, ls.height / 2, cz]));
+      scene.add(block(mat.metal, [DIM.uprightW, ls.height, ls.depth], [ux, ls.height / 2, cz]));
     }
     for (const y of [...ls.boardYs, ls.height - 0.02]) {
-      scene.add(block(mat.board, [w, DIM.boardT, DIM.unitDepth], [ls.x0 + w / 2, y, cz]));
+      scene.add(block(mat.board, [w, DIM.boardT, ls.depth], [ls.x0 + w / 2, y, cz]));
     }
-    scene.add(block(mat.metal, [w, 0.03, 0.02], [ls.x0 + w / 2, ls.height * 0.55, ls.zFront + DIM.unitDepth - 0.01]));
+    // Traverse de dos : côté fermé du meuble (fond pour la face A, devant pour la face B).
+    const backZ = ls.facing === 1 ? ls.zFront + ls.depth - 0.01 : ls.zFront + 0.01;
+    scene.add(block(mat.metal, [w, 0.03, 0.02], [ls.x0 + w / 2, ls.height * 0.55, backZ]));
     const sign = new CSS2DObject(shelfSign(ls.shelf.node.code, ls.shelf.node.label,
       percent(ls.shelf.occupancy), occupancyColor(ls.shelf.occupancy.rate, ls.shelf.occupancy.boxes)));
-    sign.position.set(ls.x0 + w / 2, ls.height + 0.3, ls.zFront);
+    sign.position.set(ls.x0 + w / 2, ls.height + 0.3, ls.facing === 1 ? ls.zFront : ls.zFront + ls.depth);
     scene.add(sign);
   }
 
@@ -250,8 +252,8 @@ function buildScene(host: HTMLDivElement, layout: RoomLayout, emitPick: (p: Scen
   const p = new THREE.Vector3();
   const color = new THREE.Color();
   layout.slots.forEach((slot, i) => {
-    p.set((slot.x0 + slot.x1) / 2, slot.y + DIM.boardT / 2 + 0.005, slot.zFront + DIM.unitDepth / 2);
-    s.set(slot.x1 - slot.x0 - 0.012, 0.01, DIM.unitDepth * 0.96);
+    p.set((slot.x0 + slot.x1) / 2, slot.y + DIM.boardT / 2 + 0.005, slot.zFront + slot.depth / 2);
+    s.set(slot.x1 - slot.x0 - 0.012, 0.01, slot.depth * 0.96);
     m4.compose(p, q, s);
     slotMesh.setMatrixAt(i, m4);
     const o = slot.position.occupancy;
@@ -277,8 +279,9 @@ function buildScene(host: HTMLDivElement, layout: RoomLayout, emitPick: (p: Scen
   const stickerQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
   solid.forEach((b, i) => {
     solidMesh.setMatrixAt(i, m4.compose(p.set(...b.center), q.identity(), widthScale(b)));
-    p.set(b.center[0], b.center[1] + 0.035, b.center[2] - DIM.boxD / 2 - 0.002);
-    stickerMesh.setMatrixAt(i, m4.compose(p, stickerQ, s.set(Math.min(0.058, b.width * 0.64), 0.1, 1)));
+    // L'étiquette est sur la face de la boîte tournée vers l'allée (face A : vers l'entrée ; B : vers le fond).
+    p.set(b.center[0], b.center[1] + 0.035, b.center[2] - b.facing * (DIM.boxD / 2 + 0.002));
+    stickerMesh.setMatrixAt(i, m4.compose(p, b.facing === 1 ? stickerQ : q.identity(), s.set(Math.min(0.058, b.width * 0.64), 0.1, 1)));
   });
   ghost.forEach((b, i) => ghostMesh.setMatrixAt(i, m4.compose(p.set(...b.center), q.identity(), widthScale(b))));
   scene.add(solidMesh, ghostMesh, stickerMesh);

@@ -200,6 +200,8 @@ export interface RoomSpecInput {
   tempMaxC: number | null;
   rhMinPct: number | null;
   rhMaxPct: number | null;
+  /** Poids moyen au mètre linéaire (kg/ml), mesuré sur place ; sans lui, pas de charge estimée. */
+  avgWeightKgPerMl: number | null;
 }
 
 export interface RoomSpecView {
@@ -240,6 +242,29 @@ export async function generateShelving(storehouseId: string, template: ShelvingT
     body: JSON.stringify(template),
   });
   return parse<ShelvingPlan>(response);
+}
+
+// ─── Indicateurs en mètres linéaires (5T.D) ────────────────────────────────────
+
+export interface RoomIndicators {
+  installedMm: number;
+  usedMm: number;
+  freeMm: number;
+  placeableMm: number;
+  rate: number;
+  boxes: number;
+  byAisle: { key: string; label: string; travees: number; boxes: number; installedMm: number; usedMm: number; placeableMm: number; rate: number }[];
+  capacityByFormat: { code: string; label: string; spineMm: number; boxes: number }[];
+  areaM2: number | null;
+  densityMlPerM2: number | null;
+  load: { kgPerMl: number; estimatedKg: number; footprintM2: number; kgPerM2: number | null; limitKgM2: number | null; overLimit: boolean } | null;
+  loadNote: string | null;
+  saturation: { windowDays: number; historyDays: number; intakeMm: number; mmPerMonth: number | null; monthsLeft: number | null; date: string | null; note: string | null };
+}
+
+export async function getRoomIndicators(storehouseId: string): Promise<RoomIndicators> {
+  const response = await fetch(`/api/v1/physical/rooms/${storehouseId}/indicators`, { headers: headers() });
+  return parse<RoomIndicators>(response);
 }
 
 export async function getRoomSpec(storehouseId: string): Promise<RoomSpecView> {
@@ -839,8 +864,20 @@ export interface RoomBox {
   expectedReturnAt: string | null;
 }
 export interface RoomPosition { node: RoomNode; occupancy: Occupancy; boxes: RoomBox[] }
-export interface RoomRack { node: RoomNode; occupancy: Occupancy; positions: RoomPosition[] }
-export interface RoomShelf { node: RoomNode; occupancy: Occupancy; racks: RoomRack[] }
+/** {@code clearanceMm} : hauteur libre propre à la tablette (null = celle de la travée). */
+export interface RoomRack { node: RoomNode; occupancy: Occupancy; positions: RoomPosition[]; clearanceMm: number | null }
+/** Mobilier et épi d'une travée (pattern 10, 5T.B) : la 3D place les épis à l'échelle. */
+export interface RoomFurniture {
+  furnitureType: FurnitureType | null;
+  depthMm: number | null;
+  clearanceMm: number | null;
+  heightMm: number | null;
+  faces: 1 | 2 | null;
+  aisleCode: string | null;
+  aisleOrder: number | null;
+  aisleSide: "A" | "B" | null;
+}
+export interface RoomShelf { node: RoomNode; occupancy: Occupancy; racks: RoomRack[]; furniture: RoomFurniture }
 export interface RoomEquipment {
   id: string;
   kind: EquipmentKind;
@@ -862,6 +899,8 @@ export interface RoomResponse {
   equipment: RoomEquipment[];
   defaultSpineMm: number;
   marginPercent: number;
+  /** Dimensions mesurées de la salle (5T.B), null si non saisies. */
+  dims: { lengthMm: number | null; widthMm: number | null; ceilingHeightMm: number | null } | null;
 }
 
 export async function getRoom(storehouseId: string): Promise<RoomResponse> {

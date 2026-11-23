@@ -15,6 +15,7 @@ import {
 import { Icons } from "@/lib/icons";
 import { CreateChildForm } from "./CreateChildForm";
 import { aisleLabel, FurnitureCard, RoomSpecCard, TabletteDimsCard } from "./FurniturePanel";
+import { RoomIndicatorsCard } from "./RoomIndicators";
 import { ShelvingGenerator } from "./ShelvingGenerator";
 import { KIND_META } from "./kinds";
 import { LinkButton } from "./LinkButton";
@@ -162,6 +163,7 @@ export function NodePanel({
       {mode === "generate" && loc.kind === "STOREHOUSE" && (
         <ShelvingGenerator storehouseId={loc.id} onDone={() => { setMode("view"); onCreated(); }} onCancel={() => setMode("view")} />
       )}
+      {loc.kind === "STOREHOUSE" && <RoomIndicatorsCard storehouseId={loc.id} />}
       {loc.kind === "STOREHOUSE" && <RoomSpecCard storehouseId={loc.id} />}
       {loc.kind === "SHELF" && <FurnitureCard node={current} />}
       {loc.kind === "RACK" && <TabletteDimsCard node={loc} travee={travee} />}

@@ -60,6 +60,7 @@ export function ShelvingGenerator({ storehouseId, onDone, onCancel }: {
       qc.invalidateQueries({ queryKey: ["storage-tree"] });
       qc.invalidateQueries({ queryKey: ["room"] });
       qc.invalidateQueries({ queryKey: ["room-spec"] });
+      qc.invalidateQueries({ queryKey: ["room-indicators"] });
       onDone();
     },
   });

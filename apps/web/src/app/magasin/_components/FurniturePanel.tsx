@@ -53,6 +53,7 @@ function useRefresh() {
     qc.invalidateQueries({ queryKey: ["space"] });
     qc.invalidateQueries({ queryKey: ["room"] });
     qc.invalidateQueries({ queryKey: ["room-spec"] });
+    qc.invalidateQueries({ queryKey: ["room-indicators"] });
   };
 }
 
@@ -316,6 +317,7 @@ export function RoomSpecCard({ storehouseId }: { storehouseId: string }) {
               ? `${spec?.tempMinC ?? "?"} à ${spec?.tempMaxC ?? "?"} °C` : null} />
             <Stat icon="humidity" label="Humidité relative" value={spec?.rhMinPct != null || spec?.rhMaxPct != null
               ? `${spec?.rhMinPct ?? "?"} à ${spec?.rhMaxPct ?? "?"} %` : null} />
+            <Stat icon="floorLoad" label="Poids moyen au ml" value={spec?.avgWeightKgPerMl != null ? `${String(spec.avgWeightKgPerMl).replace(".", ",")} kg/ml` : null} empty="non mesuré" />
           </div>
 
           {footprintPct != null && (
@@ -355,12 +357,13 @@ function RoomSpecForm({ storehouseId, spec, onDone }: { storehouseId: string; sp
     tmax: spec?.tempMaxC != null ? String(spec.tempMaxC).replace(".", ",") : "",
     rhmin: spec?.rhMinPct != null ? String(spec.rhMinPct) : "",
     rhmax: spec?.rhMaxPct != null ? String(spec.rhMaxPct) : "",
+    weight: spec?.avgWeightKgPerMl != null ? String(spec.avgWeightKgPerMl).replace(".", ",") : "",
   });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
   const input: RoomSpecInput = {
     lengthMm: mmFromM(f.length), widthMm: mmFromM(f.width), ceilingHeightMm: mmFromM(f.ceiling),
     usableAreaM2: num(f.area), floorLoadKgM2: num(f.load), tempMinC: num(f.tmin), tempMaxC: num(f.tmax),
-    rhMinPct: num(f.rhmin), rhMaxPct: num(f.rhmax),
+    rhMinPct: num(f.rhmin), rhMaxPct: num(f.rhmax), avgWeightKgPerMl: num(f.weight),
   };
   const invalid = Object.values(input).some((v) => typeof v === "number" && Number.isNaN(v));
   const mutation = useMutation({
@@ -381,6 +384,7 @@ function RoomSpecForm({ storehouseId, spec, onDone }: { storehouseId: string; sp
         {field("Hauteur sous plafond (m)", "ceiling", "ex. 2,8")}
         {field("Surface utile (m²)", "area", "vide : longueur × largeur")}
         {field("Charge au sol (kg/m²)", "load", "selon le bâtiment")}
+        {field("Poids moyen au ml (kg)", "weight", "à mesurer", "Pesez 1 mètre de boîtes pleines")}
       </div>
       <div style={{ fontSize: 13, fontWeight: 600, margin: "4px 0 8px" }}>Consignes climatiques</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
