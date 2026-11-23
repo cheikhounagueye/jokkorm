@@ -153,8 +153,72 @@ export interface StorageLocationResponse {
   path: string;
   /** Longueur utile saisie en mm (travée, tablette, position). null = déduite (pattern 10). */
   lengthMm: number | null;
+  /** Mobilier et dimensions propres (pattern 10, 5T.B). null = non mesuré (ou hérité de la travée). */
+  furnitureType: FurnitureType | null;
+  depthMm: number | null;
+  clearanceMm: number | null;
+  heightMm: number | null;
+  faces: 1 | 2 | null;
+  aisleCode: string | null;
+  aisleOrder: number | null;
+  aisleSide: "A" | "B" | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type FurnitureType =
+  | "FIXED_SHELVING" | "MOBILE_SHELVING" | "CABINET" | "FIRE_SAFE" | "PLAN_CHEST" | "PALLET_RACK";
+
+export interface StorageSpec {
+  furnitureType?: FurnitureType | null;
+  depthMm?: number | null;
+  clearanceMm?: number | null;
+  heightMm?: number | null;
+  faces?: 1 | 2 | null;
+  aisleCode?: string | null;
+  aisleOrder?: number | null;
+  aisleSide?: "A" | "B" | null;
+}
+
+/** Mobilier et dimensions d'une travée, ou dimensions propres d'une tablette (remplace tout). */
+export async function setStorageSpec(locationId: string, spec: StorageSpec): Promise<StorageLocationResponse> {
+  const response = await fetch(`/api/v1/physical/locations/${locationId}/spec`, {
+    method: "PUT",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(spec),
+  });
+  return parse<StorageLocationResponse>(response);
+}
+
+export interface RoomSpecInput {
+  lengthMm: number | null;
+  widthMm: number | null;
+  ceilingHeightMm: number | null;
+  usableAreaM2: number | null;
+  floorLoadKgM2: number | null;
+  tempMinC: number | null;
+  tempMaxC: number | null;
+  rhMinPct: number | null;
+  rhMaxPct: number | null;
+}
+
+export interface RoomSpecView {
+  spec: RoomSpecInput | null;
+  limits: { areaM2: number | null; footprintM2: number; measuredShelves: number; shelves: number; warnings: string[] };
+}
+
+export async function getRoomSpec(storehouseId: string): Promise<RoomSpecView> {
+  const response = await fetch(`/api/v1/physical/rooms/${storehouseId}/spec`, { headers: headers() });
+  return parse<RoomSpecView>(response);
+}
+
+export async function setRoomSpec(storehouseId: string, input: RoomSpecInput): Promise<RoomSpecView> {
+  const response = await fetch(`/api/v1/physical/rooms/${storehouseId}/spec`, {
+    method: "PUT",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parse<RoomSpecView>(response);
 }
 
 export interface StorageLocationTreeResponse {

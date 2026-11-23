@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { Icons } from "@/lib/icons";
 import { CreateChildForm } from "./CreateChildForm";
+import { aisleLabel, FurnitureCard, RoomSpecCard, TabletteDimsCard } from "./FurniturePanel";
 import { KIND_META } from "./kinds";
 import { LinkButton } from "./LinkButton";
 import { PositionShelf } from "./PositionShelf";
@@ -42,6 +43,14 @@ export function NodePanel({
   const childMeta = meta.child ? KIND_META[meta.child] : null;
   const [mode, setMode] = useState<"view" | "rename" | "delete" | "create" | "length">("view");
   const hasLength = HAS_LENGTH.includes(loc.kind);
+  // Adresse de terrain (pattern 10) : « SALLE-A · Épi E1 · rang 3 · face A · Travée T01 · Tablette 2 »
+  const travee = path.find((p) => p.node.kind === "SHELF")?.node ?? null;
+  const roomNode = path.find((p) => p.node.kind === "STOREHOUSE")?.node ?? null;
+  const aisle = travee ? aisleLabel(travee) : null;
+  const address = aisle && roomNode
+    ? [roomNode.code, aisle, ...path.filter((p) => p.node.kind === "SHELF" || p.node.kind === "RACK" || p.node.kind === "POSITION")
+        .map((p) => `${KIND_META[p.node.kind].label} ${p.node.code}`)].join(" · ")
+    : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -81,6 +90,12 @@ export function NodePanel({
               Code <code>{loc.code}</code> · Chemin <code>{loc.path}</code>
               {hasLength && <> · Longueur {loc.lengthMm != null ? <strong>{cm(loc.lengthMm)}</strong> : "déduite"}</>}
             </div>
+            {address && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 12, fontWeight: 600,
+                padding: "3px 10px", borderRadius: 99, background: "var(--surface-sunken)", border: "1px solid var(--border-subtle)" }}>
+                <Icons.position size={13} weight="duotone" /> {address}
+              </div>
+            )}
           </div>
           {mode === "view" && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -138,6 +153,9 @@ export function NodePanel({
         )}
       </Card>
 
+      {loc.kind === "STOREHOUSE" && <RoomSpecCard storehouseId={loc.id} />}
+      {loc.kind === "SHELF" && <FurnitureCard node={current} />}
+      {loc.kind === "RACK" && <TabletteDimsCard node={loc} travee={travee} />}
       {loc.kind === "RACK" && <TabletteSpace id={loc.id} />}
       {loc.kind === "POSITION"
         ? <PositionShelf position={loc} />
