@@ -35,3 +35,5 @@ databaseChangeLog:
       file: db/changelog/0017-master-watch.yaml
   - include:
       file: db/changelog/0018-master-import.yaml
+  - include:
+      file: db/changelog/0019-magasin-mode.yaml

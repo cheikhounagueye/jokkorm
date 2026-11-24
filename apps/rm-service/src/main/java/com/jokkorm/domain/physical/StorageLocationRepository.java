@@ -20,6 +20,12 @@ public interface StorageLocationRepository {
 
     Optional<StorageLocation> findByPath(TenantId tenant, String path);
 
+    /** Emplacement dont l'étiquette porte ce code (mode magasin, pattern 12). */
+    Optional<StorageLocation> findByScanCode(TenantId tenant, String scanCode);
+
+    /** Emplacements (POSITION) sous un nœud, lui compris, triés par chemin : planche d'étiquettes. */
+    List<StorageLocation> findPositionsUnder(TenantId tenant, String path);
+
     /** Enfants directs triés par code ascending. */
     List<StorageLocation> findChildren(TenantId tenant, UUID parentId);
 

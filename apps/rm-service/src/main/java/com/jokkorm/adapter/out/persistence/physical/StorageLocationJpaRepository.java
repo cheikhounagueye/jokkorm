@@ -20,6 +20,17 @@ public interface StorageLocationJpaRepository extends JpaRepository<StorageLocat
 
     Optional<StorageLocationEntity> findByTenantIdAndPath(String tenantId, String path);
 
+    Optional<StorageLocationEntity> findByTenantIdAndScanCode(String tenantId, String scanCode);
+
+    /** starts_with plutôt que LIKE : les codes peuvent contenir « _ », joker de LIKE. */
+    @Query(value = """
+        SELECT * FROM storage_location
+        WHERE tenant_id = :tenantId AND kind = 'POSITION'
+          AND (path = :path OR starts_with(path, :path || '/'))
+        ORDER BY path
+        """, nativeQuery = true)
+    List<StorageLocationEntity> findPositionsUnder(@Param("tenantId") String tenantId, @Param("path") String path);
+
     List<StorageLocationEntity> findByTenantIdAndParentIdOrderByCodeAsc(String tenantId, UUID parentId);
 
     List<StorageLocationEntity> findByTenantIdAndKindAndParentIdIsNullOrderByCodeAsc(

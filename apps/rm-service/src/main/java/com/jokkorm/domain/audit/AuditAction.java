@@ -60,6 +60,12 @@ public enum AuditAction {
     CONTAINER_PLACED,
     /** Boîte déplacée d'une position à une autre — phase 5T. */
     CONTAINER_MOVED,
+    /** Boîte pointée à son arrivée en zone tampon (mode magasin, pattern 12). */
+    CONTAINER_RECEIVED,
+    /** Boîte retirée de sa tablette, repassée en zone tampon (mode magasin, 3 scans). */
+    CONTAINER_REMOVED,
+    /** Planche d'étiquettes d'emplacement imprimée (mode magasin). */
+    POSITION_LABELS_PRINTED,
     /** Format de boîte corrigé — phase 5T. */
     CONTAINER_FORMAT_CHANGED,
     /** Format ajouté ou modifié dans le catalogue du tenant — phase 5T. */

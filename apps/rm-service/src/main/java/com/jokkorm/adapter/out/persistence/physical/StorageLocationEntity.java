@@ -69,6 +69,10 @@ public class StorageLocationEntity {
     @Column(name = "aisle_side", length = 1)
     private String aisleSide;
 
+    /** Code de l'étiquette d'emplacement (POSITION), jamais modifié après création. */
+    @Column(name = "scan_code", length = 16, updatable = false)
+    private String scanCode;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -92,6 +96,7 @@ public class StorageLocationEntity {
         e.path = d.path();
         e.lengthMm = d.lengthMm().orElse(null);
         e.copySpec(d.spec());
+        e.scanCode = d.scanCode().orElse(null);
         e.createdAt = d.createdAt();
         e.updatedAt = d.updatedAt();
         return e;
@@ -102,7 +107,7 @@ public class StorageLocationEntity {
             id, TenantId.of(tenantId), kind, code, label, parentId, path, lengthMm,
             new com.jokkorm.domain.physical.PhysicalSpec(furnitureType, depthMm, clearanceMm, heightMm,
                 faces, aisleCode, aisleOrder, aisleSide),
-            createdAt, updatedAt);
+            scanCode, createdAt, updatedAt);
     }
 
     private void copySpec(com.jokkorm.domain.physical.PhysicalSpec s) {

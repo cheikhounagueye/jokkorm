@@ -52,6 +52,16 @@ public class JpaStorageLocationRepository implements StorageLocationRepository {
     }
 
     @Override
+    public Optional<StorageLocation> findByScanCode(TenantId tenant, String scanCode) {
+        return jpa.findByTenantIdAndScanCode(tenant.value(), scanCode).map(StorageLocationEntity::toDomain);
+    }
+
+    @Override
+    public List<StorageLocation> findPositionsUnder(TenantId tenant, String path) {
+        return jpa.findPositionsUnder(tenant.value(), path).stream().map(StorageLocationEntity::toDomain).toList();
+    }
+
+    @Override
     public List<StorageLocation> findChildren(TenantId tenant, UUID parentId) {
         return jpa.findByTenantIdAndParentIdOrderByCodeAsc(tenant.value(), parentId)
             .stream().map(StorageLocationEntity::toDomain).toList();

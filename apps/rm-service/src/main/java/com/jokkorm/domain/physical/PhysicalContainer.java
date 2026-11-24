@@ -17,6 +17,8 @@ import java.util.regex.Pattern;
  *       que la boîte n'a pas été rangée.</li>
  *   <li>{@code capacity} — nombre max de records physiques acceptés. Null = pas de limite.</li>
  *   <li>{@code state} — EMPTY → OPEN → SEALED → DESTROYED (voir {@link ContainerState}).</li>
+ *   <li>{@code receivedAt}/{@code receivedBy} — pointage d'arrivée en zone tampon (mode magasin,
+ *       pattern 12). Null si la boîte n'a jamais été pointée.</li>
  * </ul>
  *
  * <p>Invariants :
@@ -45,6 +47,8 @@ public final class PhysicalContainer {
     private String externalReference;
     /** Format de boîte (dos, hauteur…). Null = format par défaut du tenant. */
     private UUID boxFormatId;
+    private Instant receivedAt;
+    private String receivedBy;
 
     private PhysicalContainer(
         UUID id, TenantId tenantId, String barcode, String label, UUID positionId,
@@ -96,10 +100,53 @@ public final class PhysicalContainer {
         UUID id, TenantId tenant, String barcode, String label, UUID positionId,
         Integer capacity, ContainerState state,
         Instant createdAt, Instant updatedAt, Instant lastMovedAt,
-        UUID batchId, Integer sequenceInBatch, String externalReference, UUID boxFormatId) {
-        return new PhysicalContainer(
+        UUID batchId, Integer sequenceInBatch, String externalReference, UUID boxFormatId,
+        Instant receivedAt, String receivedBy) {
+        PhysicalContainer c = new PhysicalContainer(
             id, tenant, barcode, label, positionId, capacity, state,
             createdAt, updatedAt, lastMovedAt, batchId, sequenceInBatch, externalReference, boxFormatId);
+        c.receivedAt = receivedAt;
+        c.receivedBy = receivedBy;
+        return c;
+    }
+
+    /**
+     * Pointage d'arrivée : la boîte est reçue dans la zone tampon (aucune position).
+     * Pointer deux fois de suite ne change rien ; une boîte retirée de sa tablette puis
+     * pointée de nouveau prend la nouvelle date. L'appelant écarte d'abord les cas métier
+     * (boîte rangée, en prêt) pour donner un message clair.
+     *
+     * @return {@code false} si la boîte était déjà pointée et n'a pas bougé depuis
+     */
+    public boolean receive(String by, Instant at) {
+        requireNotDestroyed();
+        if (positionId != null) {
+            throw new IllegalStateException("Container " + barcode + " is on a shelf : remove it first");
+        }
+        if (by == null || by.isBlank()) throw new IllegalArgumentException("receivedBy required");
+        boolean movedSince = lastMovedAt != null && receivedAt != null && lastMovedAt.isAfter(receivedAt);
+        if (receivedAt != null && !movedSince) return false;
+        this.receivedAt = at;
+        this.receivedBy = by.trim();
+        this.updatedAt = at;
+        return true;
+    }
+
+    /**
+     * Retire la boîte de sa tablette : elle repasse en zone tampon et libère sa place.
+     *
+     * @return la position quittée
+     */
+    public UUID removeFromShelf(Instant at) {
+        requireNotDestroyed();
+        if (positionId == null) {
+            throw new IllegalStateException("Container " + barcode + " is not on a shelf");
+        }
+        UUID from = positionId;
+        this.positionId = null;
+        this.lastMovedAt = at;
+        this.updatedAt = at;
+        return from;
     }
 
     /** Change le format (ex. correction après reprise). Le contrôle de place est fait par l'appelant. */
@@ -209,4 +256,6 @@ public final class PhysicalContainer {
     public Optional<Integer> sequenceInBatch() { return Optional.ofNullable(sequenceInBatch); }
     public Optional<String> externalReference() { return Optional.ofNullable(externalReference); }
     public Optional<UUID> boxFormatId() { return Optional.ofNullable(boxFormatId); }
+    public Optional<Instant> receivedAt() { return Optional.ofNullable(receivedAt); }
+    public Optional<String> receivedBy() { return Optional.ofNullable(receivedBy); }
 }

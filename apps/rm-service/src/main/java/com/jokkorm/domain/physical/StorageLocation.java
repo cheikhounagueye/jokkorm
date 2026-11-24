@@ -1,6 +1,7 @@
 package com.jokkorm.domain.physical;
 
 import com.jokkorm.commons.tenancy.TenantId;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -18,12 +19,20 @@ import java.util.regex.Pattern;
  *   <li>Le parent doit être du bon kind (ex. parent d'un {@code SHELF} = {@code STOREHOUSE}).</li>
  *   <li>Le {@code code} est un slug court lisible sur une étiquette (A-Z, 0-9, tiret, underscore).</li>
  *   <li>Le {@code path} est dénormalisé = concaténation des codes de la racine jusqu'à soi,
- *       séparés par {@code /}. Recalculé à chaque modification. Sert au code-barres et au listing.</li>
+ *       séparés par {@code /}. Recalculé à chaque modification. Sert au listing.</li>
+ *   <li>Un {@code POSITION} porte un {@code scanCode} (EMP-XXXXXXXX) imprimé sur son étiquette :
+ *       attribué à la création, il ne change jamais (pattern 12, mode magasin).</li>
  * </ul>
  */
 public final class StorageLocation {
 
     private static final Pattern CODE = Pattern.compile("^[A-Z0-9][A-Z0-9_\\-]{0,31}$");
+
+    /** Préfixe des codes d'emplacement : distingue au premier coup d'œil une étiquette de tablette d'une boîte (BOX-). */
+    public static final String SCAN_CODE_PREFIX = "EMP-";
+    private static final Pattern SCAN_CODE = Pattern.compile("^EMP-[0-9A-Z]{8}$");
+    private static final String CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     /** Bornes d'une longueur utile (travée, tablette ou emplacement), en millimètres. */
     public static final int MIN_LENGTH_MM = 50;
@@ -40,12 +49,14 @@ public final class StorageLocation {
     private Integer lengthMm;
     /** Mobilier et dimensions (travée, tablette), jamais null : {@link PhysicalSpec#EMPTY}. */
     private PhysicalSpec spec = PhysicalSpec.EMPTY;
+    /** Code imprimé sur l'étiquette d'un emplacement (POSITION seulement), stable. */
+    private final String scanCode;
     private final Instant createdAt;
     private Instant updatedAt;
 
     private StorageLocation(
         UUID id, TenantId tenantId, StorageLocationKind kind, String code, String label,
-        UUID parentId, String path, Integer lengthMm, Instant createdAt, Instant updatedAt) {
+        UUID parentId, String path, Integer lengthMm, String scanCode, Instant createdAt, Instant updatedAt) {
         this.id = Objects.requireNonNull(id, "id");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         this.kind = Objects.requireNonNull(kind, "kind");
@@ -54,6 +65,7 @@ public final class StorageLocation {
         this.parentId = parentId;
         this.path = Objects.requireNonNull(path, "path");
         this.lengthMm = requireValidLength(kind, lengthMm);
+        this.scanCode = requireValidScanCode(kind, scanCode);
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt");
         requireParentShape(kind, parentId);
@@ -66,7 +78,7 @@ public final class StorageLocation {
         String normalizedCode = normalize(code);
         return new StorageLocation(
             id, tenant, StorageLocationKind.SITE, normalizedCode, label,
-            null, normalizedCode, null, at, at);
+            null, normalizedCode, null, null, at, at);
     }
 
     /** Création d'un enfant à partir du parent — valide le kind et calcule le path. */
@@ -79,23 +91,26 @@ public final class StorageLocation {
         }
         String normalizedCode = normalize(code);
         String path = parent.path + "/" + normalizedCode;
+        String scanCode = childKind == StorageLocationKind.POSITION ? newScanCode() : null;
         return new StorageLocation(
             UUID.randomUUID(), parent.tenantId, childKind, normalizedCode, label,
-            parent.id, path, null, at, at);
+            parent.id, path, null, scanCode, at, at);
     }
 
-    /** Rehydratation depuis la persistance (le path est lu, pas recalculé). */
-    public static StorageLocation rehydrate(
-        UUID id, TenantId tenant, StorageLocationKind kind, String code, String label,
-        UUID parentId, String path, Integer lengthMm, Instant createdAt, Instant updatedAt) {
-        return new StorageLocation(id, tenant, kind, code, label, parentId, path, lengthMm, createdAt, updatedAt);
+    /** EMP- suivi de 8 caractères Crockford (sans I, L, O, U) : court, lisible, sans ambiguïté. */
+    static String newScanCode() {
+        StringBuilder sb = new StringBuilder(SCAN_CODE_PREFIX);
+        for (int i = 0; i < 8; i++) sb.append(CROCKFORD.charAt(RANDOM.nextInt(CROCKFORD.length())));
+        return sb.toString();
     }
 
-    /** Rehydratation avec le mobilier et les dimensions (pattern 10, 5T.B). */
+    /** Rehydratation depuis la persistance (le path est lu, pas recalculé), avec mobilier et code à scanner. */
     public static StorageLocation rehydrate(
         UUID id, TenantId tenant, StorageLocationKind kind, String code, String label,
-        UUID parentId, String path, Integer lengthMm, PhysicalSpec spec, Instant createdAt, Instant updatedAt) {
-        StorageLocation l = new StorageLocation(id, tenant, kind, code, label, parentId, path, lengthMm, createdAt, updatedAt);
+        UUID parentId, String path, Integer lengthMm, PhysicalSpec spec, String scanCode,
+        Instant createdAt, Instant updatedAt) {
+        StorageLocation l = new StorageLocation(
+            id, tenant, kind, code, label, parentId, path, lengthMm, scanCode, createdAt, updatedAt);
         l.spec = (spec == null ? PhysicalSpec.EMPTY : spec).requireAllowedFor(kind);
         return l;
     }
@@ -162,6 +177,18 @@ public final class StorageLocation {
         return code;
     }
 
+    private static String requireValidScanCode(StorageLocationKind kind, String scanCode) {
+        if (kind != StorageLocationKind.POSITION) {
+            if (scanCode != null) throw new IllegalArgumentException("Only a POSITION has a scan code");
+            return null;
+        }
+        if (scanCode == null || !SCAN_CODE.matcher(scanCode).matches()) {
+            throw new IllegalArgumentException(
+                "scan code '%s' invalid : expected EMP-XXXXXXXX".formatted(scanCode));
+        }
+        return scanCode;
+    }
+
     private static void requireParentShape(StorageLocationKind kind, UUID parentId) {
         if (kind == StorageLocationKind.SITE && parentId != null) {
             throw new IllegalArgumentException("SITE must have no parent");
@@ -180,6 +207,8 @@ public final class StorageLocation {
     public String path() { return path; }
     public Optional<Integer> lengthMm() { return Optional.ofNullable(lengthMm); }
     public PhysicalSpec spec() { return spec; }
+    /** Code de l'étiquette d'emplacement ; vide pour les autres niveaux. */
+    public Optional<String> scanCode() { return Optional.ofNullable(scanCode); }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
 }

@@ -39,3 +39,7 @@ coverage/
 # Scratchpad
 /tmp/
 /scratch/
+
+# Mode magasin (iPhone) : certificat HTTPS local et moteur de lecture copié depuis node_modules
+/apps/web/.certs/
+/apps/web/public/vendor/

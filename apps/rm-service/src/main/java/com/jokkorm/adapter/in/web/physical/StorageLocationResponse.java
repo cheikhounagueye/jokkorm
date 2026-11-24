@@ -23,6 +23,8 @@ public record StorageLocationResponse(
     String aisleCode,
     Integer aisleOrder,
     String aisleSide,
+    /** Code de l'étiquette d'emplacement (POSITION seulement), stable — mode magasin. */
+    String scanCode,
     Instant createdAt,
     Instant updatedAt) {
 
@@ -33,6 +35,7 @@ public record StorageLocationResponse(
             d.lengthMm().orElse(null),
             d.spec().furnitureType(), d.spec().depthMm(), d.spec().clearanceMm(), d.spec().heightMm(),
             d.spec().faces(), d.spec().aisleCode(), d.spec().aisleOrder(), d.spec().aisleSide(),
+            d.scanCode().orElse(null),
             d.createdAt(), d.updatedAt());
     }
 }

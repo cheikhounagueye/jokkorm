@@ -6,6 +6,7 @@ import { Alert, Button, Card, CardHeader, IconTile, Input } from "@/components/u
 import {
   cm,
   deleteStorageLocation,
+  downloadPositionLabelsPdf,
   getStorageSpace,
   setStorageLength,
   updateStorageLocation,
@@ -91,6 +92,7 @@ export function NodePanel({
             <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
               Code <code>{loc.code}</code> · Chemin <code>{loc.path}</code>
               {hasLength && <> · Longueur {loc.lengthMm != null ? <strong>{cm(loc.lengthMm)}</strong> : "déduite"}</>}
+              {loc.scanCode && <> · Étiquette <code>{loc.scanCode}</code></>}
             </div>
             {address && (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 12, fontWeight: 600,
@@ -116,6 +118,7 @@ export function NodePanel({
                   Ajouter {childMeta.label.toLowerCase()}
                 </Button>
               )}
+              {loc.kind !== "SITE" && <PositionLabelsButton id={loc.id} path={loc.path} single={loc.kind === "POSITION"} />}
               {hasLength && (
                 <Button variant="secondary" icon={<Icons.gauge size={14} />} onClick={() => setMode("length")}>
                   Longueur
@@ -172,6 +175,31 @@ export function NodePanel({
         ? <PositionShelf position={loc} />
         : <ChildrenGrid node={current} onSelect={onSelect} onAdd={() => setMode("create")} />}
     </div>
+  );
+}
+
+/** Planche d'étiquettes (QR + Code128) des emplacements sous ce nœud, pour le mode magasin. */
+function PositionLabelsButton({ id, path, single }: { id: string; path: string; single: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const print = async () => {
+    setBusy(true); setError(null);
+    try {
+      await downloadPositionLabelsPdf(id, `etiquettes-${path.replaceAll("/", "-")}.pdf`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <Button variant="secondary" icon={<Icons.qr size={14} />} loading={busy} onClick={() => void print()}
+        title="Avery L7169 : QR (iPhone) + Code128 (douchette) + adresse">
+        {single ? "Étiquette d'emplacement" : "Étiquettes d'emplacement"}
+      </Button>
+      {error && <span role="alert" style={{ alignSelf: "center", fontSize: 12, color: "var(--danger-500)" }}>{error}</span>}
+    </>
   );
 }
 

@@ -82,7 +82,8 @@ public class PlaceContainerUseCase {
         if (container.positionId().filter(positionId::equals).isPresent()) {
             return container;
         }
-        if (loans.findActiveByContainer(tenant, containerId).isPresent()) {
+        // Une simple demande de prêt (REQUESTED) laisse la boîte en rayon : on peut la déplacer.
+        if (loans.findActiveByContainer(tenant, containerId).filter(l -> l.status().isActive()).isPresent()) {
             throw new PhysicalContainerConflictException(
                 "La boîte %s est en prêt : enregistre son retour avant de la ranger ailleurs"
                     .formatted(container.barcode()));

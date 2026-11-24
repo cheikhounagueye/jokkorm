@@ -3,6 +3,14 @@
  * pour garder une famille visuelle cohérente : Phosphor, graisse duotone.
  */
 import {
+  TrayArrowDown,
+  HandGrabbing,
+  Flashlight,
+  Camera,
+  Keyboard,
+  GearSix,
+  CameraSlash,
+  ArrowCounterClockwise,
   Archive,
   ArchiveBox,
   ArrowBendUpLeft,
@@ -215,6 +223,16 @@ export const Icons = {
   spinner: CircleNotch,
   sun: Sun,
   moon: Moon,
+
+  // ─── Mode magasin (iPhone) ───
+  arrival: TrayArrowDown,
+  takeOff: HandGrabbing,
+  torch: Flashlight,
+  camera: Camera,
+  cameraOff: CameraSlash,
+  keyboard: Keyboard,
+  settings: GearSix,
+  restart: ArrowCounterClockwise,
 } satisfies Record<string, Icon>;
 
 export type IconName = keyof typeof Icons;

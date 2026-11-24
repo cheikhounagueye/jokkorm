@@ -18,6 +18,25 @@ make dev                              # stack Postgres + Keycloak + Mailpit
 cd apps/web && npm run dev            # frontend :3100
 ```
 
+## Mode magasin sur iPhone (réseau local)
+
+La caméra d'un iPhone ne s'ouvre qu'en HTTPS avec un certificat de confiance (pattern 12).
+
+1. Une fois par Mac : `apps/web/scripts/https-lan-setup.sh` (installe mkcert, crée l'autorité
+   locale, puis un certificat pour `<nom-du-mac>.local` et l'adresse IP). Relancer si l'IP change.
+2. Une fois par iPhone : AirDrop de `rootCA.pem` (jamais `rootCA-key.pem`), Réglages › Profil
+   téléchargé › Installer, puis Réglages › Général › Informations › Réglages de confiance des
+   certificats › activer « mkcert ». Sans ce dernier interrupteur, la caméra reste bloquée.
+3. Backend joignable **seulement** depuis le Mac : ajouter `SERVER_ADDRESS=127.0.0.1` à la
+   commande de démarrage. L'iPhone passe par le front, qui relaie `/api`.
+4. Front en HTTPS : `cd apps/web && npm run dev:lan` (remplace `npm run dev`, même port 3100).
+5. Sur l'iPhone, Safari : `https://<nom-du-mac>.local:3100/terrain`, puis Partager › Sur l'écran
+   d'accueil. Régler une fois l'espace, le rôle et le nom (l'appli installée ne partage pas les
+   réglages de Safari).
+
+Tant que la connexion (OIDC) n'est pas branchée, le rôle est simulé : ne faire ce test que sur un
+réseau de confiance, et arrêter `dev:lan` après.
+
 ## Health checks
 
 - Backend : `GET /actuator/health` (liveness + readiness)

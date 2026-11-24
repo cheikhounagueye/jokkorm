@@ -66,6 +66,9 @@ const SIDEBAR_WIDTH = 220;
 const TOPBAR_HEIGHT = 56;
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  // Mode magasin (iPhone) : plein écran, sans menu latéral ni barre du haut.
+  if (pathname === "/terrain" || pathname.startsWith("/terrain/")) return <>{children}</>;
   return (
     <div style={{ minHeight: "100vh", background: "var(--surface-page)" }}>
       <Sidebar />

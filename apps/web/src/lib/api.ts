@@ -182,6 +182,8 @@ export interface StorageLocationResponse {
   aisleCode: string | null;
   aisleOrder: number | null;
   aisleSide: "A" | "B" | null;
+  /** Code de l'étiquette d'emplacement (POSITION seulement) — mode magasin. */
+  scanCode: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -365,6 +367,9 @@ export interface PhysicalContainerResponse {
   sequenceInBatch: number | null;
   externalReference: string | null;
   boxFormatId: string | null;
+  /** Pointage d'arrivée en zone tampon (mode magasin) ; null si jamais pointée. */
+  receivedAt: string | null;
+  receivedBy: string | null;
 }
 
 // ─── Prêts (phase 5E) ──────────────────────────────────────────────────────────
@@ -1174,4 +1179,81 @@ export function cm(mm: number): string {
 export function ml(mm: number): string {
   const v = mm / 1000;
   return `${v >= 10 ? v.toFixed(1) : v.toFixed(2)}`.replace(".", ",") + " ml";
+}
+
+// ─── Mode magasin (pattern 12) : gestes au scan depuis l'iPhone ou une douchette ───
+
+export interface ScanPositionView {
+  id: string;
+  path: string;
+  scanCode: string;
+  address: string;
+}
+
+/** Ce qu'une étiquette scannée désigne : une boîte OU un emplacement. */
+export interface ScanResponse {
+  code: string;
+  kind: "CONTAINER" | "POSITION";
+  container: PhysicalContainerResponse | null;
+  containerAddress: string | null;
+  containerOnLoan: boolean;
+  position: ScanPositionView | null;
+}
+
+export interface ArrivalResponse {
+  container: PhysicalContainerResponse;
+  alreadyReceived: boolean;
+}
+
+export interface PositionLabelResponse {
+  id: string;
+  path: string;
+  scanCode: string;
+  address: string;
+}
+
+const MAGASIN = "/api/v1/physical/magasin";
+
+async function magasinPost<T>(path: string, body: object): Promise<T> {
+  const r = await fetch(`${MAGASIN}${path}`, {
+    method: "POST",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parse<T>(r);
+}
+
+export async function scanCode(code: string): Promise<ScanResponse> {
+  const r = await fetch(`${MAGASIN}/scan?${new URLSearchParams({ code })}`, { headers: accessHeaders() });
+  return parse<ScanResponse>(r);
+}
+
+export const recordArrival = (barcode: string) => magasinPost<ArrivalResponse>("/arrivals", { barcode });
+
+export const placeFromScan = (containerId: string, positionId: string) =>
+  magasinPost<PhysicalContainerResponse>("/placements", { containerId, positionId });
+
+export const removeFromShelf = (containerId: string, positionId: string) =>
+  magasinPost<PhysicalContainerResponse>("/removals", { containerId, positionId });
+
+export async function listPositionLabels(nodeId: string): Promise<PositionLabelResponse[]> {
+  const r = await fetch(`${MAGASIN}/locations/${nodeId}/position-labels`, { headers: accessHeaders() });
+  return parse<PositionLabelResponse[]>(r);
+}
+
+/** Planche Avery L7169 des étiquettes d'emplacement sous un nœud (fetch + blob : en-têtes requis). */
+export async function downloadPositionLabelsPdf(nodeId: string, fileName: string): Promise<void> {
+  const response = await fetch(`${MAGASIN}/locations/${nodeId}/position-labels.pdf`, { headers: accessHeaders() });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as ProblemDetail;
+    throw new Error(body.detail || body.title || `HTTP ${response.status}`);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

@@ -161,7 +161,9 @@ public class MasterSyncService {
             .filter(l -> l.status().isActive())
             .map(l -> l.expectedReturnAt() == null ? "en prêt"
                 : "en prêt, retour prévu le " + DAY.withZone(zone).format(l.expectedReturnAt()))
-            .orElse(address == null ? "en zone tampon (pas encore rangée)" : "en magasin");
+            .orElse(address != null ? "en magasin"
+                : box.lastMovedAt().isPresent() ? "en zone tampon (retirée de sa tablette)"
+                : "en zone tampon (pas encore rangée)");
         return new PhysicalStatus(address, state, asOf);
     }
 

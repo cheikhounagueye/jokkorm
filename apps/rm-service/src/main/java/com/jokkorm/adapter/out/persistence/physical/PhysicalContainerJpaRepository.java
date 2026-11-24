@@ -68,9 +68,11 @@ public interface PhysicalContainerJpaRepository extends JpaRepository<PhysicalCo
     Page<PhysicalContainerEntity> findByTenantIdOrderByCreatedAtDesc(String tenantId, Pageable pageable);
 
     /**
-     * Phase 5O — boîtes toujours en zone tampon (position_id IS NULL) créées avant
+     * Phase 5O — boîtes toujours en zone tampon (position_id IS NULL) entrées dans la zone avant
      * {@code threshold}, groupées par batch_id (celles sans batch_id sont exclues
      * car elles ont été créées unitairement, hors scénario d'alerte lot).
+     * Entrée dans la zone = le plus récent de la création, du pointage d'arrivée et du dernier
+     * mouvement (une boîte retirée de sa tablette repart de zéro, pattern 12).
      * Retourne Object[] { batch_id (UUID), reference (String), count (Long), oldest_created_at (Timestamp) }
      * ordonnés par plus vieux d'abord.
      */
@@ -78,16 +80,16 @@ public interface PhysicalContainerJpaRepository extends JpaRepository<PhysicalCo
         SELECT c.batch_id,
                b.reference,
                COUNT(*) as stale_count,
-               MIN(c.created_at) as oldest
+               MIN(GREATEST(c.created_at, c.received_at, c.last_moved_at)) as oldest
         FROM physical_container c
         JOIN container_batch b ON b.id = c.batch_id
         WHERE c.tenant_id = :tenantId
           AND c.position_id IS NULL
           AND c.state <> 'DESTROYED'
-          AND c.created_at < :threshold
+          AND GREATEST(c.created_at, c.received_at, c.last_moved_at) < :threshold
           AND c.batch_id IS NOT NULL
         GROUP BY c.batch_id, b.reference
-        ORDER BY MIN(c.created_at) ASC
+        ORDER BY MIN(GREATEST(c.created_at, c.received_at, c.last_moved_at)) ASC
         """, nativeQuery = true)
     List<Object[]> findStaleBufferGroupedByBatch(
         @Param("tenantId") String tenantId,

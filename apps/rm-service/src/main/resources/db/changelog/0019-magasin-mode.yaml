@@ -1,0 +1,33 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0019-magasin-mode
+      author: jokkorm
+      comment: >
+        Mode magasin (pattern 12) : chaque emplacement (POSITION) reçoit un code à scanner stable,
+        imprimé sur son étiquette (EMP-XXXXXXXX) ; il ne change jamais, même si le libellé change.
+        La contrainte de contrôle garantit qu'aucun chemin de création ne l'oublie.
+        La boîte garde la date et l'auteur de son pointage d'arrivée (zone tampon).
+      changes:
+        - addColumn:
+            tableName: storage_location
+            columns:
+              - column: { name: scan_code, type: VARCHAR(16) }
+        - sql:
+            comment: Codes des emplacements existants, dérivés de leur identifiant (hexadécimal, sous-ensemble du Crockford).
+            sql: >
+              UPDATE storage_location
+              SET scan_code = 'EMP-' || upper(substr(md5(id::text), 1, 8))
+              WHERE kind = 'POSITION' AND scan_code IS NULL
+        - addUniqueConstraint:
+            tableName: storage_location
+            columnNames: tenant_id, scan_code
+            constraintName: uq_storage_location_tenant_scan_code
+        - sql:
+            sql: >
+              ALTER TABLE storage_location ADD CONSTRAINT ck_storage_location_position_scan_code
+              CHECK (kind <> 'POSITION' OR scan_code IS NOT NULL)
+        - addColumn:
+            tableName: physical_container
+            columns:
+              - column: { name: received_at, type: TIMESTAMP WITH TIME ZONE }
+              - column: { name: received_by, type: VARCHAR(128) }

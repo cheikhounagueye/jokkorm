@@ -18,7 +18,10 @@ public record PhysicalContainerResponse(
     UUID batchId,
     Integer sequenceInBatch,
     String externalReference,
-    UUID boxFormatId) {
+    UUID boxFormatId,
+    /** Pointage d'arrivée en zone tampon (mode magasin) ; null si jamais pointée. */
+    Instant receivedAt,
+    String receivedBy) {
 
     public static PhysicalContainerResponse from(PhysicalContainer d) {
         return new PhysicalContainerResponse(
@@ -31,6 +34,8 @@ public record PhysicalContainerResponse(
             d.batchId().orElse(null),
             d.sequenceInBatch().orElse(null),
             d.externalReference().orElse(null),
-            d.boxFormatId().orElse(null));
+            d.boxFormatId().orElse(null),
+            d.receivedAt().orElse(null),
+            d.receivedBy().orElse(null));
     }
 }

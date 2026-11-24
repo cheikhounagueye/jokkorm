@@ -137,6 +137,21 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "access-denied", e.getMessage(), request);
     }
 
+    @ExceptionHandler(com.jokkorm.application.physical.ScanCodeUnknownException.class)
+    public ResponseEntity<ProblemDetail> scanCodeUnknown(
+        com.jokkorm.application.physical.ScanCodeUnknownException e, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "scan-code-unknown", e.getMessage(), request);
+    }
+
+    @ExceptionHandler(com.jokkorm.application.physical.ContainerNotAtPositionException.class)
+    public ResponseEntity<ProblemDetail> containerNotAtPosition(
+        com.jokkorm.application.physical.ContainerNotAtPositionException e, HttpServletRequest request) {
+        // Retrait au mauvais endroit : l'adresse enregistrée accompagne la réponse pour l'écran.
+        ProblemDetail pd = baseProblem(HttpStatus.CONFLICT, "container-not-at-position", e.getMessage(), request);
+        pd.setProperty("currentAddress", e.currentAddress());
+        return response(pd);
+    }
+
     @ExceptionHandler(com.jokkorm.application.record.RecordContainerConflictException.class)
     public ResponseEntity<ProblemDetail> recordContainerConflict(
         com.jokkorm.application.record.RecordContainerConflictException e, HttpServletRequest request) {
