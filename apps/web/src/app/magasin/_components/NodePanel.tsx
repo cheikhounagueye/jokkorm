@@ -195,7 +195,7 @@ function PositionLabelsButton({ id, path, single }: { id: string; path: string; 
   return (
     <>
       <Button variant="secondary" icon={<Icons.qr size={14} />} loading={busy} onClick={() => void print()}
-        title="Avery L7169 : QR (iPhone) + Code128 (douchette) + adresse">
+        title="Avery L7162 : QR (iPhone) + Code128 (douchette) + adresse">
         {single ? "Étiquette d'emplacement" : "Étiquettes d'emplacement"}
       </Button>
       {error && <span role="alert" style={{ alignSelf: "center", fontSize: 12, color: "var(--danger-500)" }}>{error}</span>}

@@ -17,9 +17,25 @@ public enum AveryTemplate {
     AVERY_L7159("Avery L7159 · 24 étiquettes 63.5 × 33.9 mm",
         3, 8, 63.5, 33.9, 7.21, 13.0, 2.5, 0.0),
 
-    /** L7169 : 99.1 × 33.9 mm, 2 colonnes × 8 lignes = 16 étiquettes par A4. Cartons allongés. */
-    AVERY_L7169("Avery L7169 · 16 étiquettes 99.1 × 33.9 mm",
-        2, 8, 99.1, 33.9, 4.0, 13.0, 2.5, 0.0);
+    /**
+     * L7162 : 99.1 × 33.9 mm, 2 colonnes × 8 lignes = 16 étiquettes par A4. Cartons allongés,
+     * étiquettes d'emplacement. Planche centrée : marges (210 − 2 × 99,1 − 2,5) / 2 = 4,65 mm et
+     * (297 − 8 × 33,9) / 2 = 12,9 mm. S'appelait à tort « L7169 » (une autre référence Avery,
+     * de plus grand format) jusqu'au 24 novembre 2026 ; ce nom reste accepté par {@link #parse}.
+     */
+    AVERY_L7162("Avery L7162 · 16 étiquettes 99.1 × 33.9 mm",
+        2, 8, 99.1, 33.9, 4.65, 12.9, 2.5, 0.0);
+
+    /** Ancien nom de {@link #AVERY_L7162}, encore accepté en entrée de l'API. */
+    public static final String LEGACY_L7169 = "AVERY_L7169";
+
+    /** Lecture tolérante d'un nom de gabarit (paramètre d'API) : casse ignorée, ancien nom accepté. */
+    public static AveryTemplate parse(String raw) {
+        String name = raw == null ? "" : raw.trim().toUpperCase(java.util.Locale.ROOT);
+        if (name.equals(LEGACY_L7169) || name.equals("L7169")) return AVERY_L7162;
+        if (!name.startsWith("AVERY_")) name = "AVERY_" + name;
+        return valueOf(name);
+    }
 
     private final String label;
     private final int columns;

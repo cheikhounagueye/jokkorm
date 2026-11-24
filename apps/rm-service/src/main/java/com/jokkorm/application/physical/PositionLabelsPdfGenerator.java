@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Étiquettes d'emplacement (mode magasin, pattern 12) : une par POSITION sous le nœud choisi
- * (salle, travée, tablette ou emplacement), sur planche Avery L7169 (99,1 × 33,9 mm, 16 par A4),
+ * (salle, travée, tablette ou emplacement), sur planche Avery L7162 (99,1 × 33,9 mm, 16 par A4),
  * format allongé qui se colle sur le chant d'une tablette.
  *
  * <p>Chaque étiquette porte le QR du code (lu par l'iPhone), le même code en Code128 (lu par les
@@ -39,7 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PositionLabelsPdfGenerator {
 
     private static final float MM = 2.83465f;
-    private static final AveryTemplate TEMPLATE = AveryTemplate.AVERY_L7169;
+    private static final AveryTemplate TEMPLATE = AveryTemplate.AVERY_L7162;
 
     private final StorageLocationRepository locations;
     private final BarcodeImageGenerator barcodes;

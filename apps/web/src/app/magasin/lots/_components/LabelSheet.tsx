@@ -1,12 +1,12 @@
 "use client";
 
-export type AveryTemplate = "AVERY_L7160" | "AVERY_L7159" | "AVERY_L7169";
+export type AveryTemplate = "AVERY_L7160" | "AVERY_L7159" | "AVERY_L7162";
 
 /** Formats des planches d'étiquettes Avery A4 gérés par le backend. */
 export const AVERY_TEMPLATES: Record<AveryTemplate, { code: string; cols: number; rows: number; perPage: number; dims: string }> = {
   AVERY_L7160: { code: "L7160", cols: 3, rows: 7, perPage: 21, dims: "63,5 × 38,1 mm" },
   AVERY_L7159: { code: "L7159", cols: 3, rows: 8, perPage: 24, dims: "63,5 × 33,9 mm" },
-  AVERY_L7169: { code: "L7169", cols: 2, rows: 8, perPage: 16, dims: "99,1 × 33,9 mm" },
+  AVERY_L7162: { code: "L7162", cols: 2, rows: 8, perPage: 16, dims: "99,1 × 33,9 mm" },
 };
 
 /** Barres de code-barres stylisées (aperçu, pas un code lisible). */

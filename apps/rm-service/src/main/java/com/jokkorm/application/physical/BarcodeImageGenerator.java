@@ -37,6 +37,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class BarcodeImageGenerator {
 
+    /** Blanc gardé de chaque côté du texte en clair. */
+    static final int TEXT_SIDE_MARGIN_PX = 4;
+    private static final int MIN_TEXT_SIZE_PX = 8;
+
     public enum Symbology {
         CODE128(BarcodeFormat.CODE_128),
         QR(BarcodeFormat.QR_CODE);
@@ -90,9 +94,19 @@ public class BarcodeImageGenerator {
                 g.drawImage(barcodeImg, 0, 0, null);
                 if (showLabel) {
                     g.setColor(Color.BLACK);
-                    Font font = new Font(Font.MONOSPACED, Font.BOLD, Math.max(10, labelHeight - 6));
+                    // Le texte en clair tient toujours en entier dans la largeur : sur un QR (carré),
+                    // la taille tirée de la hauteur le faisait déborder (« BOX-261122- » tronqué).
+                    int size = Math.max(10, labelHeight - 6);
+                    int maxWidth = w - 2 * TEXT_SIDE_MARGIN_PX;
+                    Font font = new Font(Font.MONOSPACED, Font.BOLD, size);
                     g.setFont(font);
                     var fm = g.getFontMetrics();
+                    while (fm.stringWidth(content) > maxWidth && size > MIN_TEXT_SIZE_PX) {
+                        size--;
+                        font = font.deriveFont((float) size);
+                        g.setFont(font);
+                        fm = g.getFontMetrics();
+                    }
                     int textWidth = fm.stringWidth(content);
                     int x = Math.max(0, (w - textWidth) / 2);
                     int y = barcodeHeight + ((labelHeight + fm.getAscent()) / 2) - 2;

@@ -22,7 +22,7 @@ qu'on est devant la bonne tablette.
 - **Boîte** : son code-barres `BOX-AAMMJJ-XXXXXX` (pattern 06), Code128 par défaut, QR possible.
 - **Emplacement** : un code `EMP-XXXXXXXX` attribué à la création de l'emplacement et **qui ne
   change jamais**, même si on renomme la travée. On peut réimprimer une étiquette sans recoller
-  les autres. Planche Avery L7169 (16 par A4) à coller sur le chant de la tablette : QR pour le
+  les autres. Planche Avery L7162 (16 par A4, 99,1 × 33,9 mm) à coller sur le chant de la tablette : QR pour le
   téléphone, Code128 pour les douchettes, code en clair et adresse lisible.
 - Le code est cherché dans les boîtes **et** dans les emplacements : on ne devine pas d'après le
   préfixe, et un code qui désignerait les deux est refusé.

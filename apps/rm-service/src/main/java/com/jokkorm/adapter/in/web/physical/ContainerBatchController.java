@@ -109,7 +109,7 @@ public class ContainerBatchController {
     @Operation(
         summary = "PDF A4 multi-pages avec toutes les étiquettes d'un lot (phase 5M.2).",
         description = "Génère les étiquettes selon un template Avery (L7160 = 21/A4, "
-            + "L7159 = 24/A4, L7169 = 16/A4), symbologie CODE128 ou QR, prêt à imprimer. "
+            + "L7159 = 24/A4, L7162 = 16/A4 ; l'ancien nom AVERY_L7169 reste accepté), symbologie CODE128 ou QR, prêt à imprimer. "
             + "Marque le lot comme PRINTED + audit CONTAINER_BATCH_PRINTED. Rejoué = "
             + "lastPrintedAt mis à jour, pas de doublon côté containers.")
     public ResponseEntity<byte[]> labelsPdf(
