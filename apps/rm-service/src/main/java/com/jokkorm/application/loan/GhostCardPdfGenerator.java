@@ -80,13 +80,13 @@ public class GhostCardPdfGenerator {
                 cs.setNonStrokingColor(1f, 1f, 1f);
                 cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 28);
                 cs.newLineAtOffset(30, h - 42);
-                cs.showText("BOITE SORTIE");
+                cs.showText("BOÎTE SORTIE");
                 cs.endText();
 
                 cs.beginText();
                 cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 10);
                 cs.newLineAtOffset(w - 160, h - 30);
-                cs.showText("Fantome pret physique");
+                cs.showText("Fantôme de prêt physique");
                 cs.endText();
 
                 cs.setNonStrokingColor(0f, 0f, 0f);
@@ -99,7 +99,7 @@ public class GhostCardPdfGenerator {
                 // Infos clés — la boîte en clair (libellé + code-barres en texte, pas en barres)
                 String containerLabel = container.label() != null && !container.label().isBlank()
                     ? container.label() : "(sans libellé)";
-                drawLine(cs, "Boite", sanitize(containerLabel + " (" + container.barcode() + ")"), 30, h - 200, 10, true);
+                drawLine(cs, "Boîte", sanitize(containerLabel + " (" + container.barcode() + ")"), 30, h - 200, 10, true);
 
                 drawLine(cs, "Emprunteur", sanitize(loan.borrowerName()), 30, h - 230, 12, true);
                 drawLine(cs, "Service", sanitize(loan.borrowerDept().orElse("—")), 30, h - 255, 10, false);
@@ -128,13 +128,13 @@ public class GhostCardPdfGenerator {
                 cs.beginText();
                 cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_OBLIQUE), 7);
                 cs.newLineAtOffset(30, 25);
-                cs.showText("Ce code designe le pret, pas la boite. Retirer ce fantome au retour de la boite.");
+                cs.showText("Ce code désigne le prêt, pas la boîte. Retirer ce fantôme au retour de la boîte.");
                 cs.endText();
 
                 cs.beginText();
                 cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_OBLIQUE), 7);
                 cs.newLineAtOffset(30, 15);
-                cs.showText("Fantome " + loan.ghostCode());
+                cs.showText("Fantôme " + loan.ghostCode());
                 cs.endText();
             }
 
@@ -162,20 +162,11 @@ public class GhostCardPdfGenerator {
         cs.endText();
     }
 
+    /**
+     * Avant, seul l'ASCII passait : « Ressources humaines · 001 » s'imprimait
+     * « Ressources humaines ? 001 » et les accents disparaissaient.
+     */
     private static String sanitize(String s) {
-        if (s == null) return "";
-        StringBuilder sb = new StringBuilder(s.length());
-        for (char c : s.toCharArray()) {
-            if (c >= 32 && c < 127) sb.append(c);
-            else if (c == 'à' || c == 'â') sb.append('a');
-            else if (c == 'é' || c == 'è' || c == 'ê') sb.append('e');
-            else if (c == 'ç') sb.append('c');
-            else if (c == 'î' || c == 'ï') sb.append('i');
-            else if (c == 'ô') sb.append('o');
-            else if (c == 'ù' || c == 'û') sb.append('u');
-            else if (c == '°') sb.append('o');
-            else sb.append('?');
-        }
-        return sb.toString();
+        return com.jokkorm.application.physical.PdfText.printable(s);
     }
 }

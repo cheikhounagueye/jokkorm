@@ -133,13 +133,15 @@ class GhostCodeIT {
     @Test
     @DisplayName("Le fantôme imprimé : ses codes-barres portent le code du prêt, jamais celui de la boîte")
     void pdfCarriesGhostCodeOnly() throws Exception {
-        PhysicalContainer box = as(() -> createBox.execute("Boîte du fantôme imprimé", null, null));
+        PhysicalContainer box = as(() -> createBox.execute("Ressources humaines · 001/128 éé", null, null));
         PhysicalLoan loan = loanOut(box);
 
         byte[] pdf = as(() -> ghostPdf.generate(loan.id()));
         try (PDDocument doc = Loader.loadPDF(pdf)) {
             String text = new PDFTextStripper().getText(doc);
-            assertThat(text).contains("Fantome " + loan.ghostCode()).contains(box.barcode());
+            assertThat(text).contains("Fantôme " + loan.ghostCode()).contains(box.barcode())
+                // Accents et « · » imprimés tels quels (ils devenaient « ? » ou disparaissaient).
+                .contains("Ressources humaines · 001/128 éé").contains("Retour prévu le");
 
             BufferedImage page = new PDFRenderer(doc).renderImageWithDPI(0, 200);
             List<String> decoded = decodeAll(page);

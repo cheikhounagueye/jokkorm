@@ -185,20 +185,11 @@ public class BatchLabelsPdfGenerator {
         return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 
-    /** PDFBox Helvetica ne supporte pas tous les caractères — on retire les points hors ANSI. */
+    /**
+     * Texte imprimable par Helvetica (accents et « · » compris). Avant, seul l'ASCII passait :
+     * « Marchés publics DMG · 004/020 » s'imprimait « Marches publics DMG ? 004/020 ».
+     */
     private static String sanitize(String s) {
-        StringBuilder sb = new StringBuilder(s.length());
-        for (char c : s.toCharArray()) {
-            if (c >= 32 && c < 127) sb.append(c);
-            else if (c == 'à' || c == 'â') sb.append('a');
-            else if (c == 'é' || c == 'è' || c == 'ê') sb.append('e');
-            else if (c == 'ç') sb.append('c');
-            else if (c == 'î' || c == 'ï') sb.append('i');
-            else if (c == 'ô') sb.append('o');
-            else if (c == 'ù' || c == 'û') sb.append('u');
-            else if (c == '°') sb.append('o');
-            else sb.append('?');
-        }
-        return sb.toString();
+        return PdfText.printable(s);
     }
 }
