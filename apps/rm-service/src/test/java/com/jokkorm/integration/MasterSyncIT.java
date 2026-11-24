@@ -505,6 +505,25 @@ class MasterSyncIT {
     }
 
     @Test
+    @DisplayName("Dossier sous gel contentieux → aucun transfert proposé ni accepté, message clair, le dossier ne bouge pas")
+    void frozen_record_never_changes_box() {
+        PhysicalContainer b2 = secondBoxAtP2();
+        jdbc.update("UPDATE physical_archive_record SET status = 'FROZEN' WHERE tenant_id = ? AND cote = ?",
+            tenant.value(), COTE);
+
+        for (boolean transfer : new boolean[] {false, true}) {
+            try {
+                as(() -> store.execute(Cote.of(COTE), b2.barcode(), transfer));
+                throw new AssertionError("Le rangement d'un dossier gelé aurait dû être refusé");
+            } catch (com.jokkorm.application.record.LegalHoldException e) {
+                assertThat(e.getMessage()).contains("gel contentieux").contains(box.barcode());
+            }
+        }
+        assertThat(recordBox()).isEqualTo(box.barcode());
+        assertThat(recordStatus()).isEqualTo("FROZEN");
+    }
+
+    @Test
     @DisplayName("Veilleur : Maarch injoignable → passage en échec visible, curseur inchangé, rien de perdu")
     void outage_keeps_the_cursor() {
         Instant at = Instant.now().minusSeconds(200).truncatedTo(ChronoUnit.SECONDS);

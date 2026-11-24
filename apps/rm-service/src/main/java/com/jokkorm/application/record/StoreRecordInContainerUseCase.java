@@ -21,6 +21,7 @@ import com.jokkorm.domain.physical.StorageLocationRepository;
 import com.jokkorm.domain.record.Cote;
 import com.jokkorm.domain.record.PhysicalArchiveRecord;
 import com.jokkorm.domain.record.PhysicalArchiveRecordRepository;
+import com.jokkorm.domain.record.PhysicalArchiveStatus;
 import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -134,6 +135,13 @@ public class StoreRecordInContainerUseCase {
                     "Le dossier %s est déjà dans cette boîte (%s) : rien à faire."
                         .formatted(cote.value(), describe(container)));
             }
+            // Gel contentieux : ne pas proposer un transfert qui serait refusé ensuite.
+            if (record.status() == PhysicalArchiveStatus.FROZEN) {
+                throw new LegalHoldException(
+                    ("Le dossier %s est sous gel contentieux : il ne peut pas changer de boîte tant que le gel "
+                        + "n'est pas levé dans la GED maître. Il reste dans la boîte %s, %s.")
+                        .formatted(cote.value(), describe(from), where(tenant, from)));
+            }
             if (!transfer) {
                 throw conflict(Reason.IN_ANOTHER_BOX, tenant, from,
                     "Le dossier %s est déjà rangé dans la boîte %s, %s. Un dossier ne peut être que dans "
@@ -142,6 +150,10 @@ public class StoreRecordInContainerUseCase {
             }
             requireNoLoan(tenant, from, "d'origine");
             requireNoLoan(tenant, container, "d'arrivée");
+        } else if (record.status() == PhysicalArchiveStatus.FROZEN) {
+            throw new LegalHoldException(
+                "Le dossier %s est sous gel contentieux : il ne peut pas être rangé tant que le gel n'est pas levé dans la GED maître."
+                    .formatted(cote.value()));
         }
 
         java.time.Instant now = clock.instant();
