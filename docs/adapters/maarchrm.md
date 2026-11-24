@@ -194,13 +194,17 @@ papier, et c'est une décision écrite.
 - **Vérifié en réel le 2026-11-24** (rattrapage 30 jours, aucune règle) : 4 dépôts lus, 3 déjà
   suivis (AE0002 déposée deux fois, AE0003), 1 sous-archive (AE0002_001). Rien n'a été écrit.
 
-**Test d'acceptation (à faire dans Maarch)** :
+**Test d'acceptation — réussi en réel le 2026-11-24** (heures UTC, comptes et données fictives) :
 
-1. Créer une archive DOSIP de premier niveau : elle apparaît dans « À importer » en une minute
-   environ.
-2. Créer une sous-archive dedans : elle n'apparaît pas.
-3. En responsable des archives, activer l'import automatique de DOSIP, puis créer une autre
-   archive DOSIP : elle entre seule dans JokkoRM, « Enregistrée », à ranger.
+1. 13:06:05, archive DOSIP déposée par ggrand → `FR094080_2026_AE0004` dans « À décider »,
+   titre lu en direct.
+2. 13:09:29, sous-archive ETAC dedans (`AE0004_001`) → n'apparaît pas.
+3. 13:10:46, import automatique DOSIP activé par le responsable des archives (audité) ;
+   13:12:54, nouvelle archive DOSIP → importée seule par le veilleur à 13:13:17 (23 s),
+   « Enregistrée ». L'audit porte le profil, l'auteur et la date de la règle, et l'identifiant
+   réel de l'événement de dépôt Maarch.
+4. 13:14:13, `AE0004` (restée à décider, la règle ne vaut que pour les dépôts suivants) importée
+   par le responsable des archives (audité).
 
 ## Montées de version de Maarch RM
 

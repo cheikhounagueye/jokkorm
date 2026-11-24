@@ -38,6 +38,19 @@ export default function RecordsPage() {
     queryKey: ["records", page, size, statusFilter ?? "all"],
     queryFn: () => listRecords({ page, size, status: statusFilter }),
   });
+  // Avec un filtre, le total affiché doit rester celui de toutes les enveloppes suivies.
+  const all = useQuery({
+    queryKey: ["records", 0, 1, "all"],
+    queryFn: () => listRecords({ page: 0, size: 1 }),
+    enabled: !!statusFilter,
+  });
+  const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
+  const subtitle = !query.data
+    ? "Enveloppes physiques suivies par JokkoRM"
+    : statusFilter
+      ? `${plural(query.data.totalElements, "enveloppe")} au statut « ${ARCHIVE_STATUS[statusFilter].label} »`
+        + (all.data ? ` · ${all.data.totalElements} suivie${all.data.totalElements > 1 ? "s" : ""} par JokkoRM au total` : "")
+      : `${plural(query.data.totalElements, "enveloppe")} suivie${query.data.totalElements > 1 ? "s" : ""} par JokkoRM`;
 
   const needle = search.trim().toLowerCase();
   const rows = (query.data?.content ?? []).filter((r) => !needle || r.cote.toLowerCase().includes(needle));
@@ -54,9 +67,7 @@ export default function RecordsPage() {
         icon="archives"
         tone="brand"
         title="Archives physiques"
-        subtitle={query.data
-          ? `${query.data.totalElements} enveloppe${query.data.totalElements > 1 ? "s" : ""} suivie${query.data.totalElements > 1 ? "s" : ""} par JokkoRM`
-          : "Enveloppes physiques suivies par JokkoRM"}
+        subtitle={subtitle}
         crumbs={[{ label: "Accueil", href: "/" }, { label: "Archives" }]}
       />
 
