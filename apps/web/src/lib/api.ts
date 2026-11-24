@@ -487,6 +487,14 @@ export interface QualificationCheck {
 
 const ROLE_KEY = "jokkorm.role";
 const ACTOR_KEY = "jokkorm.actor";
+
+/**
+ * Clés qui fixent l'espace et le rôle de TOUS les onglets du navigateur. Si un autre onglet les
+ * change (sélecteur d'espace, réglages de /terrain), les onglets déjà ouverts doivent recharger :
+ * sinon ils affichent un espace et interrogent l'autre.
+ */
+export const SESSION_STORAGE_KEYS: readonly string[] = [TENANT_KEY, ROLE_KEY];
+
 const ROLES: UserRole[] = ["REQUESTER", "ARCHIVIST", "ARCHIVES_HEAD", "AUDITOR"];
 const DEFAULT_ACTOR: Record<UserRole, string> = {
   REQUESTER: "awa.diop",

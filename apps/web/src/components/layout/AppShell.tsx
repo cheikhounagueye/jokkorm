@@ -3,10 +3,27 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { IconTile } from "@/components/ui/IconTile";
 import { useRole } from "@/app/demandes/_components/useRole";
-import { getImportSummary, getMasterWatch, listPendingConditioning } from "@/lib/api";
+import { SESSION_STORAGE_KEYS, getImportSummary, getMasterWatch, listPendingConditioning } from "@/lib/api";
+
+/**
+ * L'espace ou le rôle a changé dans un autre onglet : cet onglet recharge, pour ne jamais
+ * afficher un espace et en interroger un autre. Une fiche de dossier (propre à un espace)
+ * renvoie à la liste des archives.
+ */
+function useFollowSessionChanges() {
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || !SESSION_STORAGE_KEYS.includes(e.key) || e.oldValue === e.newValue) return;
+      if (window.location.pathname === "/records/detail") window.location.href = "/records";
+      else window.location.reload();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+}
 import { Icons, type IconName } from "@/lib/icons";
 import { TopBar } from "./TopBar";
 
@@ -78,6 +95,7 @@ const TOPBAR_HEIGHT = 56;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  useFollowSessionChanges();
   // Mode magasin (iPhone) : plein écran, sans menu latéral ni barre du haut.
   if (pathname === "/terrain" || pathname.startsWith("/terrain/")) return <>{children}</>;
   return (

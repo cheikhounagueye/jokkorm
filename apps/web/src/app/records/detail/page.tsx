@@ -18,6 +18,7 @@ import {
 import {
   getConsolidatedRecord,
   getMasterSync,
+  problemSlug,
   type ConsolidatedRecordResponse,
   type MasterStatus,
   type RecordResponse,
@@ -47,7 +48,10 @@ function RecordDetail() {
     enabled: cote.length > 0,
     queryKey: ["consolidated", cote],
     queryFn: () => getConsolidatedRecord(cote),
+    // Un dossier absent de l'espace ne réapparaîtra pas en réessayant.
+    retry: (failures, error) => problemSlug(error) !== "record-not-found" && failures < 2,
   });
+  const notHere = query.isError && problemSlug(query.error) === "record-not-found";
 
   const crumbs = [{ label: "Accueil", href: "/" }, { label: "Archives", href: "/records" }, { label: cote || "—" }];
 
@@ -81,8 +85,14 @@ function RecordDetail() {
       {query.isLoading && (
         <Card><div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Chargement de la fiche…</div></Card>
       )}
-      {query.isError && (
-        <Alert tone="danger" title="Fiche introuvable">{(query.error as Error).message}</Alert>
+      {notHere && (
+        <Alert tone="warning" title="Dossier absent de cet espace">
+          JokkoRM ne suit pas le dossier <code>{cote}</code> dans l&apos;espace choisi en haut de l&apos;écran.
+          S&apos;il appartient à un autre espace (par exemple ACME — Maarch RM), choisis cet espace, puis rouvre-le.
+        </Alert>
+      )}
+      {query.isError && !notHere && (
+        <Alert tone="danger" title="Fiche indisponible">{(query.error as Error).message}</Alert>
       )}
 
       {query.data && (
