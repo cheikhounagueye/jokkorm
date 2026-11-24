@@ -196,6 +196,34 @@ class MasterSyncIT {
     }
 
     @Test
+    @DisplayName("Mise en boîte en zone tampon (D1) : Maarch lit « en zone tampon », puis l'adresse quand la boîte est placée")
+    void buffer_box_then_placed_sends_address() {
+        String cote2 = "FR-IT-0002";
+        MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).willReturn(json(
+            "[{\"archiveId\":\"arc-2\",\"archiverArchiveId\":\"" + cote2 + "\"}]")));
+        MAARCH.stubFor(get(urlPathMatching("/recordsManagement/archive/Metadata/.*")).willReturn(json(
+            "{\"archiveId\":\"arc-2\",\"archiverArchiveId\":\"" + cote2 + "\",\"originatorArchiveId\":\"124\","
+                + "\"archiveName\":\"Dossier 2\",\"originatingDate\":\"2026-01-03\",\"description\":{\"service\":\"RH\"}}")));
+        PhysicalContainer buffer = as(() -> {
+            UUID d10 = formats.list().stream().filter(f -> f.spineMm() == 100).map(BoxFormat::id).findFirst().orElseThrow();
+            PhysicalContainer b = createBox.execute("Boîte tampon", null, d10);
+            register.execute(tenant, Cote.of(cote2));
+            store.execute(Cote.of(cote2), b.barcode());
+            return b;
+        });
+        MasterSync queued = as(() -> sync.status(Cote.of(cote2))).orElseThrow();
+        assertThat(queued.status()).isEqualTo(MasterSync.Status.PENDING);
+        sync.drain(100);
+        assertThat(as(() -> sync.status(Cote.of(cote2))).orElseThrow().lastPayload()).contains("en zone tampon");
+
+        as(() -> place.execute(buffer.id(), p2.id(), "it"));
+        assertThat(as(() -> sync.status(Cote.of(cote2))).orElseThrow().status()).isEqualTo(MasterSync.Status.PENDING);
+        sync.drain(100);
+        assertThat(as(() -> sync.status(Cote.of(cote2))).orElseThrow().lastPayload())
+            .contains("Travée T01 · Tablette 2 · Emplacement 01").contains("en magasin");
+    }
+
+    @Test
     @DisplayName("Prêt : l'état affiché dans Maarch devient « en prêt, retour prévu le … », sans code-barres")
     void loan_shows_in_maarch() {
         as(() -> {

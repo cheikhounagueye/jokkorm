@@ -10,9 +10,12 @@ import { Icons } from "@/lib/icons";
 import { etiquetteHref } from "./kinds";
 import { LinkButton } from "./LinkButton";
 
+const DEFAULT_CAPACITY = 50;
+
 export function ContainerCreationCard() {
   const [label, setLabel] = useState("");
-  const [capacity, setCapacity] = useState("");
+  // Capacité : 50 dossiers par défaut (étude du 24 novembre 2026, D4) ; vide = sans limite.
+  const [capacity, setCapacity] = useState(String(DEFAULT_CAPACITY));
   const [created, setCreated] = useState<PhysicalContainerResponse | null>(null);
 
   const mutation = useMutation({
@@ -20,7 +23,7 @@ export function ContainerCreationCard() {
       label: label || undefined,
       capacity: capacity ? parseInt(capacity, 10) : undefined,
     }),
-    onSuccess: (c) => { setCreated(c); setLabel(""); setCapacity(""); },
+    onSuccess: (c) => { setCreated(c); setLabel(""); setCapacity(String(DEFAULT_CAPACITY)); },
   });
 
   return (

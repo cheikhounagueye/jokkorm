@@ -31,7 +31,8 @@ export default function NewLotPage() {
   const [reference, setReference] = useState("");
   const [size, setSize] = useState(10);
   const [labelPattern, setLabelPattern] = useState("");
-  const [capacity, setCapacity] = useState("");
+  // 50 dossiers par boîte par défaut (étude du 24 novembre 2026, D4) ; vide = sans limite.
+  const [capacity, setCapacity] = useState("50");
   const boxFormats = useBoxFormats();
   // Vide = le format par défaut du tenant, connu une fois le catalogue chargé.
   const [chosenFormatId, setChosenFormatId] = useState("");
