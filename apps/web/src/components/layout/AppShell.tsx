@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { IconTile } from "@/components/ui/IconTile";
 import { useRole } from "@/app/demandes/_components/useRole";
-import { getImportSummary, getMasterWatch } from "@/lib/api";
+import { getImportSummary, getMasterWatch, listPendingConditioning } from "@/lib/api";
 import { Icons, type IconName } from "@/lib/icons";
 import { TopBar } from "./TopBar";
 
@@ -23,6 +23,15 @@ function PendingImportsCount() {
   const q = useQuery({ queryKey: ["imports-summary"], queryFn: getImportSummary, refetchInterval: 60_000,
     retry: false, enabled: staff });
   return <CountBadge n={staff ? q.data?.pending ?? 0 : 0} label="archive(s) à importer" color="var(--brand-500)" />;
+}
+
+/** Dossiers enregistrés qui attendent d'être mis en boîte (conditionnement, lot 1). */
+function PendingConditioningCount() {
+  const role = useRole();
+  const staff = role === "ARCHIVIST" || role === "ARCHIVES_HEAD" || role === "AUDITOR";
+  const q = useQuery({ queryKey: ["conditioning-pending", "count"], queryFn: () => listPendingConditioning(0, 1),
+    refetchInterval: 60_000, retry: false, enabled: staff });
+  return <CountBadge n={staff ? q.data?.total ?? 0 : 0} label="dossier(s) à conditionner" color="var(--warning-500)" />;
 }
 
 function CountBadge({ n, label, color }: { n: number; label: string; color: string }) {
@@ -50,6 +59,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/a-importer",   label: "À importer",        icon: "inbox",       section: "Travail" },
   { href: "/signalements", label: "Signalements",     icon: "eyes",        section: "Travail" },
   { href: "/magasin",      label: "Salle d'archives", icon: "archiveRoom", section: "Gestion" },
+  { href: "/magasin/conditionner", label: "À conditionner", icon: "conditioning", section: "Gestion" },
+  { href: "/magasin/etiquette", label: "Étiquettes",  icon: "label",       section: "Gestion" },
   { href: "/magasin/visite", label: "Visite 3D",      icon: "virtualTour", section: "Gestion" },
   { href: "/magasin/lots", label: "Lots de boîtes",   icon: "batches",     section: "Gestion" },
   { href: "/magasin/formats", label: "Formats de boîtes", icon: "boxFormats", section: "Gestion" },
@@ -58,7 +69,7 @@ const NAV_ITEMS: NavItem[] = [
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
-  if (href === "/magasin") return pathname === "/magasin" || pathname.startsWith("/magasin/etiquette");
+  if (href === "/magasin") return pathname === "/magasin";
   return pathname === href || pathname.startsWith(href + "/");
 }
 
@@ -150,6 +161,7 @@ function Sidebar() {
                   {item.label}
                   {item.href === "/signalements" && <OpenAlertsCount />}
                   {item.href === "/a-importer" && <PendingImportsCount />}
+                  {item.href === "/magasin/conditionner" && <PendingConditioningCount />}
                 </Link>
               );
             })}

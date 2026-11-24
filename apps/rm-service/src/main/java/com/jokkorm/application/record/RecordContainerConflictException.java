@@ -8,6 +8,9 @@ package com.jokkorm.application.record;
  *   <li>{@link Reason#IN_ANOTHER_BOX} — il est dans une autre boîte : seul un transfert explicite
  *       peut l'en sortir.</li>
  *   <li>{@link Reason#TRANSFER_BLOCKED} — transfert impossible (une des deux boîtes est en prêt).</li>
+ *   <li>{@link Reason#CONTAINER_ON_LOAN} — la boîte d'arrivée est en prêt : son contenu est promis.</li>
+ *   <li>{@link Reason#CONTAINER_FULL} — la boîte a atteint sa capacité (règle R4).</li>
+ *   <li>{@link Reason#CONTAINER_CLOSED} — la boîte est fermée ou détruite : elle ne reçoit plus rien.</li>
  * </ul>
  *
  * <p>La boîte actuelle (code-barres, libellé, adresse) accompagne la réponse : l'écran peut
@@ -20,7 +23,10 @@ public class RecordContainerConflictException extends RuntimeException {
     public enum Reason {
         ALREADY_IN_THIS_BOX("record-already-in-container"),
         IN_ANOTHER_BOX("record-in-other-container"),
-        TRANSFER_BLOCKED("record-transfer-blocked");
+        TRANSFER_BLOCKED("record-transfer-blocked"),
+        CONTAINER_ON_LOAN("container-on-loan"),
+        CONTAINER_FULL("container-full"),
+        CONTAINER_CLOSED("container-closed");
 
         private final String slug;
 

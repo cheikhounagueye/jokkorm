@@ -64,6 +64,19 @@ public class JpaPhysicalArchiveRecordRepository implements PhysicalArchiveRecord
     }
 
     @Override
+    public long countByContainer(TenantId tenant, UUID containerId) {
+        return jpa.countByTenantIdAndContainerId(tenant.value(), containerId);
+    }
+
+    @Override
+    public Page<PhysicalArchiveRecord> findToCondition(TenantId tenant, PageRequest pageRequest) {
+        var page = jpa.findByTenantIdAndContainerIdIsNullAndStatusInOrderByRegisteredAtAscCoteAsc(
+            tenant.value(), List.of(PhysicalArchiveStatus.REGISTERED, PhysicalArchiveStatus.FROZEN),
+            toPageable(pageRequest));
+        return map(page, pageRequest);
+    }
+
+    @Override
     public boolean existsByCote(TenantId tenant, Cote cote) {
         return jpa.existsByTenantIdAndCote(tenant.value(), cote.value());
     }

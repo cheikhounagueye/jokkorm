@@ -52,15 +52,27 @@ class PhysicalArchiveRecordTest {
     }
 
     @Test
-    @DisplayName("releaseFreeze() ramène FROZEN → STORED")
+    @DisplayName("releaseFreeze() d'un dossier en boîte : FROZEN → STORED")
     void release_freeze_returns_to_stored() {
         PhysicalArchiveRecord r = PhysicalArchiveRecord.register(TENANT, COTE, NOW);
-        r.markStored(NOW);
+        r.storeInContainer(java.util.UUID.randomUUID(), NOW);
         r.markFrozen(NOW);
 
         r.releaseFreeze(NOW.plusSeconds(100));
 
         assertThat(r.status()).isEqualTo(PhysicalArchiveStatus.STORED);
+    }
+
+    @Test
+    @DisplayName("releaseFreeze() d'un dossier dans aucune boîte : FROZEN → REGISTERED (il reste à conditionner)")
+    void release_freeze_without_box_returns_to_registered() {
+        PhysicalArchiveRecord r = PhysicalArchiveRecord.register(TENANT, COTE, NOW);
+        r.markFrozen(NOW);
+
+        r.releaseFreeze(NOW.plusSeconds(100));
+
+        assertThat(r.status()).isEqualTo(PhysicalArchiveStatus.REGISTERED);
+        assertThat(r.containerId()).isEmpty();
     }
 
     @Test

@@ -34,16 +34,19 @@ public class MagasinScanService {
     private final StorageLocationRepository locations;
     private final PhysicalLoanRepository loans;
     private final MasterSyncService masterSync;
+    private final com.jokkorm.domain.record.PhysicalArchiveRecordRepository records;
 
     public MagasinScanService(
         PhysicalContainerRepository containers,
         StorageLocationRepository locations,
         PhysicalLoanRepository loans,
-        MasterSyncService masterSync) {
+        MasterSyncService masterSync,
+        com.jokkorm.domain.record.PhysicalArchiveRecordRepository records) {
         this.containers = containers;
         this.locations = locations;
         this.loans = loans;
         this.masterSync = masterSync;
+        this.records = records;
     }
 
     @Transactional(readOnly = true)
@@ -62,6 +65,23 @@ public class MagasinScanService {
                 new ScannedPosition(position.get(), masterSync.address(tenant, position.get())));
         }
         throw new ScanCodeUnknownException("Code inconnu dans cet espace : " + code);
+    }
+
+    /** Une boîte trouvée, avec son remplissage (jauge de la règle R4). */
+    public record SearchHit(ScannedContainer box, long recordCount) {}
+
+    /**
+     * Retrouver une boîte sans l'avoir en main : libellé (contient) ou code-barres (commence par).
+     * Sert à la page Étiquettes et au choix d'une boîte existante pour le conditionnement.
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<SearchHit> search(String q, int limit) {
+        TenantId tenant = TenantContext.current();
+        String query = q == null ? "" : q.trim();
+        int max = Math.max(1, Math.min(limit, 50));
+        return containers.search(tenant, query, max).stream()
+            .map(b -> new SearchHit(describe(tenant, b), records.countByContainer(tenant, b.id())))
+            .toList();
     }
 
     ScannedContainer describe(TenantId tenant, PhysicalContainer box) {

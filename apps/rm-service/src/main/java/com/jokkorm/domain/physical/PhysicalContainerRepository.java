@@ -16,6 +16,12 @@ public interface PhysicalContainerRepository {
 
     Optional<PhysicalContainer> findByBarcode(TenantId tenant, String barcode);
 
+    /**
+     * Boîtes non détruites dont le libellé contient {@code q} ou dont le code-barres commence par
+     * {@code q} (casse ignorée), les plus récemment modifiées d'abord. {@code q} vide = les dernières.
+     */
+    List<PhysicalContainer> search(TenantId tenant, String q, int limit);
+
     boolean existsByBarcode(TenantId tenant, String barcode);
 
     /**
@@ -24,6 +30,13 @@ public interface PhysicalContainerRepository {
      * simultanés. Libéré à la fin de la transaction.
      */
     void lockLabels(TenantId tenant);
+
+    /**
+     * Verrou de transaction sur le contenu d'une boîte : deux mises en boîte simultanées (deux
+     * téléphones, deux bureaux) passent l'une après l'autre, si bien que le comptage de capacité
+     * (règle R4) voit toujours ce que l'autre vient d'écrire. Libéré à la fin de la transaction.
+     */
+    void lockContent(TenantId tenant, java.util.UUID containerId);
 
     /** Boîtes non détruites portant ce libellé, casse et espaces en trop ignorés. */
     List<PhysicalContainer> findActiveByLabel(TenantId tenant, String label, int limit);

@@ -46,6 +46,12 @@ public class JpaPhysicalContainerRepository implements PhysicalContainerReposito
     }
 
     @Override
+    public List<PhysicalContainer> search(TenantId tenant, String q, int limit) {
+        String escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return jpa.search(tenant.value(), escaped, limit).stream().map(PhysicalContainerEntity::toDomain).toList();
+    }
+
+    @Override
     public Optional<PhysicalContainer> findByBarcode(TenantId tenant, String barcode) {
         return jpa.findByTenantIdAndBarcode(tenant.value(), barcode)
             .map(PhysicalContainerEntity::toDomain);
@@ -59,6 +65,11 @@ public class JpaPhysicalContainerRepository implements PhysicalContainerReposito
     @Override
     public void lockLabels(TenantId tenant) {
         jpa.advisoryXactLock("container-label:" + tenant.value());
+    }
+
+    @Override
+    public void lockContent(TenantId tenant, UUID containerId) {
+        jpa.advisoryXactLock("container-content:" + tenant.value() + ":" + containerId);
     }
 
     @Override

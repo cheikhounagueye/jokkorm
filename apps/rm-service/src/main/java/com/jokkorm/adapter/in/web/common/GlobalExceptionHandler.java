@@ -163,6 +163,15 @@ public class GlobalExceptionHandler {
         return response(pd);
     }
 
+    @ExceptionHandler(com.jokkorm.application.record.ConditioningRefusedException.class)
+    public ResponseEntity<ProblemDetail> conditioningRefused(
+        com.jokkorm.application.record.ConditioningRefusedException e, HttpServletRequest request) {
+        // Tout ou rien : chaque refus (cote, raison, message) part à l'écran, rien n'a été écrit.
+        ProblemDetail pd = baseProblem(HttpStatus.CONFLICT, "conditioning-refused", e.getMessage(), request);
+        pd.setProperty("refusals", e.refusals());
+        return response(pd);
+    }
+
     @ExceptionHandler(com.jokkorm.application.record.LegalHoldException.class)
     public ResponseEntity<ProblemDetail> legalHold(
         com.jokkorm.application.record.LegalHoldException e, HttpServletRequest request) {

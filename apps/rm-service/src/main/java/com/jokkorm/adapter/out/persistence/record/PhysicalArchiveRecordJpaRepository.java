@@ -23,4 +23,9 @@ public interface PhysicalArchiveRecordJpaRepository
 
     Page<PhysicalArchiveRecordEntity> findByTenantIdAndStatusOrderByRegisteredAtDesc(
         String tenantId, PhysicalArchiveStatus status, Pageable pageable);
+
+    long countByTenantIdAndContainerId(String tenantId, UUID containerId);
+
+    Page<PhysicalArchiveRecordEntity> findByTenantIdAndContainerIdIsNullAndStatusInOrderByRegisteredAtAscCoteAsc(
+        String tenantId, java.util.Collection<PhysicalArchiveStatus> statuses, Pageable pageable);
 }

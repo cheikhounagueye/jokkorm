@@ -49,6 +49,7 @@ import {
   Files,
   Fire,
   FolderOpen,
+  FolderSimplePlus,
   Funnel,
   Gavel,
   Ghost,
@@ -118,6 +119,7 @@ export const Icons = {
   batches: Stack,
   boxFormats: Ruler,
   archives: Archive,
+  conditioning: FolderSimplePlus,
 
   // Objets métier
   box: ArchiveBox,

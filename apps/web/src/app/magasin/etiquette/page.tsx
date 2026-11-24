@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import {
   Alert,
   Button,
   Card,
   CardHeader,
-  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -16,10 +15,16 @@ import {
 } from "@/components/ui";
 import { Icons } from "@/lib/icons";
 import { useTenantImage } from "@/lib/useTenantImage";
+import { BoxPicker } from "../_components/BoxPicker";
+import { etiquetteHref } from "../_components/kinds";
 
 type Symbology = "CODE128" | "QR";
 
-const CRUMBS = [{ label: "Salle d'archives", href: "/magasin" }, { label: "Étiquette" }];
+const CRUMBS = [
+  { label: "Salle d'archives", href: "/magasin" },
+  { label: "Étiquettes", href: "/magasin/etiquette" },
+  { label: "Boîte" },
+];
 
 export default function EtiquettePage() {
   return (
@@ -30,6 +35,7 @@ export default function EtiquettePage() {
 }
 
 function EtiquetteInner() {
+  const router = useRouter();
   const params = useSearchParams();
   const barcode = params.get("barcode") ?? "";
   const label = params.get("label") ?? "";
@@ -55,16 +61,26 @@ function EtiquetteInner() {
 
   if (!barcode) {
     return (
-      <section>
-        <PageHeader icon="label" tone="kraft" title="Étiquette de boîte" crumbs={CRUMBS} />
-        <Card>
-          <EmptyState
-            icon={<Icons.barcode size={32} />}
-            title="Aucun code-barres fourni"
-            description="Ouvre cette page depuis une boîte de la salle d'archives (paramètre ?barcode=BOX-XXXXXX-XXXXXX)."
-            action={<Link href="/magasin"><Button variant="secondary">Aller à la salle d&apos;archives</Button></Link>}
-          />
-        </Card>
+      <section className="fade-up">
+        <PageHeader icon="label" tone="kraft" title="Étiquettes"
+          subtitle="Une étiquette dit qui est la boîte ; où elle est et dans quel état, le scan le dit."
+          crumbs={[{ label: "Salle d'archives", href: "/magasin" }, { label: "Étiquettes" }]} />
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 460px) minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+          <Card>
+            <CardHeader title="Étiquette de boîte" subtitle="Réimprimer redonne toujours le même code." />
+            <BoxPicker allowCreate={false} forContent={false}
+              onPick={(h) => router.push(etiquetteHref(h.container.barcode, h.container.label))} />
+          </Card>
+          <Card>
+            <CardHeader title="Autres étiquettes" />
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+              <li><strong>Lot de boîtes</strong> : la planche entière d&apos;un lot, depuis <Link href="/magasin/lots">Lots de boîtes</Link>.</li>
+              <li><strong>Emplacements</strong> : choisis une salle, une travée ou une tablette dans la{" "}
+                <Link href="/magasin">Salle d&apos;archives</Link>, puis « Étiquettes d&apos;emplacement ».</li>
+              <li><strong>Fantôme de prêt</strong> : imprimé à la sortie de la boîte, depuis <Link href="/prets">Prêts</Link>.</li>
+            </ul>
+          </Card>
+        </div>
       </section>
     );
   }

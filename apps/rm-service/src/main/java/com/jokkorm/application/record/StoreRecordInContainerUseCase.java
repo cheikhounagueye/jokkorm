@@ -10,6 +10,7 @@ import com.jokkorm.domain.audit.AuditAction;
 import com.jokkorm.domain.audit.AuditTargetType;
 import com.jokkorm.domain.master.PhysicalLocation;
 import com.jokkorm.domain.master.SaeMasterPort;
+import com.jokkorm.domain.physical.ContainerState;
 import com.jokkorm.domain.physical.MovementKind;
 import com.jokkorm.domain.physical.PhysicalContainer;
 import com.jokkorm.domain.physical.PhysicalContainerRepository;
@@ -32,15 +33,18 @@ import org.springframework.transaction.annotation.Transactional;
  * Range un dossier dans une boîte — pivot central phase 5C. Enchaîne :
  *
  * <ol>
- *   <li>Charger le record + la boîte (même tenant).</li>
- *   <li>Vérifier que la boîte a une position (sinon on ne peut pas remonter l'adresse au maître).</li>
+ *   <li>Charger le record + la boîte (même tenant), verrouiller le contenu de la boîte.</li>
+ *   <li>La boîte peut être rangée ou encore en zone tampon : on conditionne avant de placer
+ *       (pattern 05, étape 3 ; étude du 24 novembre 2026, D1).</li>
  *   <li>Règle « un dossier, une seule boîte » : déjà dans cette boîte → refus sans écriture ;
  *       dans une autre boîte → refus, sauf transfert confirmé (et aucune des deux boîtes en prêt).</li>
+ *   <li>Boîte d'arrivée : ni fermée, ni détruite, ni en prêt, et pas pleine (règle R4).</li>
  *   <li>Marquer le record {@code STORED} + lier au container.</li>
  *   <li>Marquer la boîte comme {@code OPEN} (EMPTY → OPEN auto).</li>
- *   <li>Récupérer l'adresse complète sur 5 niveaux (SITE/MAG/TRAV/TAB/POS) depuis la
- *       topographie, à partir du {@code path} dénormalisé ("DKR/MAG-B/14/3/07").</li>
- *   <li>Notifier le maître via {@link SaeMasterPort#notifyPhysicalLocation}.</li>
+ *   <li>Boîte rangée : récupérer l'adresse complète sur 5 niveaux (SITE/MAG/TRAV/TAB/POS)
+ *       depuis le {@code path} dénormalisé ("DKR/MAG-B/14/3/07") et notifier le maître via
+ *       {@link SaeMasterPort#notifyPhysicalLocation}. Boîte en zone tampon : pas d'adresse ; la
+ *       file d'envoi montre « en zone tampon » et l'adresse partira quand la boîte sera placée.</li>
  *   <li>Émettre un évent d'audit {@code RECORD_STORED} avec la cote + barcode + path.</li>
  * </ol>
  *
@@ -97,6 +101,18 @@ public class StoreRecordInContainerUseCase {
      */
     @Transactional
     public PhysicalArchiveRecord execute(Cote cote, String containerBarcode, boolean transfer) {
+        return execute(cote, containerBarcode, transfer, "user");
+    }
+
+    /**
+     * Même geste, au nom de {@code actor} (inscrit au journal et dans l'audit).
+     *
+     * <p>Contrôles de la boîte d'arrivée, faits sous verrou de son contenu pour que deux mises en
+     * boîte simultanées ne la remplissent pas au-delà de sa capacité : boîte fermée ou détruite,
+     * boîte en prêt (son contenu est promis), capacité atteinte (règle R4).
+     */
+    @Transactional
+    public PhysicalArchiveRecord execute(Cote cote, String containerBarcode, boolean transfer, String actor) {
         TenantId tenant = TenantContext.current();
 
         PhysicalArchiveRecord record = records.findByCote(tenant, cote)
@@ -104,22 +120,24 @@ public class StoreRecordInContainerUseCase {
                 "No physical archive record for cote=%s (tenant=%s)"
                     .formatted(cote.value(), tenant.value())));
 
-        PhysicalContainer container = containers.findByBarcode(tenant, containerBarcode)
+        PhysicalContainer found = containers.findByBarcode(tenant, containerBarcode)
             .orElseThrow(() -> new PhysicalContainerNotFoundException(
                 "No container with barcode=%s (tenant=%s)"
                     .formatted(containerBarcode, tenant.value())));
+        // Verrou puis relecture : l'état vu ensuite (prêt, fermeture, contenu) est celui qui compte.
+        containers.lockContent(tenant, found.id());
+        PhysicalContainer container = containers.findById(tenant, found.id()).orElse(found);
 
-        java.util.UUID positionId = container.positionId()
-            .orElseThrow(() -> new IllegalStateException(
-                "Container %s has no position — place it first before storing records"
-                    .formatted(container.barcode())));
+        // Conditionnement avant mise en rayon (pattern 05, étape 3) : la boîte peut encore être en
+        // zone tampon ; ses dossiers prendront son adresse quand elle sera placée.
+        StorageLocation position = container.positionId()
+            .map(positionId -> locations.findById(tenant, positionId)
+                .orElseThrow(() -> new IllegalStateException(
+                    "Container %s points to a missing storage_location %s"
+                        .formatted(container.barcode(), positionId))))
+            .orElse(null);
 
-        StorageLocation position = locations.findById(tenant, positionId)
-            .orElseThrow(() -> new IllegalStateException(
-                "Container %s points to a missing storage_location %s"
-                    .formatted(container.barcode(), positionId)));
-
-        if (position.kind() != StorageLocationKind.POSITION) {
+        if (position != null && position.kind() != StorageLocationKind.POSITION) {
             throw new IllegalStateException(
                 "Container %s is attached to a %s, expected POSITION"
                     .formatted(container.barcode(), position.kind()));
@@ -154,7 +172,11 @@ public class StoreRecordInContainerUseCase {
             throw new LegalHoldException(
                 "Le dossier %s est sous gel contentieux : il ne peut pas être rangé tant que le gel n'est pas levé dans la GED maître."
                     .formatted(cote.value()));
+        } else {
+            requireNotOnLoan(tenant, container);
         }
+        requireOpen(tenant, container);
+        requireRoom(tenant, container);
 
         java.time.Instant now = clock.instant();
         boolean firstIngress = record.containerId().isEmpty();
@@ -172,13 +194,16 @@ public class StoreRecordInContainerUseCase {
         // 2) journal physique : INGRESS pour un premier rangement, RELOCATE pour un transfert (phase 5D)
         MovementKind kind = firstIngress ? MovementKind.INGRESS : MovementKind.RELOCATE;
         String fromPart = from == null ? "" : " from=" + from.barcode();
+        String path = position == null ? "zone-tampon" : position.path();
         movements.save(PhysicalMovement.create(
-            tenant, record.id(), container.id(), kind, "user", now,
-            "container=%s%s path=%s".formatted(container.barcode(), fromPart, position.path())));
+            tenant, record.id(), container.id(), kind, actor, now,
+            "container=%s%s path=%s".formatted(container.barcode(), fromPart, path)));
 
-        // 3) notify master avec l'adresse complète (5 niveaux parsés depuis le path)
-        PhysicalLocation address = resolveFiveLevelLocation(position);
-        master.notifyPhysicalLocation(tenant, cote, address);
+        // 3) notify master avec l'adresse complète (5 niveaux parsés depuis le path) ; boîte en zone
+        //    tampon : pas encore d'adresse, la file d'envoi affiche « en zone tampon » chez le maître.
+        if (position != null) {
+            master.notifyPhysicalLocation(tenant, cote, resolveFiveLevelLocation(position));
+        }
         masterSync.touchRecord(tenant, cote); // état physique affiché côté maître (file d'envoi)
 
         // 4) audit
@@ -186,14 +211,48 @@ public class StoreRecordInContainerUseCase {
             AuditAction.RECORD_STORED,
             AuditTargetType.PHYSICAL_ARCHIVE_RECORD,
             record.id(),
-            "user",
+            actor,
             "cote=%s container=%s%s path=%s kind=%s"
-                .formatted(cote.value(), container.barcode(), fromPart, position.path(), kind));
+                .formatted(cote.value(), container.barcode(), fromPart, path, kind));
 
         LOG.info("Record cote={} stored in container={}{} at path={} (kind={})",
-            cote.value(), container.barcode(), fromPart, position.path(), kind);
+            cote.value(), container.barcode(), fromPart, path, kind);
 
         return record;
+    }
+
+    /** Premier rangement : une boîte en prêt (demandé ou sorti) ne gagne pas de dossier. */
+    private void requireNotOnLoan(TenantId tenant, PhysicalContainer box) {
+        loans.findActiveByContainer(tenant, box.id()).ifPresent(loan -> {
+            String state = loan.status().isActive() ? "est sortie en prêt" : "a une demande de prêt en cours";
+            throw conflict(Reason.CONTAINER_ON_LOAN, tenant, box,
+                "La boîte %s %s : son contenu est promis tel quel. Mets ce dossier dans une autre boîte."
+                    .formatted(describe(box), state));
+        });
+    }
+
+    /** Une boîte fermée (scellée) ou détruite ne reçoit plus rien. */
+    private void requireOpen(TenantId tenant, PhysicalContainer box) {
+        if (box.state() == ContainerState.DESTROYED) {
+            throw conflict(Reason.CONTAINER_CLOSED, tenant, box,
+                "La boîte %s est détruite : elle ne reçoit plus de dossier.".formatted(describe(box)));
+        }
+        if (box.state() == ContainerState.SEALED) {
+            throw conflict(Reason.CONTAINER_CLOSED, tenant, box,
+                "La boîte %s est fermée : elle ne reçoit plus de dossier.".formatted(describe(box)));
+        }
+    }
+
+    /** Règle R4 : la boîte ne dépasse pas sa capacité (nombre de dossiers ; sans capacité, pas de limite). */
+    private void requireRoom(TenantId tenant, PhysicalContainer box) {
+        box.capacity().ifPresent(capacity -> {
+            long inside = records.countByContainer(tenant, box.id());
+            if (inside >= capacity) {
+                throw conflict(Reason.CONTAINER_FULL, tenant, box,
+                    "La boîte %s est pleine : %d dossiers sur %d. Mets ce dossier dans une autre boîte."
+                        .formatted(describe(box), inside, capacity));
+            }
+        });
     }
 
     /** Une boîte en prêt (demandé ou sorti) ne gagne ni ne perd de dossier : son contenu est promis. */

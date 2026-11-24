@@ -25,6 +25,15 @@ public interface PhysicalArchiveRecordRepository {
     /** Archives rangées dans une boîte (pour savoir ce qui sortirait avec elle). */
     java.util.List<PhysicalArchiveRecord> findByContainer(TenantId tenant, UUID containerId);
 
+    /** Nombre de dossiers dans une boîte (jauge et contrôle de capacité, règle R4). */
+    long countByContainer(TenantId tenant, UUID containerId);
+
+    /**
+     * À conditionner : dossiers dans aucune boîte et pas sortis du cycle (enregistrés ou gelés),
+     * les plus anciens d'abord. Un dossier gelé y figure : son papier attend quelque part.
+     */
+    Page<PhysicalArchiveRecord> findToCondition(TenantId tenant, PageRequest pageRequest);
+
     /** Liste paginée triée par date d'enregistrement décroissante. */
     Page<PhysicalArchiveRecord> findAll(TenantId tenant, PageRequest pageRequest);
 

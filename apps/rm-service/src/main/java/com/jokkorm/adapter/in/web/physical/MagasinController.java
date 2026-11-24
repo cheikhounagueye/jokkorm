@@ -102,6 +102,25 @@ public class MagasinController {
             new PositionView(p.position().id(), p.position().path(), p.position().scanCode().orElse(null), p.address()));
     }
 
+    /** {@code recordCount} : dossiers dans la boîte (jauge, à comparer à {@code container.capacity}). */
+    public record ContainerHit(PhysicalContainerResponse container, String address, boolean onLoan, long recordCount) {}
+
+    @GetMapping("/containers")
+    @Operation(
+        summary = "Retrouver une boîte : libellé (contient) ou code-barres (commence par).",
+        description = "Boîtes non détruites, les plus récemment modifiées d'abord (q vide = les dernières). "
+            + "Avec l'adresse si la boîte est rangée et le nombre de dossiers qu'elle contient. "
+            + "Réservé au personnel des archives (pattern 08).")
+    public List<ContainerHit> searchContainers(
+        @RequestParam(defaultValue = "") String q,
+        @RequestParam(defaultValue = "20") int limit) {
+        RoleContext.requireAny(UserRole.ARCHIVIST, UserRole.ARCHIVES_HEAD, UserRole.AUDITOR);
+        return scan.search(q, limit).stream()
+            .map(h -> new ContainerHit(PhysicalContainerResponse.from(h.box().container()), h.box().address(),
+                h.box().onLoan(), h.recordCount()))
+            .toList();
+    }
+
     @PostMapping("/arrivals")
     @Operation(
         summary = "Arrivée (1 scan) : la boîte est reçue en zone tampon.",
@@ -148,7 +167,7 @@ public class MagasinController {
 
     @GetMapping(value = "/locations/{nodeId}/position-labels.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     @Operation(
-        summary = "Planche d'étiquettes d'emplacement (Avery L7169, 16 par A4) : QR + Code128 + adresse.",
+        summary = "Planche d'étiquettes d'emplacement (Avery L7162, 16 par A4) : QR + Code128 + adresse.",
         description = "Une étiquette par emplacement sous le nœud. Le code ne change jamais : réimprimer ne "
             + "demande pas de recoller les autres. Audit POSITION_LABELS_PRINTED.")
     public ResponseEntity<byte[]> positionLabelsPdf(

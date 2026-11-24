@@ -1241,7 +1241,7 @@ export async function listPositionLabels(nodeId: string): Promise<PositionLabelR
   return parse<PositionLabelResponse[]>(r);
 }
 
-/** Planche Avery L7169 des étiquettes d'emplacement sous un nœud (fetch + blob : en-têtes requis). */
+/** Planche Avery L7162 des étiquettes d'emplacement sous un nœud (fetch + blob : en-têtes requis). */
 export async function downloadPositionLabelsPdf(nodeId: string, fileName: string): Promise<void> {
   const response = await fetch(`${MAGASIN}/locations/${nodeId}/position-labels.pdf`, { headers: accessHeaders() });
   if (!response.ok) {
@@ -1256,4 +1256,65 @@ export async function downloadPositionLabelsPdf(nodeId: string, fileName: string
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ─── Boîtes : recherche ; conditionnement (étude du 24 novembre 2026, lot 1) ────
+
+/** Une boîte trouvée : adresse si rangée, en prêt ou non, nombre de dossiers dedans (jauge). */
+export interface ContainerHit {
+  container: PhysicalContainerResponse;
+  address: string | null;
+  onLoan: boolean;
+  recordCount: number;
+}
+
+/** Libellé (contient) ou code-barres (commence par) ; vide = les boîtes modifiées en dernier. */
+export async function searchContainers(q: string, limit = 20): Promise<ContainerHit[]> {
+  const qs = new URLSearchParams({ q, limit: String(limit) });
+  const r = await fetch(`${MAGASIN}/containers?${qs}`, { headers: accessHeaders() });
+  return parse<ContainerHit[]>(r);
+}
+
+const CONDITIONING = "/api/v1/physical/conditioning";
+
+export interface PendingConditioningPage {
+  items: RecordResponse[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+/** À conditionner : dossiers dans aucune boîte (enregistrés ou gelés), les plus anciens d'abord. */
+export async function listPendingConditioning(page = 0, size = 50): Promise<PendingConditioningPage> {
+  const qs = new URLSearchParams({ page: String(page), size: String(size) });
+  const r = await fetch(`${CONDITIONING}/pending?${qs}`, { headers: accessHeaders() });
+  return parse<PendingConditioningPage>(r);
+}
+
+/** Un refus de mise en boîte ; `cote` null = la boîte elle-même (fermée, en prêt, trop pleine). */
+export interface ConditioningRefusal {
+  cote: string | null;
+  reason: string;
+  message: string;
+}
+
+export interface ConditioningResponse {
+  container: PhysicalContainerResponse;
+  recordCount: number;
+  stored: RecordResponse[];
+}
+
+/** Tout ou rien : 409 `conditioning-refused` avec `refusals` si un seul dossier ne peut pas entrer. */
+export async function conditionRecords(containerBarcode: string, cotes: string[]): Promise<ConditioningResponse> {
+  const r = await fetch(CONDITIONING, {
+    method: "POST",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ containerBarcode, cotes }),
+  });
+  return parse<ConditioningResponse>(r);
+}
+
+export function refusalsOf(error: unknown): ConditioningRefusal[] {
+  const p = problemOf(error) as (ProblemDetail & { refusals?: ConditioningRefusal[] }) | null;
+  return p?.refusals ?? [];
 }

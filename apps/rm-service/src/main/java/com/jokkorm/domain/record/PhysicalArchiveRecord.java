@@ -122,12 +122,16 @@ public final class PhysicalArchiveRecord {
         this.lastTransitionAt = at;
     }
 
-    /** Levée du gel : retour à {@link PhysicalArchiveStatus#STORED}. */
+    /**
+     * Levée du gel : le dossier retrouve l'état d'avant le gel — {@link PhysicalArchiveStatus#STORED}
+     * s'il est dans une boîte, {@link PhysicalArchiveStatus#REGISTERED} s'il attend encore d'être
+     * mis en boîte (sinon il serait « rangé » sans boîte et sortirait de la liste À conditionner).
+     */
     public void releaseFreeze(Instant at) {
         if (status != PhysicalArchiveStatus.FROZEN) {
             throw new IllegalStateException("Cannot release freeze on non-frozen archive: " + cote.value());
         }
-        this.status = PhysicalArchiveStatus.STORED;
+        this.status = containerId == null ? PhysicalArchiveStatus.REGISTERED : PhysicalArchiveStatus.STORED;
         this.lastTransitionAt = at;
     }
 

@@ -14,6 +14,16 @@ public interface PhysicalContainerJpaRepository extends JpaRepository<PhysicalCo
 
     Optional<PhysicalContainerEntity> findByIdAndTenantId(UUID id, String tenantId);
 
+    /** {@code q} déjà échappé pour LIKE (\\, %, _). */
+    @Query(value = """
+        SELECT * FROM physical_container
+        WHERE tenant_id = :tenantId AND state <> 'DESTROYED'
+          AND (:q = '' OR upper(barcode) LIKE upper(:q) || '%' OR label ILIKE '%' || :q || '%')
+        ORDER BY updated_at DESC
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<PhysicalContainerEntity> search(@Param("tenantId") String tenantId, @Param("q") String q, @Param("limit") int limit);
+
     Optional<PhysicalContainerEntity> findByTenantIdAndBarcode(String tenantId, String barcode);
 
     boolean existsByTenantIdAndBarcode(String tenantId, String barcode);
