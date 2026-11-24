@@ -13,6 +13,9 @@ public interface PhysicalLoanRepository {
 
     Optional<PhysicalLoan> findById(TenantId tenant, UUID id);
 
+    /** Le prêt dont le fantôme porte ce code ({@code PRT-…}), quel que soit son état. */
+    Optional<PhysicalLoan> findByGhostCode(TenantId tenant, String ghostCode);
+
     /** Prêt actif (REQUESTED/OUT/OVERDUE) pour un container donné, s'il existe. */
     Optional<PhysicalLoan> findActiveByContainer(TenantId tenant, UUID containerId);
 

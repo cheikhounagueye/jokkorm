@@ -67,14 +67,24 @@ public class MagasinController {
 
     public record PositionView(UUID id, String path, String scanCode, String address) {}
 
-    /** {@code kind} = CONTAINER ou POSITION ; seul le bloc correspondant est rempli. */
+    /**
+     * Un fantôme scanné : le prêt et la boîte prêtée (en clair). La boîte n'est volontairement pas
+     * dans {@code ScanResponse.container} : un fantôme ne doit jamais être pris pour la boîte.
+     */
+    public record GhostView(
+        UUID loanId, String ghostCode, com.jokkorm.domain.loan.LoanStatus status, boolean overdue,
+        String borrowerName, String borrowerDept, java.time.Instant outAt, java.time.Instant expectedReturnAt,
+        PhysicalContainerResponse box, String boxAddress) {}
+
+    /** {@code kind} = CONTAINER, POSITION ou GHOST ; seul le bloc correspondant est rempli. */
     public record ScanResponse(
         String code,
         String kind,
         PhysicalContainerResponse container,
         String containerAddress,
         boolean containerOnLoan,
-        PositionView position) {}
+        PositionView position,
+        GhostView ghost) {}
 
     public record ArrivalRequest(@NotBlank String barcode) {}
 
@@ -86,20 +96,31 @@ public class MagasinController {
 
     @GetMapping("/scan")
     @Operation(
-        summary = "Identifie un code scanné : boîte (BOX-…) ou emplacement (EMP-…).",
-        description = "Cherche le code dans les boîtes ET les emplacements (pas de devinette sur le préfixe). "
-            + "404 scan-code-unknown si inconnu dans l'espace ; 409 si le code désigne les deux.")
+        summary = "Identifie un code scanné : boîte (BOX-…), emplacement (EMP-…) ou fantôme de prêt (PRT-…).",
+        description = "Cherche le code dans les boîtes, les emplacements ET les fantômes (pas de devinette sur "
+            + "le préfixe). 404 scan-code-unknown si inconnu dans l'espace ; 409 si le code en désigne plusieurs.")
     public ScanResponse scan(@RequestParam String code) {
         RoleContext.requireAny(UserRole.ARCHIVIST, UserRole.ARCHIVES_HEAD, UserRole.AUDITOR);
         MagasinScanService.ScanResult r = scan.resolve(code);
         if (r.container() != null) {
             return new ScanResponse(r.code(), "CONTAINER",
                 PhysicalContainerResponse.from(r.container().container()),
-                r.container().address(), r.container().onLoan(), null);
+                r.container().address(), r.container().onLoan(), null, null);
+        }
+        if (r.ghost() != null) {
+            var loan = r.ghost().loan();
+            var box = r.ghost().box();
+            return new ScanResponse(r.code(), "GHOST", null, null, false, null, new GhostView(
+                loan.id(), loan.ghostCode(), loan.status(), loan.isOverdue(java.time.Instant.now()),
+                loan.borrowerName(), loan.borrowerDept().orElse(null), loan.outAt().orElse(null),
+                loan.expectedReturnAt(),
+                box == null ? null : PhysicalContainerResponse.from(box.container()),
+                box == null ? null : box.address()));
         }
         var p = r.position();
         return new ScanResponse(r.code(), "POSITION", null, null, false,
-            new PositionView(p.position().id(), p.position().path(), p.position().scanCode().orElse(null), p.address()));
+            new PositionView(p.position().id(), p.position().path(), p.position().scanCode().orElse(null), p.address()),
+            null);
     }
 
     /** {@code recordCount} : dossiers dans la boîte (jauge, à comparer à {@code container.capacity}). */

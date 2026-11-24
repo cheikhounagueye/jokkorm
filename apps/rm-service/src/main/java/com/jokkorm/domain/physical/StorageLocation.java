@@ -1,7 +1,6 @@
 package com.jokkorm.domain.physical;
 
 import com.jokkorm.commons.tenancy.TenantId;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -30,9 +29,7 @@ public final class StorageLocation {
 
     /** Préfixe des codes d'emplacement : distingue au premier coup d'œil une étiquette de tablette d'une boîte (BOX-). */
     public static final String SCAN_CODE_PREFIX = "EMP-";
-    private static final Pattern SCAN_CODE = Pattern.compile("^EMP-[0-9A-Z]{8}$");
-    private static final String CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Pattern SCAN_CODE = com.jokkorm.domain.common.ShortCode.pattern(SCAN_CODE_PREFIX);
 
     /** Bornes d'une longueur utile (travée, tablette ou emplacement), en millimètres. */
     public static final int MIN_LENGTH_MM = 50;
@@ -99,9 +96,7 @@ public final class StorageLocation {
 
     /** EMP- suivi de 8 caractères Crockford (sans I, L, O, U) : court, lisible, sans ambiguïté. */
     static String newScanCode() {
-        StringBuilder sb = new StringBuilder(SCAN_CODE_PREFIX);
-        for (int i = 0; i < 8; i++) sb.append(CROCKFORD.charAt(RANDOM.nextInt(CROCKFORD.length())));
-        return sb.toString();
+        return com.jokkorm.domain.common.ShortCode.random(SCAN_CODE_PREFIX);
     }
 
     /** Rehydratation depuis la persistance (le path est lu, pas recalculé), avec mobilier et code à scanner. */

@@ -12,6 +12,8 @@ public interface PhysicalLoanJpaRepository extends JpaRepository<PhysicalLoanEnt
 
     Optional<PhysicalLoanEntity> findByIdAndTenantId(UUID id, String tenantId);
 
+    Optional<PhysicalLoanEntity> findByTenantIdAndGhostCode(String tenantId, String ghostCode);
+
     Optional<PhysicalLoanEntity> findFirstByTenantIdAndContainerIdAndStatusIn(
         String tenantId, UUID containerId, List<LoanStatus> statuses);
 

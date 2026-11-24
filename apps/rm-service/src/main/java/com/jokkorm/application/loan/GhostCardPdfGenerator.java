@@ -29,8 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
  * l'archiviste imprime et dépose dans l'emplacement de la boîte sortie.
  * Permet de retrouver visuellement une sortie sans ouvrir l'application.
  *
- * <p>Contenu : barcode de la boîte (CODE128), QR contenant le loan id,
- * emprunteur, service, date de retour prévue, référence externe si présente.
+ * <p>Contenu : le code du fantôme ({@code PRT-…}) en Code128 et en QR, la boîte en clair
+ * (libellé et code-barres en texte), emprunteur, service, date de retour prévue, référence
+ * externe si présente. Jamais le code-barres de la boîte en barres : au récolement, scanner le
+ * fantôme compterait sinon comme présente une boîte qui est chez l'emprunteur (D10).
  */
 @Service
 public class GhostCardPdfGenerator {
@@ -89,15 +91,15 @@ public class GhostCardPdfGenerator {
 
                 cs.setNonStrokingColor(0f, 0f, 0f);
 
-                // Barcode CODE128 de la boîte
-                byte[] barcodePng = barcodeImage.render(container.barcode(), Symbology.CODE128, 500, 100, true);
+                // Code du fantôme en CODE128 (douchette) : il désigne le prêt, pas la boîte.
+                byte[] barcodePng = barcodeImage.render(loan.ghostCode(), Symbology.CODE128, 500, 100, true);
                 PDImageXObject barcodeImg = PDImageXObject.createFromByteArray(doc, barcodePng, "bc.png");
                 cs.drawImage(barcodeImg, 30, h - 170, w - 60, 90);
 
-                // Infos clés — libellé boîte
+                // Infos clés — la boîte en clair (libellé + code-barres en texte, pas en barres)
                 String containerLabel = container.label() != null && !container.label().isBlank()
                     ? container.label() : "(sans libellé)";
-                drawLine(cs, "Boite", sanitize(containerLabel), 30, h - 200, 10, true);
+                drawLine(cs, "Boite", sanitize(containerLabel + " (" + container.barcode() + ")"), 30, h - 200, 10, true);
 
                 drawLine(cs, "Emprunteur", sanitize(loan.borrowerName()), 30, h - 230, 12, true);
                 drawLine(cs, "Service", sanitize(loan.borrowerDept().orElse("—")), 30, h - 255, 10, false);
@@ -117,10 +119,8 @@ public class GhostCardPdfGenerator {
                     } catch (IOException e) { throw new RuntimeException(e); }
                 });
 
-                // QR code en bas-droite : loan id + container barcode
-                String qrPayload = "jokkorm:loan:%s:%s"
-                    .formatted(loan.id(), container.barcode());
-                byte[] qrPng = barcodeImage.render(qrPayload, Symbology.QR, 120, 120, false);
+                // QR en bas à droite : le même code brut (pattern 12 : jamais d'adresse web)
+                byte[] qrPng = barcodeImage.render(loan.ghostCode(), Symbology.QR, 120, 120, false);
                 PDImageXObject qrImg = PDImageXObject.createFromByteArray(doc, qrPng, "qr.png");
                 cs.drawImage(qrImg, w - 140, 20, 120, 120);
 
@@ -128,13 +128,13 @@ public class GhostCardPdfGenerator {
                 cs.beginText();
                 cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_OBLIQUE), 7);
                 cs.newLineAtOffset(30, 25);
-                cs.showText("Scanner le QR pour acceder au pret dans JokkoRM.");
+                cs.showText("Ce code designe le pret, pas la boite. Retirer ce fantome au retour de la boite.");
                 cs.endText();
 
                 cs.beginText();
                 cs.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_OBLIQUE), 7);
                 cs.newLineAtOffset(30, 15);
-                cs.showText("Loan ID : " + loan.id());
+                cs.showText("Fantome " + loan.ghostCode());
                 cs.endText();
             }
 

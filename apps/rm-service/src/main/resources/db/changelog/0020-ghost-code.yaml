@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0020-ghost-code
+      author: jokkorm
+      comment: >
+        Fantôme de prêt (étude du 24 novembre 2026, D10) : chaque prêt a son propre code à scanner
+        (PRT-XXXXXXXX), imprimé sur le fantôme à la place du code-barres de la boîte. Scanner un
+        fantôme ne peut donc plus passer pour la boîte (récolement faussé), et le mode magasin le
+        reconnaît. Le code ne change jamais ; les prêts existants reçoivent un code dérivé de leur
+        identifiant.
+      changes:
+        - addColumn:
+            tableName: physical_loan
+            columns:
+              - column: { name: ghost_code, type: VARCHAR(16) }
+        - sql:
+            comment: Codes des prêts existants, dérivés de leur identifiant (hexadécimal, sous-ensemble du Crockford).
+            sql: >
+              UPDATE physical_loan
+              SET ghost_code = 'PRT-' || upper(substr(md5(id::text), 1, 8))
+              WHERE ghost_code IS NULL
+        - addNotNullConstraint:
+            tableName: physical_loan
+            columnName: ghost_code
+            columnDataType: VARCHAR(16)
+        - addUniqueConstraint:
+            tableName: physical_loan
+            columnNames: tenant_id, ghost_code
+            constraintName: uq_physical_loan_tenant_ghost_code

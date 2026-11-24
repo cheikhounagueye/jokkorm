@@ -16,9 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Mode magasin (pattern 12) : « qu'est-ce que je viens de scanner ? ».
  *
- * <p>Une étiquette est soit une boîte (code-barres BOX-…), soit un emplacement (EMP-…). On ne se
- * fie pas au préfixe : le code est cherché dans les deux tables, et un code qui désignerait les
- * deux est refusé plutôt que deviné.
+ * <p>Une étiquette est une boîte (code-barres BOX-…), un emplacement (EMP-…) ou le fantôme d'un
+ * prêt (PRT-…, D10). On ne se fie pas au préfixe : le code est cherché dans les trois tables, et
+ * un code qui en désignerait plusieurs est refusé plutôt que deviné.
  */
 @Service
 public class MagasinScanService {
@@ -27,8 +27,11 @@ public class MagasinScanService {
 
     public record ScannedPosition(StorageLocation position, String address) {}
 
-    /** Exactement un des deux est renseigné. */
-    public record ScanResult(String code, ScannedContainer container, ScannedPosition position) {}
+    /** Un fantôme : le prêt qu'il représente et la boîte prêtée (avec la place qu'elle garde). */
+    public record ScannedGhost(com.jokkorm.domain.loan.PhysicalLoan loan, ScannedContainer box) {}
+
+    /** Exactement un des trois est renseigné. */
+    public record ScanResult(String code, ScannedContainer container, ScannedPosition position, ScannedGhost ghost) {}
 
     private final PhysicalContainerRepository containers;
     private final StorageLocationRepository locations;
@@ -55,14 +58,21 @@ public class MagasinScanService {
         String code = normalize(raw);
         Optional<PhysicalContainer> box = containers.findByBarcode(tenant, code);
         Optional<StorageLocation> position = locations.findByScanCode(tenant, code);
-        if (box.isPresent() && position.isPresent()) {
+        Optional<com.jokkorm.domain.loan.PhysicalLoan> ghost = loans.findByGhostCode(tenant, code);
+        int matches = (box.isPresent() ? 1 : 0) + (position.isPresent() ? 1 : 0) + (ghost.isPresent() ? 1 : 0);
+        if (matches > 1) {
             throw new PhysicalContainerConflictException(
-                "Le code %s désigne à la fois une boîte et un emplacement : étiquette à refaire".formatted(code));
+                "Le code %s désigne plusieurs choses (boîte, emplacement ou fantôme) : étiquette à refaire".formatted(code));
         }
-        if (box.isPresent()) return new ScanResult(code, describe(tenant, box.get()), null);
+        if (box.isPresent()) return new ScanResult(code, describe(tenant, box.get()), null, null);
         if (position.isPresent()) {
             return new ScanResult(code, null,
-                new ScannedPosition(position.get(), masterSync.address(tenant, position.get())));
+                new ScannedPosition(position.get(), masterSync.address(tenant, position.get())), null);
+        }
+        if (ghost.isPresent()) {
+            ScannedContainer lent = containers.findById(tenant, ghost.get().containerId())
+                .map(b -> describe(tenant, b)).orElse(null);
+            return new ScanResult(code, null, null, new ScannedGhost(ghost.get(), lent));
         }
         throw new ScanCodeUnknownException("Code inconnu dans cet espace : " + code);
     }

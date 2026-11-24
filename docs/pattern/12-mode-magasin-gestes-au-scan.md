@@ -19,13 +19,23 @@ qu'on est devant la bonne tablette.
 
 ## Les étiquettes
 
+Une étiquette dit **qui** est la boîte ou l'emplacement, jamais **où** ni **dans quel état** : une
+étiquette collée ne change plus, l'adresse et l'état se lisent au scan. JokkoRM propose
+l'impression au bon moment, une personne imprime et colle ; réimprimer redonne le même code.
+
 - **Boîte** : son code-barres `BOX-AAMMJJ-XXXXXX` (pattern 06), Code128 par défaut, QR possible.
+  Libellé court et neutre (service, versement, n° de boîte), ni intitulé ni sort final (D9).
 - **Emplacement** : un code `EMP-XXXXXXXX` attribué à la création de l'emplacement et **qui ne
   change jamais**, même si on renomme la travée. On peut réimprimer une étiquette sans recoller
   les autres. Planche Avery L7162 (16 par A4, 99,1 × 33,9 mm) à coller sur le chant de la tablette : QR pour le
   téléphone, Code128 pour les douchettes, code en clair et adresse lisible.
-- Le code est cherché dans les boîtes **et** dans les emplacements : on ne devine pas d'après le
-  préfixe, et un code qui désignerait les deux est refusé.
+- **Fantôme de prêt** (D10) : son propre code `PRT-XXXXXXXX`, attribué à la demande de prêt, en
+  Code128 et en QR ; la boîte n'y figure qu'en clair. Scanné, il est reconnu comme fantôme (qui a
+  la boîte, jusqu'à quand, place gardée) et refusé par les gestes qui attendent une boîte ou un
+  emplacement : au récolement, un fantôme ne compte jamais pour la boîte. Un fantôme d'un prêt
+  terminé, trouvé en rayon, se signale « à retirer ».
+- Le code est cherché dans les boîtes, les emplacements **et** les fantômes : on ne devine pas
+  d'après le préfixe, et un code qui en désignerait plusieurs est refusé.
 - Le contenu de l'étiquette est le code brut, jamais une adresse web : l'étiquette reste valable
   si le serveur change de nom.
 

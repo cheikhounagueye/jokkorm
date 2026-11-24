@@ -45,6 +45,11 @@ public class JpaPhysicalLoanRepository implements PhysicalLoanRepository {
     }
 
     @Override
+    public Optional<PhysicalLoan> findByGhostCode(TenantId tenant, String ghostCode) {
+        return jpa.findByTenantIdAndGhostCode(tenant.value(), ghostCode).map(PhysicalLoanEntity::toDomain);
+    }
+
+    @Override
     public Optional<PhysicalLoan> findActiveByContainer(TenantId tenant, UUID containerId) {
         return jpa.findFirstByTenantIdAndContainerIdAndStatusIn(tenant.value(), containerId, ACTIVE)
             .map(PhysicalLoanEntity::toDomain);

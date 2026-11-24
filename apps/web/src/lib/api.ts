@@ -379,6 +379,8 @@ export type LoanStatus = "REQUESTED" | "OUT" | "OVERDUE" | "RETURNED" | "CANCELL
 export interface LoanResponse {
   id: string;
   containerId: string;
+  /** Code imprimé sur le fantôme (PRT-…), reconnu par le mode magasin. */
+  ghostCode: string;
   borrowerName: string;
   borrowerDept: string | null;
   purpose: string | null;
@@ -1190,14 +1192,29 @@ export interface ScanPositionView {
   address: string;
 }
 
-/** Ce qu'une étiquette scannée désigne : une boîte OU un emplacement. */
+/** Un fantôme de prêt scanné : le prêt et la boîte prêtée (jamais pris pour la boîte, D10). */
+export interface ScanGhostView {
+  loanId: string;
+  ghostCode: string;
+  status: LoanStatus;
+  overdue: boolean;
+  borrowerName: string;
+  borrowerDept: string | null;
+  outAt: string | null;
+  expectedReturnAt: string;
+  box: PhysicalContainerResponse | null;
+  boxAddress: string | null;
+}
+
+/** Ce qu'une étiquette scannée désigne : une boîte, un emplacement OU un fantôme de prêt. */
 export interface ScanResponse {
   code: string;
-  kind: "CONTAINER" | "POSITION";
+  kind: "CONTAINER" | "POSITION" | "GHOST";
   container: PhysicalContainerResponse | null;
   containerAddress: string | null;
   containerOnLoan: boolean;
   position: ScanPositionView | null;
+  ghost: ScanGhostView | null;
 }
 
 export interface ArrivalResponse {

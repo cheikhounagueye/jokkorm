@@ -20,6 +20,7 @@ public class PhysicalLoanEntity {
     @Id @Column(name = "id", nullable = false) private UUID id;
     @Column(name = "tenant_id", length = 64, nullable = false) private String tenantId;
     @Column(name = "container_id", nullable = false) private UUID containerId;
+    @Column(name = "ghost_code", length = 16, nullable = false, updatable = false) private String ghostCode;
     @Column(name = "borrower_name", length = 255, nullable = false) private String borrowerName;
     @Column(name = "borrower_dept", length = 255) private String borrowerDept;
     @Column(name = "purpose", length = 500) private String purpose;
@@ -42,6 +43,7 @@ public class PhysicalLoanEntity {
         e.id = l.id();
         e.tenantId = l.tenantId().value();
         e.containerId = l.containerId();
+        e.ghostCode = l.ghostCode();
         e.borrowerName = l.borrowerName();
         e.borrowerDept = l.borrowerDept().orElse(null);
         e.purpose = l.purpose().orElse(null);
@@ -60,7 +62,7 @@ public class PhysicalLoanEntity {
 
     public PhysicalLoan toDomain() {
         return PhysicalLoan.rehydrate(
-            id, TenantId.of(tenantId), containerId,
+            id, TenantId.of(tenantId), containerId, ghostCode,
             borrowerName, borrowerDept, purpose,
             status, requestedAt, requestedBy, expectedReturnAt,
             outAt, outBy, returnedAt, returnedBy, cancelReason, updatedAt);

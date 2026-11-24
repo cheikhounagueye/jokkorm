@@ -12,14 +12,20 @@ import java.util.UUID;
  * la fois — l'invariant est garanti par l'application layer qui refuse une
  * nouvelle demande si un prêt actif existe).
  *
- * <p>Le fantôme (ghost card PDF+QR) n'est pas modélisé ici — c'est juste un
- * artefact d'impression dérivé du prêt (voir GhostCardPdfGenerator).
+ * <p>Le fantôme (carton posé à la place de la boîte sortie) porte le {@link #ghostCode()} du
+ * prêt, jamais le code-barres de la boîte : scanner un fantôme ne doit pas passer pour la boîte
+ * (étude du 24 novembre 2026, D10). Le code est attribué à la demande et ne change jamais.
  */
 public final class PhysicalLoan {
+
+    public static final String GHOST_CODE_PREFIX = "PRT-";
+    private static final java.util.regex.Pattern GHOST_CODE =
+        com.jokkorm.domain.common.ShortCode.pattern(GHOST_CODE_PREFIX);
 
     private final UUID id;
     private final TenantId tenantId;
     private final UUID containerId;
+    private final String ghostCode;
     private final String borrowerName;
     private final String borrowerDept;
     private final String purpose;
@@ -35,7 +41,7 @@ public final class PhysicalLoan {
     private Instant updatedAt;
 
     private PhysicalLoan(
-        UUID id, TenantId tenantId, UUID containerId,
+        UUID id, TenantId tenantId, UUID containerId, String ghostCode,
         String borrowerName, String borrowerDept, String purpose,
         LoanStatus status, Instant requestedAt, String requestedBy,
         Instant expectedReturnAt,
@@ -45,6 +51,10 @@ public final class PhysicalLoan {
         this.id = Objects.requireNonNull(id, "id");
         this.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         this.containerId = Objects.requireNonNull(containerId, "containerId");
+        if (ghostCode == null || !GHOST_CODE.matcher(ghostCode).matches()) {
+            throw new IllegalArgumentException("ghost code '%s' invalid : expected PRT-XXXXXXXX".formatted(ghostCode));
+        }
+        this.ghostCode = ghostCode;
         if (borrowerName == null || borrowerName.isBlank()) {
             throw new IllegalArgumentException("borrowerName required");
         }
@@ -75,20 +85,21 @@ public final class PhysicalLoan {
         Instant expectedReturnAt, String requestedBy, Instant at) {
         return new PhysicalLoan(
             UUID.randomUUID(), tenant, containerId,
+            com.jokkorm.domain.common.ShortCode.random(GHOST_CODE_PREFIX),
             borrowerName, borrowerDept, purpose,
             LoanStatus.REQUESTED, at, requestedBy, expectedReturnAt,
             null, null, null, null, null, at);
     }
 
     public static PhysicalLoan rehydrate(
-        UUID id, TenantId tenantId, UUID containerId,
+        UUID id, TenantId tenantId, UUID containerId, String ghostCode,
         String borrowerName, String borrowerDept, String purpose,
         LoanStatus status, Instant requestedAt, String requestedBy,
         Instant expectedReturnAt,
         Instant outAt, String outBy,
         Instant returnedAt, String returnedBy,
         String cancelReason, Instant updatedAt) {
-        return new PhysicalLoan(id, tenantId, containerId,
+        return new PhysicalLoan(id, tenantId, containerId, ghostCode,
             borrowerName, borrowerDept, purpose,
             status, requestedAt, requestedBy, expectedReturnAt,
             outAt, outBy, returnedAt, returnedBy, cancelReason, updatedAt);
@@ -137,6 +148,8 @@ public final class PhysicalLoan {
     public UUID id() { return id; }
     public TenantId tenantId() { return tenantId; }
     public UUID containerId() { return containerId; }
+    /** Code imprimé sur le fantôme ({@code PRT-XXXXXXXX}), reconnu au scan. */
+    public String ghostCode() { return ghostCode; }
     public String borrowerName() { return borrowerName; }
     public Optional<String> borrowerDept() { return Optional.ofNullable(borrowerDept); }
     public Optional<String> purpose() { return Optional.ofNullable(purpose); }

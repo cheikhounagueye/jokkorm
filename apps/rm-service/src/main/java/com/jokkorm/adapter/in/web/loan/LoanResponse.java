@@ -8,6 +8,8 @@ import java.util.UUID;
 public record LoanResponse(
     UUID id,
     UUID containerId,
+    /** Code imprimé sur le fantôme ({@code PRT-…}), reconnu par le mode magasin. */
+    String ghostCode,
     String borrowerName,
     String borrowerDept,
     String purpose,
@@ -28,7 +30,7 @@ public record LoanResponse(
 
     public static LoanResponse from(PhysicalLoan l, boolean overdue) {
         return new LoanResponse(
-            l.id(), l.containerId(), l.borrowerName(),
+            l.id(), l.containerId(), l.ghostCode(), l.borrowerName(),
             l.borrowerDept().orElse(null), l.purpose().orElse(null),
             l.status(), overdue,
             l.requestedAt(), l.requestedBy(), l.expectedReturnAt(),

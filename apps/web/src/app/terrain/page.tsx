@@ -152,6 +152,16 @@ export default function TerrainPage() {
         return;
       }
 
+      // Un fantôme tient la place d'une boîte prêtée : il n'est jamais la boîte (D10).
+      if (s.kind === "GHOST") {
+        const g = s.ghost!;
+        const name = g.box?.label || g.box?.barcode || "la boîte";
+        fail({ tone: "danger", title: "C'est un fantôme",
+          text: `Il garde la place de ${name}, en prêt chez ${g.borrowerName}. Scanne `
+            + (expect === "position" ? "l'étiquette de l'emplacement." : "la boîte elle-même.") });
+        return;
+      }
+
       // Une boîte attendue — ou une autre boîte scannée à la place de l'emplacement : on repart avec elle.
       if (expect === "box" || (expect === "position" && s.kind === "CONTAINER")) {
         if (s.kind !== "CONTAINER") {
@@ -465,6 +475,7 @@ export default function TerrainPage() {
 }
 
 function IdentifiedCard({ s }: { s: ScanResponse }) {
+  if (s.kind === "GHOST") return <GhostCard s={s} />;
   if (s.kind === "POSITION") {
     const p = s.position!;
     return (
@@ -500,6 +511,37 @@ function IdentifiedCard({ s }: { s: ScanResponse }) {
                   En zone tampon{c.receivedAt ? ` · reçue le ${dayTime(c.receivedAt)} par ${c.receivedBy}` : " · arrivée non pointée"}
                 </span>}
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Fantôme de prêt : qui a la boîte, jusqu'à quand, et s'il faut retirer le fantôme du rayon. */
+function GhostCard({ s }: { s: ScanResponse }) {
+  const g = s.ghost!;
+  const day = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  const active = g.status === "OUT" || g.status === "OVERDUE";
+  const finished = g.status === "RETURNED" || g.status === "CANCELLED";
+  return (
+    <section style={{ padding: "10px 12px 0" }}>
+      <div style={cardStyle}>
+        <IconTile name="ghost" tone={finished ? "danger" : "warning"} size={48} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Fantôme de prêt
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.35 }}>{g.box?.label || g.box?.barcode || "Boîte inconnue"}</div>
+          <code style={{ fontSize: 12, color: "var(--text-secondary)" }}>{g.ghostCode}{g.box && <> · boîte {g.box.barcode}</>}</code>
+          <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.4 }}>
+            {active && <>
+              Chez {g.borrowerName}{g.borrowerDept ? ` (${g.borrowerDept})` : ""} · retour prévu le {day(g.expectedReturnAt)}
+              {g.overdue && <strong style={{ color: "var(--danger-500)" }}> · en retard</strong>}
+            </>}
+            {g.status === "REQUESTED" && <>Prêt demandé, pas encore sorti : ce fantôme ne devrait pas être en rayon.</>}
+            {finished && <strong style={{ color: "var(--danger-500)" }}>Prêt terminé : retire ce fantôme du rayon.</strong>}
+          </div>
+          {g.boxAddress && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>Place gardée : {g.boxAddress}</div>}
         </div>
       </div>
     </section>

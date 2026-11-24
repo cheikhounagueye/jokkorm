@@ -38,6 +38,29 @@ Sans `transfer` → 409 `record-in-other-container` (`currentBarcode`, `currentL
 `currentAddress`) ; même boîte → 409 `record-already-in-container` ; boîte en prêt → 409
 `record-transfer-blocked`.
 
+## Conditionner avant de placer (retenu le 2026-11-24, étude D1 et D4)
+
+L'étape 3 vient avant l'étape 4 : on met les dossiers en boîte, puis on range la boîte.
+
+- **À conditionner** (menu Salle d'archives) : les dossiers dans aucune boîte, enregistrés ou gelés,
+  les plus anciens d'abord. Un dossier gelé y figure (son papier attend quelque part) mais n'entre en
+  boîte qu'après la levée du gel ; la levée du gel d'un dossier sans boîte le remet « Enregistré ».
+- **Une boîte encore en zone tampon** reçoit des dossiers. Leur adresse part au maître quand la boîte
+  est placée ; d'ici là, la file d'envoi affiche « en zone tampon ». Le statut d'un dossier en boîte
+  s'affiche « En boîte » : l'adresse se lit toujours sur la boîte.
+- **Plusieurs dossiers d'un geste, tout ou rien** : au moindre refus rien n'est écrit, et chaque refus
+  a sa raison (dossier inconnu, déjà en boîte, gelé ; boîte fermée, en prêt, trop pleine). Une trace
+  d'audit et de journal par dossier, au nom de la personne.
+- **Capacité (R4)** : une boîte ne dépasse pas son nombre maximal de dossiers. Le contrôle se fait sous
+  verrou du contenu de la boîte : deux mises en boîte simultanées ne la font pas déborder.
+- **Une boîte en prêt** (demandé ou sorti), **fermée ou détruite** ne reçoit plus de dossier, même au
+  premier rangement.
+
+API : `GET /api/v1/physical/conditioning/pending` ; `POST /api/v1/physical/conditioning` corps
+`{ "containerBarcode": "…", "cotes": ["…"] }` → 409 `conditioning-refused` avec `refusals`
+(`cote`, `reason`, `message` ; `cote` vide = la boîte). À l'unité, `POST /records/store` renvoie
+409 `container-full`, `container-on-loan` ou `container-closed`.
+
 ## Échéance de la DUA
 
 À l'échéance de la Durée d'Utilité Administrative, le maître prononce le sort final. **JokkoRM ne décide jamais seul du devenir d'une archive : il exécute, il trace, il atteste.**
