@@ -84,9 +84,14 @@ public class BatchLabelsPdfGenerator {
             float gapVPt = (float) (template.verticalGapMm() * MM_TO_POINTS);
             int perPage = template.perPage();
 
-            // Paramètres de rendu du code-barres image : dimensions adaptées à l'étiquette
-            int barcodeWidthPx = symbology == Symbology.QR ? 150 : 400;
-            int barcodeHeightPx = symbology == Symbology.QR ? 150 : 100;
+            // Image du code-barres rendue large (plusieurs pixels par barre) puis réduite : à 400 px,
+            // une barre faisait 1 pixel, soit 0,14 mm imprimée sur une L7160 — trop fin pour une
+            // douchette, et le moteur de lecture n'en relisait aucune à 200 dpi.
+            int barcodeWidthPx = symbology == Symbology.QR ? 600 : 1500;
+            PDType1Font labelFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+            PDType1Font seqFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            float pad = 4f;
+            float textBand = 12f;
 
             PDPage currentPage = null;
             PDPageContentStream content = null;
@@ -110,37 +115,42 @@ public class BatchLabelsPdfGenerator {
                     float yTop = PDRectangle.A4.getHeight() - marginTopPt - row * (labelHeightPt + gapVPt);
                     float yBottom = yTop - labelHeightPt;
 
-                    // Rendu du barcode PNG dans un buffer
+                    // Mise en page : une ligne de texte en haut (libellé à gauche, n° à droite), le
+                    // code-barres dessous, la référence externe en bas. Jamais de texte sur les barres :
+                    // le libellé passait sur le haut du code-barres et en gênait la lecture.
+                    boolean hasRef = c.externalReference().isPresent();
+                    float imgTop = yTop - textBand - 2;
+                    float imgBottom = yBottom + (hasRef ? 9f : pad);
+                    float imgH = imgTop - imgBottom;
+                    float imgW = symbology == Symbology.QR ? imgH : labelWidthPt - 2 * pad;
+                    float imgX = x + (labelWidthPt - imgW) / 2;
+                    int barcodeHeightPx = symbology == Symbology.QR ? barcodeWidthPx
+                        : Math.max(100, Math.round(barcodeWidthPx * imgH / imgW));
                     byte[] png = barcodeImage.render(
                         c.barcode(), symbology, barcodeWidthPx, barcodeHeightPx, true);
                     PDImageXObject image = PDImageXObject.createFromByteArray(doc, png,
                         c.barcode() + ".png");
+                    content.drawImage(image, imgX, imgBottom, imgW, imgH);
 
-                    // Positionnement : barcode centré horizontalement, calé en haut
-                    float imgW = labelWidthPt * 0.9f;
-                    float imgH = labelHeightPt * 0.65f;
-                    float imgX = x + (labelWidthPt - imgW) / 2;
-                    float imgY = yBottom + labelHeightPt - imgH - 4;
-                    content.drawImage(image, imgX, imgY, imgW, imgH);
-
-                    // Libellé humain en haut (si présent)
-                    if (c.label() != null && !c.label().isBlank()) {
+                    // Phase 5N — N° séquence dans le lot (haut-droite), « N° 023/500 »
+                    float seqWidth = 0;
+                    if (c.sequenceInBatch().isPresent()) {
+                        String seq = "N° %03d/%03d".formatted(c.sequenceInBatch().get(), batch.size());
+                        seqWidth = seqFont.getStringWidth(seq) / 1000f * 6;
                         content.beginText();
-                        content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 7);
-                        content.newLineAtOffset(x + 4, yTop - 10);
-                        String label = truncate(c.label(), 48);
-                        content.showText(sanitize(label));
+                        content.setFont(seqFont, 6);
+                        content.newLineAtOffset(x + labelWidthPt - pad - seqWidth, yTop - 9);
+                        content.showText(seq);
                         content.endText();
                     }
 
-                    // Phase 5N — N° séquence dans le lot (haut-droite) :
-                    //   format "N° 023/500" aligné pour lecture rapide humaine
-                    if (c.sequenceInBatch().isPresent()) {
-                        String seq = "N° %03d/%03d".formatted(c.sequenceInBatch().get(), batch.size());
+                    // Libellé humain en haut à gauche (si présent), coupé avant le n° de séquence
+                    if (c.label() != null && !c.label().isBlank()) {
+                        float maxW = labelWidthPt - 2 * pad - (seqWidth > 0 ? seqWidth + 6 : 0);
                         content.beginText();
-                        content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 6);
-                        content.newLineAtOffset(x + labelWidthPt - 42, yTop - 10);
-                        content.showText(seq);
+                        content.setFont(labelFont, 7);
+                        content.newLineAtOffset(x + pad, yTop - 9);
+                        content.showText(PositionLabelsPdfGenerator.fit(labelFont, 7, c.label().strip(), maxW));
                         content.endText();
                     }
 
@@ -179,10 +189,6 @@ public class BatchLabelsPdfGenerator {
         } catch (IOException e) {
             throw new IllegalStateException("PDF render failed for batch " + batchId, e);
         }
-    }
-
-    private static String truncate(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
     }
 
     /**

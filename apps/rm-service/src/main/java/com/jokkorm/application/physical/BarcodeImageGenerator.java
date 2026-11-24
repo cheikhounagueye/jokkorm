@@ -40,6 +40,9 @@ public class BarcodeImageGenerator {
     /** Blanc gardé de chaque côté du texte en clair. */
     static final int TEXT_SIDE_MARGIN_PX = 4;
     private static final int MIN_TEXT_SIZE_PX = 8;
+    private static final int QR_QUIET_ZONE = 4;
+    /** zxing compte la marge d'un code 1D sur les deux côtés réunis : 20 = 10 modules de chaque côté. */
+    private static final int CODE128_QUIET_ZONE_TOTAL = 20;
 
     public enum Symbology {
         CODE128(BarcodeFormat.CODE_128),
@@ -70,7 +73,10 @@ public class BarcodeImageGenerator {
 
         try {
             Map<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
-            hints.put(EncodeHintType.MARGIN, 2);
+            // Zone blanche autour du code, en modules : 4 pour le QR (ISO/IEC 18004), 10 de chaque
+            // côté pour le Code128 (ISO/IEC 15417). Avec 2, le texte en clair collait au QR et
+            // certaines étiquettes ne se relisaient pas.
+            hints.put(EncodeHintType.MARGIN, symbology == Symbology.QR ? QR_QUIET_ZONE : CODE128_QUIET_ZONE_TOTAL);
             if (symbology == Symbology.QR) {
                 hints.put(EncodeHintType.ERROR_CORRECTION,
                     com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M);
