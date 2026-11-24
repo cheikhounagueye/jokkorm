@@ -24,7 +24,9 @@ public record MasterEvent(String id, Kind kind, Instant occurredAt, String maste
         /** Gel contentieux posé. */
         FROZEN,
         /** Gel contentieux levé. */
-        UNFROZEN
+        UNFROZEN,
+        /** Nouvelle archive déposée chez le maître (candidate à l'import, étape 2). */
+        DEPOSITED
     }
 
     public MasterEvent {

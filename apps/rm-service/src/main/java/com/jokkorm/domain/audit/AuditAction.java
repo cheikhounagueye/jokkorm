@@ -21,6 +21,21 @@ public enum AuditAction {
     /** Signalement du veilleur marqué traité par un archiviste. */
     MASTER_ALERT_ACKNOWLEDGED,
 
+    /** Archive déposée chez le maître, importée seule par une règle de profil (étape 2). */
+    MASTER_DEPOSIT_AUTO_IMPORTED,
+
+    /** Archive de la liste « à importer » importée par un archiviste (étape 2). */
+    MASTER_CANDIDATE_IMPORTED,
+
+    /** Archive de la liste « à importer » écartée : pas de papier (étape 2). */
+    MASTER_CANDIDATE_IGNORED,
+
+    /** Archive écartée remise dans la liste « à importer » (étape 2). */
+    MASTER_CANDIDATE_RESTORED,
+
+    /** Règle d'import automatique d'un profil activée ou retirée (étape 2). */
+    MASTER_AUTO_IMPORT_CHANGED,
+
     /** Un dossier a été rangé dans une boîte à une position physique — phase 5C. */
     RECORD_STORED,
 

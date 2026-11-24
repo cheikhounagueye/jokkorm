@@ -29,5 +29,11 @@ public enum AuditTargetType {
     BOX_FORMAT,
 
     /** Signalement du veilleur du journal maître. */
-    MASTER_ALERT
+    MASTER_ALERT,
+
+    /** Archive de la liste « à importer » (étape 2). */
+    MASTER_IMPORT_CANDIDATE,
+
+    /** Règle d'import automatique d'un profil (étape 2). */
+    MASTER_IMPORT_PROFILE
 }

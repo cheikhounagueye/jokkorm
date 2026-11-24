@@ -34,7 +34,10 @@ class ImportFromMasterUseCaseTest {
     private final SaeMasterPort master = mock(SaeMasterPort.class);
     private final PhysicalArchiveRecordRepository records = mock(PhysicalArchiveRecordRepository.class);
     private final HandleCoteAssignedEventUseCase register = mock(HandleCoteAssignedEventUseCase.class);
-    private final ImportFromMasterUseCase useCase = new ImportFromMasterUseCase(master, records, register);
+    private final ImportFromMasterUseCase useCase = new ImportFromMasterUseCase(master, records, register,
+        mock(com.jokkorm.domain.master.MasterImportCandidateRepository.class),
+        mock(com.jokkorm.application.audit.AuditChainService.class),
+        java.time.Clock.fixed(Instant.parse("2026-11-24T10:00:00Z"), java.time.ZoneOffset.UTC));
 
     @AfterEach
     void clear() {

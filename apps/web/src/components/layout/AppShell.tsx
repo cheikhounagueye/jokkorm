@@ -5,19 +5,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { IconTile } from "@/components/ui/IconTile";
-import { getMasterWatch } from "@/lib/api";
+import { getImportSummary, getMasterWatch } from "@/lib/api";
 import { Icons, type IconName } from "@/lib/icons";
 import { TopBar } from "./TopBar";
 
 /** Nombre de signalements à traiter (veilleur du journal maître), rafraîchi chaque minute. */
 function OpenAlertsCount() {
   const q = useQuery({ queryKey: ["master-watch"], queryFn: getMasterWatch, refetchInterval: 60_000, retry: false });
-  const n = q.data?.openActions ?? 0;
+  return <CountBadge n={q.data?.openActions ?? 0} label="signalement(s) à traiter" color="var(--danger-500)" />;
+}
+
+/** Nouvelles archives de la GED maître en attente de décision (étape 2). */
+function PendingImportsCount() {
+  const q = useQuery({ queryKey: ["imports-summary"], queryFn: getImportSummary, refetchInterval: 60_000, retry: false });
+  return <CountBadge n={q.data?.pending ?? 0} label="archive(s) à importer" color="var(--brand-500)" />;
+}
+
+function CountBadge({ n, label, color }: { n: number; label: string; color: string }) {
   if (n === 0) return null;
   return (
-    <span aria-label={`${n} signalement(s) à traiter`} style={{
+    <span aria-label={`${n} ${label}`} style={{
       marginLeft: "auto", minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10,
-      background: "var(--danger-500)", color: "white", fontSize: 11, fontWeight: 700,
+      background: color, color: "white", fontSize: 11, fontWeight: 700,
       display: "inline-flex", alignItems: "center", justifyContent: "center",
     }}>{n}</span>
   );
@@ -34,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/",             label: "Tableau de bord",  icon: "dashboard",   section: "Accueil" },
   { href: "/demandes",     label: "Demandes",         icon: "requests",    section: "Travail" },
   { href: "/prets",        label: "Prêts",            icon: "loans",       section: "Travail" },
+  { href: "/a-importer",   label: "À importer",        icon: "inbox",       section: "Travail" },
   { href: "/signalements", label: "Signalements",     icon: "eyes",        section: "Travail" },
   { href: "/magasin",      label: "Salle d'archives", icon: "archiveRoom", section: "Gestion" },
   { href: "/magasin/visite", label: "Visite 3D",      icon: "virtualTour", section: "Gestion" },
@@ -132,6 +142,7 @@ function Sidebar() {
                   <NavIcon size={20} weight={active ? "fill" : "duotone"} />
                   {item.label}
                   {item.href === "/signalements" && <OpenAlertsCount />}
+                  {item.href === "/a-importer" && <PendingImportsCount />}
                 </Link>
               );
             })}

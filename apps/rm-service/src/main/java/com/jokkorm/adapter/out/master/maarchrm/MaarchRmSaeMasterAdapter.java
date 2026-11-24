@@ -256,7 +256,8 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
     private static final Map<MasterEvent.Kind, String> EVENT_TYPES = Map.of(
         MasterEvent.Kind.METADATA_MODIFIED, "recordsManagement/metadataModification",
         MasterEvent.Kind.FROZEN, "recordsManagement/freeze",
-        MasterEvent.Kind.UNFROZEN, "recordsManagement/unfreeze");
+        MasterEvent.Kind.UNFROZEN, "recordsManagement/unfreeze",
+        MasterEvent.Kind.DEPOSITED, "recordsManagement/deposit");
     private static final String JOURNAL_FORBIDDEN = "Maarch RM refuse la lecture du journal (HTTP 403) : il manque "
         + "au compte de JokkoRM le droit lifeCycle/event/readSearch (script jokkorm-setup-veilleur.sh)";
 
@@ -370,7 +371,8 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
         String cote = text(meta, "archiverArchiveId");
         if (cote == null || !isValidCote(cote)) return Optional.empty();
         JsonNode field = meta.path("description").path(config.locationField());
-        return Optional.of(new MasterArchiveRef(cote, field.isMissingNode() || field.isNull() ? null : field.asText()));
+        return Optional.of(new MasterArchiveRef(cote, field.isMissingNode() || field.isNull() ? null : field.asText(),
+            text(meta, "archivalProfileReference"), notBlank(text(meta, "parentArchiveId"))));
     }
 
     @Override

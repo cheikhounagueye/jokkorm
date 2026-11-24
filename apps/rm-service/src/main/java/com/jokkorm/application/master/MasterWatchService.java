@@ -50,7 +50,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       n'est plus celui que JokkoRM a envoyé, il est rétabli et l'écart est signalé. Un texte tapé
  *       dans le maître n'est pas un geste (pas de scan, pas d'agent nommé) : il ne remonte jamais ;</li>
  *   <li><b>gel</b> : l'archive passe à « gelée » dans JokkoRM, avec une alerte si sa boîte est en prêt
- *       ou demandée ; <b>levée du gel</b> : retour à la normale.</li>
+ *       ou demandée ; <b>levée du gel</b> : retour à la normale ;</li>
+ *   <li><b>dépôt</b> d'une nouvelle archive : elle rejoint la liste « à importer », ou entre seule si
+ *       son profil a la règle d'import automatique (étape 2, {@link MasterImportService}).</li>
  * </ul>
  *
  * <p>Fiabilité : le curseur est l'horodatage du MAÎTRE du dernier événement traité (jamais l'horloge
@@ -89,6 +91,7 @@ public class MasterWatchService {
     private final TransactionTemplate tx;
     private final Clock clock;
     private final Duration initialLookback;
+    private final MasterImportService imports;
     /** Événements déjà traités récemment : évite de relire le maître pour la fenêtre de recouvrement. */
     private final Map<String, Boolean> recentlyHandled = Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, false) {
         @Override
@@ -101,7 +104,9 @@ public class MasterWatchService {
                               MasterSyncRepository queue, MasterSyncService sync, PhysicalArchiveRecordRepository records,
                               PhysicalLoanRepository loans, ApplyLegalHoldUseCase legalHold, AuditChainService audit,
                               TransactionTemplate tx, Clock clock,
-                              @Value("${jokkorm.master.watch.initial-lookback-hours:24}") long initialLookbackHours) {
+                              @Value("${jokkorm.master.watch.initial-lookback-hours:24}") long initialLookbackHours,
+                              MasterImportService imports) {
+        this.imports = imports;
         this.master = master;
         this.states = states;
         this.alerts = alerts;
@@ -190,12 +195,19 @@ public class MasterWatchService {
     boolean handle(TenantId tenant, MasterEvent ev) {
         if (ev.kind() == MasterEvent.Kind.METADATA_MODIFIED && !master.acceptsPhysicalStatus(tenant)) return false;
         MasterArchiveRef ref = master.describe(tenant, ev.masterArchiveId()).orElse(null);
+        if (ev.kind() == MasterEvent.Kind.DEPOSITED) {
+            // Étape 2 : même illisible, un dépôt laisse une trace (jamais perdu en silence).
+            MasterImportService.Outcome o = tx.execute(s -> imports.onDeposited(tenant, ev, ref));
+            return o == MasterImportService.Outcome.PENDING || o == MasterImportService.Outcome.AUTO_IMPORTED
+                || o == MasterImportService.Outcome.UNREADABLE;
+        }
         if (ref == null) return false;  // archive inconnue ou invisible pour le compte de connexion
         Cote cote = Cote.of(ref.cote());
         Boolean raised = tx.execute(s -> switch (ev.kind()) {
             case METADATA_MODIFIED -> onMetadataModified(tenant, ev, cote, ref.displayedPhysicalStatus());
             case FROZEN -> onFrozen(tenant, ev, cote);
             case UNFROZEN -> onUnfrozen(tenant, ev, cote);
+            case DEPOSITED -> false;  // traité plus haut
         });
         return Boolean.TRUE.equals(raised);
     }

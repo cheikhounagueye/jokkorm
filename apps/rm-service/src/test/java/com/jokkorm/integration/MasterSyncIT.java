@@ -15,7 +15,9 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.jokkorm.application.loan.MarkLoanOutUseCase;
 import com.jokkorm.application.loan.RequestLoanUseCase;
+import com.jokkorm.application.master.MasterImportService;
 import com.jokkorm.application.master.MasterSyncService;
+import com.jokkorm.domain.master.MasterImportCandidate;
 import com.jokkorm.application.master.MasterWatchService;
 import com.jokkorm.application.physical.BoxFormatAdminUseCase;
 import com.jokkorm.application.physical.CreatePhysicalContainerUseCase;
@@ -116,6 +118,8 @@ class MasterSyncIT {
     @Autowired MarkLoanOutUseCase markOut;
     @Autowired MasterSyncService sync;
     @Autowired MasterWatchService watcher;
+    @Autowired MasterImportService imports;
+    @Autowired com.jokkorm.application.record.ImportFromMasterUseCase importFromMaster;
 
     private static final String COTE = "FR-IT-0001";
     private TenantId tenant;
@@ -404,6 +408,152 @@ class MasterSyncIT {
         assertThat(alerts(false)).extracting(MasterAlert::kind).containsExactly(MasterAlert.Kind.LOCATION_RESTORED);
         assertThat(alerts(false).get(0).actor()).isEqualTo("ggrand");
         assertThat(audits("MASTER_LOCATION_RESTORED")).isEqualTo(1);
+    }
+
+    // ─── Liste « à importer » (étape 2) ─────────────────────────────────────────
+
+    private static final String DEP = "recordsManagement/deposit";
+
+    private static String deposit(String id, String archiveId, Instant at) {
+        return "{\"eventId\":\"" + id + "\",\"eventType\":\"" + DEP + "\",\"timestamp\":\""
+            + OffsetDateTime.ofInstant(at, ZoneOffset.UTC) + "\",\"objectClass\":\"recordsManagement/archive\","
+            + "\"objectId\":\"" + archiveId + "\",\"accountName\":\"ggrand\"}";
+    }
+
+    /** Événements donnés du plus ancien au plus récent ; Maarch les renvoie du plus récent au plus ancien. */
+    private void stubDeposits(String... oldestFirst) {
+        java.util.List<String> newestFirst = new java.util.ArrayList<>(java.util.List.of(oldestFirst));
+        java.util.Collections.reverse(newestFirst);
+        MAARCH.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).withQueryParam("eventType", equalTo(DEP))
+            .willReturn(json("[" + String.join(",", newestFirst) + "]")));
+    }
+
+    /** Une archive du maître : métadonnées (pour le veilleur) et recherche par cote (pour l'import). */
+    private void stubArchive(String archiveId, String cote, String profile, String parent) {
+        MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/" + archiveId)).willReturn(json(
+            "{\"archiveId\":\"" + archiveId + "\",\"archiverArchiveId\":\"" + cote + "\",\"archivalProfileReference\":\""
+                + profile + "\",\"parentArchiveId\":" + (parent == null ? "null" : "\"" + parent + "\"")
+                + ",\"archiveName\":\"Titre\",\"description\":{}}")));
+        MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).withQueryParam("archiverArchiveId", equalTo(cote))
+            .willReturn(json("[{\"archiveId\":\"" + archiveId + "\",\"archiverArchiveId\":\"" + cote
+                + "\",\"archiveName\":\"Titre\",\"archivalProfileReference\":\"" + profile + "\"}]")));
+    }
+
+    private void stubGone(String archiveId) {
+        MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/" + archiveId)).willReturn(aResponse()
+            .withStatus(404).withHeader("Content-Type", "application/json")
+            .withHeader("X-Laabs-Exception", "core\\Exception\\NotFoundException; not found").withBody("{}")));
+    }
+
+    private java.util.List<MasterImportCandidate> candidates(MasterImportCandidate.Status status) {
+        return as(() -> imports.list(status, 50)).stream().map(MasterImportService.Item::candidate).toList();
+    }
+
+    private String recordStatusOf(String cote) {
+        return jdbc.query("SELECT status FROM physical_archive_record WHERE tenant_id = ? AND cote = ?",
+            (rs, i) -> rs.getString(1), tenant.value(), cote).stream().findFirst().orElse(null);
+    }
+
+    @Test
+    @DisplayName("Dépôts : une seule ligne par archive, sous-archive et archive déjà suivie écartées, dépôt illisible gardé")
+    void deposits_feed_the_import_list() {
+        Instant t = Instant.now().minusSeconds(300).truncatedTo(ChronoUnit.SECONDS);
+        stubArchive("arc-new", "FR-IT-0002", "DOSIP", null);
+        stubArchive("arc-child", "FR-IT-0002_001", "ETAC", "arc-new");
+        stubGone("arc-gone");
+        stubDeposits(deposit("d1", "arc-new", t), deposit("d1bis", "arc-new", t),
+            deposit("d2", "arc-child", t.plusSeconds(1)), deposit("d3", "arc-1", t.plusSeconds(2)),
+            deposit("d4", "arc-gone", t.plusSeconds(3)));
+
+        watcher.watch(tenant);
+
+        assertThat(candidates(MasterImportCandidate.Status.PENDING)).extracting(MasterImportCandidate::cote)
+            .containsExactly("FR-IT-0002");
+        var pending = candidates(MasterImportCandidate.Status.PENDING).get(0);
+        assertThat(pending.profileReference()).isEqualTo("DOSIP");
+        assertThat(pending.depositedBy()).isEqualTo("ggrand");
+        assertThat(candidates(MasterImportCandidate.Status.UNREADABLE)).extracting(MasterImportCandidate::masterArchiveId)
+            .containsExactly("arc-gone");
+        assertThat(recordStatusOf("FR-IT-0002")).as("rien n'est importé sans décision").isNull();
+
+        var again = as(() -> imports.catchUp(1));
+        assertThat(again.outcomes()).containsEntry(MasterImportService.Outcome.ALREADY_SEEN, 3)
+            .containsEntry(MasterImportService.Outcome.SUB_ARCHIVE, 1)
+            .containsEntry(MasterImportService.Outcome.ALREADY_TRACKED, 1);
+        assertThat(candidates(MasterImportCandidate.Status.PENDING)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Règle de profil : le dépôt entre seul dans JokkoRM, la règle (qui, quand) et l'événement maître sont audités")
+    void profile_rule_imports_new_deposits() {
+        RoleContext.set(Set.of(UserRole.ARCHIVES_HEAD));
+        as(() -> imports.setAutoImport("DOSIP", true, "responsable-it"));
+        Instant t = Instant.now().minusSeconds(120).truncatedTo(ChronoUnit.SECONDS);
+        stubArchive("arc-new", "FR-IT-0002", "DOSIP", null);
+        stubArchive("arc-other", "FR-IT-0003", "FACACH", null);
+        stubDeposits(deposit("d1", "arc-new", t), deposit("d2", "arc-other", t.plusSeconds(1)));
+
+        watcher.watch(tenant);
+
+        assertThat(recordStatusOf("FR-IT-0002")).isEqualTo("REGISTERED");
+        assertThat(recordStatusOf("FR-IT-0003")).as("profil sans règle : à décider").isNull();
+        var imported = candidates(MasterImportCandidate.Status.IMPORTED);
+        assertThat(imported).extracting(MasterImportCandidate::cote).containsExactly("FR-IT-0002");
+        assertThat(imported.get(0).auto()).isTrue();
+        assertThat(audits("MASTER_AUTO_IMPORT_CHANGED")).isEqualTo(1);
+        assertThat(audits("MASTER_DEPOSIT_AUTO_IMPORTED")).isEqualTo(1);
+        String meta = jdbc.queryForObject("SELECT metadata FROM audit_event WHERE tenant_id = ? AND action = ?",
+            String.class, tenant.value(), "MASTER_DEPOSIT_AUTO_IMPORTED");
+        assertThat(meta).contains("profil=DOSIP").contains("regle-par=responsable-it").contains("evenement-maitre=d1");
+    }
+
+    @Test
+    @DisplayName("Décisions : importer (cote revérifiée), ignorer puis remettre ; l'import par la recherche solde aussi la ligne")
+    void archivist_decisions() {
+        Instant t = Instant.now().minusSeconds(120).truncatedTo(ChronoUnit.SECONDS);
+        stubArchive("arc-a", "FR-IT-0002", "DOSIP", null);
+        stubArchive("arc-b", "FR-IT-0003", "DOSIP", null);
+        stubArchive("arc-c", "FR-IT-0004", "DOSIP", null);
+        stubDeposits(deposit("da", "arc-a", t), deposit("db", "arc-b", t.plusSeconds(1)), deposit("dc", "arc-c", t.plusSeconds(2)));
+        watcher.watch(tenant);
+        var byCote = candidates(MasterImportCandidate.Status.PENDING).stream()
+            .collect(java.util.stream.Collectors.toMap(MasterImportCandidate::cote, MasterImportCandidate::id));
+
+        var a = as(() -> imports.importCandidate(byCote.get("FR-IT-0002"), "archiviste-it"));
+        assertThat(a.status()).isEqualTo(MasterImportCandidate.Status.IMPORTED);
+        assertThat(a.decidedBy()).isEqualTo("archiviste-it");
+        assertThat(recordStatusOf("FR-IT-0002")).isEqualTo("REGISTERED");
+        assertThat(audits("MASTER_CANDIDATE_IMPORTED")).isEqualTo(1);
+
+        var b = as(() -> imports.ignore(byCote.get("FR-IT-0003"), "archiviste-it"));
+        assertThat(b.status()).isEqualTo(MasterImportCandidate.Status.IGNORED);
+        assertThat(as(() -> imports.restore(b.id(), "archiviste-it")).status()).isEqualTo(MasterImportCandidate.Status.PENDING);
+        assertThat(audits("MASTER_CANDIDATE_IGNORED")).isEqualTo(1);
+        assertThat(audits("MASTER_CANDIDATE_RESTORED")).isEqualTo(1);
+
+        as(() -> importFromMaster.execute(Cote.of("FR-IT-0004"), "archiviste-recherche"));
+        var c = as(() -> imports.list(MasterImportCandidate.Status.IMPORTED, 50)).stream()
+            .map(MasterImportService.Item::candidate).filter(x -> "FR-IT-0004".equals(x.cote())).findFirst().orElseThrow();
+        assertThat(c.decidedBy()).isEqualTo("archiviste-recherche");
+        assertThat(audits("MASTER_CANDIDATE_IMPORTED")).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Dépôt illisible puis lisible (droits corrigés) : le rattrapage le remet dans la liste à décider")
+    void unreadable_deposit_is_reevaluated_by_catch_up() {
+        Instant t = Instant.now().minusSeconds(120).truncatedTo(ChronoUnit.SECONDS);
+        stubGone("arc-x");
+        stubDeposits(deposit("dx", "arc-x", t));
+        watcher.watch(tenant);
+        assertThat(candidates(MasterImportCandidate.Status.UNREADABLE)).hasSize(1);
+
+        stubArchive("arc-x", "FR-IT-0009", "DOSIP", null);
+        var run = as(() -> imports.catchUp(1));
+
+        assertThat(run.outcomes()).containsEntry(MasterImportService.Outcome.PENDING, 1);
+        assertThat(candidates(MasterImportCandidate.Status.UNREADABLE)).isEmpty();
+        assertThat(candidates(MasterImportCandidate.Status.PENDING)).extracting(MasterImportCandidate::cote)
+            .containsExactly("FR-IT-0009");
     }
 
     // ─── Un dossier, une seule boîte ──────────────────────────────────────────

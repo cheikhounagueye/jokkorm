@@ -360,7 +360,30 @@ class MaarchRmSaeMasterAdapterTest {
             .withQueryParam("minDate", equalTo("2026-11-23T14:00:00"))
             .withQueryParam("maxDate", equalTo(""))
             .withQueryParam("org", equalTo("")));
-        wireMock.verify(3, getRequestedFor(urlPathEqualTo("/lifeCycle/event/Search")));  // un appel par type
+        wireMock.verify(4, getRequestedFor(urlPathEqualTo("/lifeCycle/event/Search")));  // un appel par type
+    }
+
+    @Test
+    @DisplayName("journal : dépôts lus (étape 2) et fusionnés avec les autres types dans l'ordre chronologique")
+    void deposits_are_read_and_merged_in_time_order() {
+        String dep = "recordsManagement/deposit";
+        wireMock.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).willReturn(json("[]")));
+        stubJournal("", "[" + ev("m2", "2026-11-23T16:00:00+00:00", "ggrand") + "]");
+        wireMock.stubFor(get(urlPathEqualTo("/lifeCycle/event/Search")).withQueryParam("eventType", equalTo(dep))
+            .willReturn(json("[" + ev("d3", "2026-11-23T17:00:00+00:00", "ccharles").replace(MOD, dep) + ","
+                + ev("d1", "2026-11-23T15:00:00+00:00", "ccharles").replace(MOD, dep) + "]")));
+
+        var events = adapter.readEvents(TENANT, Instant.parse("2026-11-23T14:00:00Z"), ALL_KINDS);
+
+        assertThat(events).extracting(com.jokkorm.domain.master.MasterEvent::id).containsExactly("d1", "m2", "d3");
+        assertThat(events.get(0).kind()).isEqualTo(com.jokkorm.domain.master.MasterEvent.Kind.DEPOSITED);
+        assertThat(events.get(1).kind()).isEqualTo(com.jokkorm.domain.master.MasterEvent.Kind.METADATA_MODIFIED);
+
+        wireMock.resetRequests();
+        adapter.readEvents(TENANT, Instant.parse("2026-11-23T14:00:00Z"),
+            java.util.EnumSet.of(com.jokkorm.domain.master.MasterEvent.Kind.DEPOSITED));
+        wireMock.verify(1, getRequestedFor(urlPathEqualTo("/lifeCycle/event/Search")));
+        wireMock.verify(getRequestedFor(urlPathEqualTo("/lifeCycle/event/Search")).withQueryParam("eventType", equalTo(dep)));
     }
 
     @Test
@@ -411,7 +434,11 @@ class MaarchRmSaeMasterAdapterTest {
     @DisplayName("describe : cote et emplacement affiché ; inconnue (404) ou invisible (accessDenied) → vide ; panne → exception")
     void describe_archive() {
         wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/arc-1")).willReturn(json(
-            "{\"archiverArchiveId\":\"" + COTE.value() + "\",\"description\":{\"nom\":\"x\",\"localisation_physique\":\"Salle A\"}}")));
+            "{\"archiverArchiveId\":\"" + COTE.value() + "\",\"archivalProfileReference\":\"DOSIP\",\"parentArchiveId\":null,"
+                + "\"description\":{\"nom\":\"x\",\"localisation_physique\":\"Salle A\"}}")));
+        wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/sous-archive")).willReturn(json(
+            "{\"archiverArchiveId\":\"" + COTE.value() + "_001\",\"archivalProfileReference\":\"ETAC\","
+                + "\"parentArchiveId\":\"arc-1\",\"description\":{}}")));
         wireMock.stubFor(get(urlPathEqualTo("/recordsManagement/archive/Metadata/inconnue")).willReturn(aResponse()
             .withStatus(404).withHeader("Content-Type", "application/json")
             .withHeader("X-Laabs-Exception", "core\\Exception\\NotFoundException; not found").withBody("{}")));
@@ -425,6 +452,11 @@ class MaarchRmSaeMasterAdapterTest {
         var ref = adapter.describe(TENANT, "arc-1").orElseThrow();
         assertThat(ref.cote()).isEqualTo(COTE.value());
         assertThat(ref.displayedPhysicalStatus()).isEqualTo("Salle A");
+        assertThat(ref.profileReference()).isEqualTo("DOSIP");
+        assertThat(ref.child()).isFalse();
+        var child = adapter.describe(TENANT, "sous-archive").orElseThrow();
+        assertThat(child.child()).as("sous-archive : elle suit son dossier").isTrue();
+        assertThat(child.profileReference()).isEqualTo("ETAC");
         assertThat(adapter.describe(TENANT, "inconnue")).isEmpty();
         assertThat(adapter.describe(TENANT, "autre-service")).isEmpty();
         assertThatThrownBy(() -> adapter.describe(TENANT, "panne")).isInstanceOf(MasterUnreachableException.class);

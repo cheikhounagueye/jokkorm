@@ -33,3 +33,5 @@ databaseChangeLog:
       file: db/changelog/0016-master-sync.yaml
   - include:
       file: db/changelog/0017-master-watch.yaml
+  - include:
+      file: db/changelog/0018-master-import.yaml

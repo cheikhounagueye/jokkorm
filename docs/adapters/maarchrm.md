@@ -63,7 +63,12 @@ onglet `{PUBLIC_URL}/recordsManagement/archiveDescription/{archiveId}`. C'est Ma
 
 ## Entrée des archives dans JokkoRM
 
-Maarch RM ne prévient pas JokkoRM quand il attribue une cote (pas de webhook). L'archiviste cherche dans Maarch depuis la page **Archives**, puis importe celles qui ont du papier : `POST /api/v1/master/import`, idempotent et audité. Une archive inconnue de Maarch donne 404, et Maarch injoignable donne 502.
+Maarch RM ne prévient pas JokkoRM quand il attribue une cote (pas de webhook). Deux chemins :
+
+- la page **À importer** : le veilleur y dépose chaque nouvelle archive de Maarch, à décider ou
+  importée seule selon la règle de son profil (voir « Liste à importer » plus bas) ;
+- la recherche de la page **Archives**, pour une archive plus ancienne : `POST /api/v1/master/import`,
+  idempotent et audité. Une archive inconnue de Maarch donne 404, et Maarch injoignable donne 502.
 
 ## Tranche 2a — l'état physique affiché dans Maarch RM (livrée)
 
@@ -158,6 +163,44 @@ Maarch ne prévient personne : JokkoRM lit son journal du cycle de vie **chaque 
   - au-delà de 20 000 événements d'un même type à rattraper d'un coup, le veilleur s'arrête en
     erreur ;
   - un gel levé remet l'archive « en magasin » même si elle n'avait pas encore de boîte.
+
+## Liste « à importer » et import automatique par profil (étape 2)
+
+Règle n° 4 : JokkoRM ne copie pas le catalogue de Maarch. Une archive n'y entre que si elle a du
+papier, et c'est une décision écrite.
+
+- **Source** : le veilleur lit aussi les dépôts (`recordsManagement/deposit`). Chaque archive
+  déposée donne **une seule ligne** (unicité tenant + archive Maarch) : relire le journal ou un
+  doublon de dépôt ne crée rien de plus.
+- **Ne deviennent jamais candidates** :
+  - une **sous-archive** (`parentArchiveId` renseigné, ex. `FR094080_2026_AE0002_001` dans
+    AE0002) : elle est dans son dossier et suit sa boîte ;
+  - une archive **déjà suivie** par JokkoRM.
+- **Dépôt illisible** : si Maarch ne donne pas la cote au compte `jokkorm` (archive d'un autre
+  service, sans cote, ou supprimée), la ligne est gardée « illisible » avec son identifiant
+  Maarch. Rien n'est perdu en silence. Après correction des droits, « Rattraper » la réévalue.
+- **Décisions** (archiviste ou responsable) : « Importer » revérifie la cote dans Maarch puis
+  crée la fiche physique ; « Pas de papier » l'écarte (réversible, « Remettre dans la liste »).
+  Un import fait depuis la recherche de la page Archives solde aussi la ligne.
+- **Règle par profil** (responsable des archives seulement) : « ce profil a toujours du papier ».
+  Elle vaut pour les **prochains** dépôts ; les archives déjà en attente restent à décider, avec
+  un bouton « Importer les N en attente ». Activation et retrait sont audités (qui, quand), et
+  chaque import automatique porte dans l'audit le profil, qui a activé la règle, quand, et
+  l'événement Maarch (`evenement-maitre=`).
+- **Rattrapage** : « Rattraper les dépôts des 30 derniers jours » relit le journal sans toucher au
+  curseur du veilleur. Rejouable sans risque.
+- **Données personnelles** : seuls l'identifiant Maarch, la cote, le profil, qui et quand sont
+  gardés. Le titre est lu en direct pour l'écran (30 au plus par affichage), jamais stocké.
+- **Vérifié en réel le 2026-11-24** (rattrapage 30 jours, aucune règle) : 4 dépôts lus, 3 déjà
+  suivis (AE0002 déposée deux fois, AE0003), 1 sous-archive (AE0002_001). Rien n'a été écrit.
+
+**Test d'acceptation (à faire dans Maarch)** :
+
+1. Créer une archive DOSIP de premier niveau : elle apparaît dans « À importer » en une minute
+   environ.
+2. Créer une sous-archive dedans : elle n'apparaît pas.
+3. En responsable des archives, activer l'import automatique de DOSIP, puis créer une autre
+   archive DOSIP : elle entre seule dans JokkoRM, « Enregistrée », à ranger.
 
 ## Montées de version de Maarch RM
 

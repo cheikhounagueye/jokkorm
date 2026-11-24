@@ -1,14 +1,19 @@
 package com.jokkorm.application.record;
 
+import com.jokkorm.application.audit.AuditChainService;
 import com.jokkorm.commons.role.RoleContext;
 import com.jokkorm.commons.role.UserRole;
 import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.commons.tenancy.TenantId;
+import com.jokkorm.domain.audit.AuditAction;
+import com.jokkorm.domain.audit.AuditTargetType;
 import com.jokkorm.domain.master.MasterArchiveView;
+import com.jokkorm.domain.master.MasterImportCandidateRepository;
 import com.jokkorm.domain.master.SaeMasterPort;
 import com.jokkorm.domain.record.Cote;
 import com.jokkorm.domain.record.PhysicalArchiveRecord;
 import com.jokkorm.domain.record.PhysicalArchiveRecordRepository;
+import java.time.Clock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,12 +34,19 @@ public class ImportFromMasterUseCase {
     private final SaeMasterPort master;
     private final PhysicalArchiveRecordRepository records;
     private final HandleCoteAssignedEventUseCase register;
+    private final MasterImportCandidateRepository candidates;
+    private final AuditChainService audit;
+    private final Clock clock;
 
     public ImportFromMasterUseCase(SaeMasterPort master, PhysicalArchiveRecordRepository records,
-                                   HandleCoteAssignedEventUseCase register) {
+                                   HandleCoteAssignedEventUseCase register, MasterImportCandidateRepository candidates,
+                                   AuditChainService audit, Clock clock) {
         this.master = master;
         this.records = records;
         this.register = register;
+        this.candidates = candidates;
+        this.audit = audit;
+        this.clock = clock;
     }
 
     @Transactional
@@ -46,6 +58,11 @@ public class ImportFromMasterUseCase {
                 "La cote " + cote.value() + " est inconnue de la GED maître"));
         boolean existed = records.findByCote(tenant, cote).isPresent();
         PhysicalArchiveRecord record = register.execute(tenant, cote, actor);
+        // Qu'il vienne de la liste « à importer » ou de la recherche, l'import solde la candidate (étape 2).
+        candidates.markImportedByCote(tenant, cote.value(), actor, clock.instant()).ifPresent(c ->
+            audit.record(AuditAction.MASTER_CANDIDATE_IMPORTED, AuditTargetType.PHYSICAL_ARCHIVE_RECORD, record.id(),
+                actor, "cote=" + cote.value() + "; profil=" + c.profileReference() + "; evenement-maitre="
+                    + c.masterEventId() + "; depose-par=" + c.depositedBy()));
         return new Result(record, view, !existed);
     }
 }

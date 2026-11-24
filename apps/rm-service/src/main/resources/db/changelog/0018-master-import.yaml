@@ -1,0 +1,58 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0018-master-import
+      author: jokkorm
+      comment: >
+        Étape 2 (règle n° 4) : liste « à importer » et import automatique par profil.
+        master_import_candidate : une ligne par archive déposée chez le maître et pas encore suivie
+        par JokkoRM. Unicité (tenant, archive du maître) = marqueur « dépôt déjà traité ».
+        Seuls l'identifiant, la cote, le profil, qui et quand sont gardés : jamais le titre ni la
+        description (lus en direct chez le maître). master_import_profile : règle « ce profil a
+        toujours du papier », décidée et datée par le responsable des archives.
+      changes:
+        - createTable:
+            tableName: master_import_candidate
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, primaryKeyName: pk_master_import_candidate, nullable: false } }
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { nullable: false, foreignKeyName: fk_master_import_candidate_tenant, references: tenant(id) }
+              - column: { name: master_archive_id, type: VARCHAR(255), constraints: { nullable: false } }
+              - column: { name: cote, type: VARCHAR(64) }
+              - column: { name: profile_reference, type: VARCHAR(128) }
+              - column: { name: master_event_id, type: VARCHAR(128), constraints: { nullable: false } }
+              - column: { name: deposited_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+              - column: { name: deposited_by, type: VARCHAR(255) }
+              - column: { name: status, type: VARCHAR(16), constraints: { nullable: false } }
+              - column: { name: auto, type: BOOLEAN, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: decided_by, type: VARCHAR(255) }
+              - column: { name: decided_at, type: TIMESTAMP WITH TIME ZONE }
+              - column: { name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: master_import_candidate
+            columnNames: tenant_id, master_archive_id
+            constraintName: uq_master_import_candidate_archive
+        - createIndex:
+            tableName: master_import_candidate
+            indexName: ix_master_import_candidate_status
+            columns:
+              - column: { name: tenant_id }
+              - column: { name: status }
+              - column: { name: deposited_at }
+        - createTable:
+            tableName: master_import_profile
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, primaryKeyName: pk_master_import_profile, nullable: false } }
+              - column:
+                  name: tenant_id
+                  type: VARCHAR(64)
+                  constraints: { nullable: false, foreignKeyName: fk_master_import_profile_tenant, references: tenant(id) }
+              - column: { name: profile_reference, type: VARCHAR(128), constraints: { nullable: false } }
+              - column: { name: auto_import, type: BOOLEAN, constraints: { nullable: false } }
+              - column: { name: decided_by, type: VARCHAR(255) }
+              - column: { name: decided_at, type: TIMESTAMP WITH TIME ZONE, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: master_import_profile
+            columnNames: tenant_id, profile_reference
+            constraintName: uq_master_import_profile

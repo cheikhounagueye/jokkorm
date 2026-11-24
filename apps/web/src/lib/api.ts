@@ -709,6 +709,87 @@ export async function acknowledgeMasterAlert(id: string): Promise<void> {
   if (!r.ok) await parse<unknown>(r);
 }
 
+// ─── Liste « à importer » (étape 2) ───────────────────────────────────────────
+
+export type ImportStatus = "PENDING" | "IMPORTED" | "IGNORED" | "UNREADABLE";
+
+export interface ImportCandidate {
+  id: string;
+  /** null si la GED maître ne donne pas la cote au compte de JokkoRM (UNREADABLE). */
+  cote: string | null;
+  profileReference: string | null;
+  masterArchiveId: string;
+  depositedAt: string;
+  depositedBy: string | null;
+  status: ImportStatus;
+  auto: boolean;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  /** Lu en direct dans la GED maître (archives à décider seulement), jamais stocké. */
+  title: string | null;
+  masterPageUrl: string | null;
+  titleUnavailable: boolean;
+}
+
+export interface ImportProfile {
+  profileReference: string;
+  autoImport: boolean;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  pending: number;
+}
+
+export interface ImportSummary {
+  available: boolean;
+  pending: number;
+  unreadable: number;
+  profiles: ImportProfile[];
+}
+
+export interface ImportCatchUp {
+  days: number;
+  read: number;
+  outcomes: Partial<Record<"PENDING" | "AUTO_IMPORTED" | "UNREADABLE" | "ALREADY_TRACKED" | "SUB_ARCHIVE" | "ALREADY_SEEN", number>>;
+}
+
+export async function getImportSummary(): Promise<ImportSummary> {
+  return parse<ImportSummary>(await fetch(`/api/v1/master/imports/summary`, { headers: accessHeaders() }));
+}
+
+export async function listImports(status: ImportStatus): Promise<ImportCandidate[]> {
+  return parse<ImportCandidate[]>(await fetch(`/api/v1/master/imports?status=${status}`, { headers: accessHeaders() }));
+}
+
+async function importAction(path: string, init: RequestInit = {}): Promise<ImportCandidate> {
+  return parse<ImportCandidate>(await fetch(`/api/v1/master/imports/${path}`, {
+    method: "POST", ...init, headers: { ...accessHeaders(), ...(init.headers ?? {}) },
+  }));
+}
+
+export const importCandidate = (id: string) => importAction(`${encodeURIComponent(id)}/import`);
+export const ignoreCandidate = (id: string) => importAction(`${encodeURIComponent(id)}/ignore`);
+export const restoreCandidate = (id: string) => importAction(`${encodeURIComponent(id)}/restore`);
+
+export async function setProfileAutoImport(profile: string, autoImport: boolean): Promise<ImportProfile> {
+  return parse<ImportProfile>(await fetch(`/api/v1/master/imports/profiles/${encodeURIComponent(profile)}`, {
+    method: "PUT",
+    headers: { ...accessHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ autoImport }),
+  }));
+}
+
+export async function importPendingOfProfile(profile: string): Promise<{ imported: number; failed: number; firstError: string | null }> {
+  return parse(await fetch(`/api/v1/master/imports/profiles/${encodeURIComponent(profile)}/import-pending`, {
+    method: "POST", headers: accessHeaders(),
+  }));
+}
+
+export async function catchUpDeposits(days: number): Promise<ImportCatchUp> {
+  return parse<ImportCatchUp>(await fetch(`/api/v1/master/imports/catch-up?days=${days}`, {
+    method: "POST", headers: accessHeaders(),
+  }));
+}
+
 export interface DevTenant { id: string; displayName: string }
 
 /** Dev uniquement : liste des espaces (404 si les endpoints de démo sont désactivés). */
