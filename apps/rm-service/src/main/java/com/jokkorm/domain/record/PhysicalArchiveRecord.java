@@ -20,6 +20,8 @@ import java.util.UUID;
  *       transféré tant que le gel n'est pas levé par le maître.</li>
  *   <li>{@link #storeInContainer} et {@link #markStored} sont le seul chemin pour passer
  *       en {@code STORED}. {@code containerId} est obligatoirement set quand status = STORED.</li>
+ *   <li>Un dossier n'est que dans <b>une seule boîte</b>. Le changer de boîte est un geste
+ *       explicite, {@link #transferToContainer} : jamais un effet de bord d'un rangement.</li>
  * </ul>
  */
 public final class PhysicalArchiveRecord {
@@ -58,14 +60,45 @@ public final class PhysicalArchiveRecord {
     }
 
     /**
-     * Range le dossier dans une boîte — transition {@code REGISTERED|STORED → STORED}.
-     * Chaîne cote → container. Peut être rejoué pour changer de boîte (déplacement).
+     * Premier rangement du dossier dans une boîte — transition {@code REGISTERED → STORED}.
+     * Refusé si le dossier est déjà dans une autre boîte : changer de boîte passe par
+     * {@link #transferToContainer}. Même boîte : rien ne change.
      */
     public void storeInContainer(UUID newContainerId, Instant at) {
         Objects.requireNonNull(newContainerId, "containerId");
         requireNotTerminal();
         if (status == PhysicalArchiveStatus.FROZEN) {
             throw new IllegalStateException("Cannot store a frozen archive: " + cote.value());
+        }
+        if (newContainerId.equals(containerId)) {
+            return;
+        }
+        if (containerId != null) {
+            throw new IllegalStateException(
+                "Le dossier %s est déjà dans une autre boîte : utiliser le transfert".formatted(cote.value()));
+        }
+        this.containerId = newContainerId;
+        this.status = PhysicalArchiveStatus.STORED;
+        this.lastTransitionAt = at;
+    }
+
+    /**
+     * Change le dossier de boîte (reconditionnement) — geste explicite, tracé comme un
+     * déplacement. Le dossier doit déjà être dans une boîte, différente de la nouvelle.
+     */
+    public void transferToContainer(UUID newContainerId, Instant at) {
+        Objects.requireNonNull(newContainerId, "containerId");
+        requireNotTerminal();
+        if (status == PhysicalArchiveStatus.FROZEN) {
+            throw new IllegalStateException("Cannot transfer a frozen archive: " + cote.value());
+        }
+        if (containerId == null) {
+            throw new IllegalStateException(
+                "Le dossier %s n'est dans aucune boîte : le ranger, pas le transférer".formatted(cote.value()));
+        }
+        if (newContainerId.equals(containerId)) {
+            throw new IllegalStateException(
+                "Le dossier %s est déjà dans cette boîte".formatted(cote.value()));
         }
         this.containerId = newContainerId;
         this.status = PhysicalArchiveStatus.STORED;

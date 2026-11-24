@@ -22,6 +22,7 @@ import com.jokkorm.application.physical.CreatePhysicalContainerUseCase;
 import com.jokkorm.application.physical.CreateStorageLocationUseCase;
 import com.jokkorm.application.physical.PlaceContainerUseCase;
 import com.jokkorm.application.record.HandleCoteAssignedEventUseCase;
+import com.jokkorm.application.record.RecordContainerConflictException;
 import com.jokkorm.application.record.StoreRecordInContainerUseCase;
 import com.jokkorm.boot.Application;
 import com.jokkorm.commons.role.RoleContext;
@@ -403,6 +404,104 @@ class MasterSyncIT {
         assertThat(alerts(false)).extracting(MasterAlert::kind).containsExactly(MasterAlert.Kind.LOCATION_RESTORED);
         assertThat(alerts(false).get(0).actor()).isEqualTo("ggrand");
         assertThat(audits("MASTER_LOCATION_RESTORED")).isEqualTo(1);
+    }
+
+    // ─── Un dossier, une seule boîte ──────────────────────────────────────────
+
+    private PhysicalContainer secondBoxAtP2() {
+        return as(() -> {
+            UUID d10 = formats.list().stream().filter(f -> f.spineMm() == 100).map(BoxFormat::id).findFirst().orElseThrow();
+            PhysicalContainer b2 = createBox.execute("Dossiers du personnel", 50, d10);
+            return place.execute(b2.id(), p2.id(), "it");
+        });
+    }
+
+    private String recordBox() {
+        return jdbc.queryForObject(
+            "SELECT c.barcode FROM physical_archive_record r JOIN physical_container c ON c.id = r.container_id "
+                + "WHERE r.tenant_id = ? AND r.cote = ?", String.class, tenant.value(), COTE);
+    }
+
+    private java.util.List<String> movementLog() {
+        return jdbc.queryForList(
+            "SELECT m.kind || ' ' || m.motive FROM physical_movement m JOIN physical_archive_record r ON r.id = m.record_id "
+                + "WHERE r.tenant_id = ? AND r.cote = ? ORDER BY m.occurred_at", String.class, tenant.value(), COTE);
+    }
+
+    private RecordContainerConflictException storeFails(String barcode, boolean transfer) {
+        try {
+            as(() -> store.execute(Cote.of(COTE), barcode, transfer));
+        } catch (RecordContainerConflictException e) {
+            return e;
+        }
+        throw new AssertionError("Le rangement aurait dû être refusé");
+    }
+
+    @Test
+    @DisplayName("Dossier déjà dans une boîte, rangé dans une autre sans transfert → refusé, rien n'est écrit, la boîte actuelle est nommée")
+    void storing_in_another_box_without_transfer_is_refused() {
+        PhysicalContainer b2 = secondBoxAtP2();
+        int movementsBefore = movementLog().size();
+        sync.drain(100);
+        MAARCH.resetRequests();
+
+        RecordContainerConflictException e = storeFails(b2.barcode(), false);
+
+        assertThat(e.reason()).isEqualTo(RecordContainerConflictException.Reason.IN_ANOTHER_BOX);
+        assertThat(e.currentBarcode()).isEqualTo(box.barcode());
+        assertThat(e.currentAddress()).contains("Travée T01 · Tablette 1 · Emplacement 01");
+        assertThat(e.getMessage()).contains(box.barcode()).contains("une seule boîte");
+        assertThat(recordBox()).isEqualTo(box.barcode());
+        assertThat(movementLog()).hasSize(movementsBefore);
+        sync.drain(100);
+        MAARCH.verify(0, putRequestedFor(urlPathEqualTo("/recordsManagement/archives/Metadata")));
+    }
+
+    @Test
+    @DisplayName("Transfert confirmé → le dossier change de boîte, déplacement tracé avec la boîte d'origine, Maarch reçoit la nouvelle adresse")
+    void confirmed_transfer_moves_the_record() {
+        PhysicalContainer b2 = secondBoxAtP2();
+        sync.drain(100);
+
+        as(() -> store.execute(Cote.of(COTE), b2.barcode(), true));
+
+        assertThat(recordBox()).isEqualTo(b2.barcode());
+        assertThat(movementLog()).last().asString()
+            .startsWith("RELOCATE").contains("container=" + b2.barcode()).contains("from=" + box.barcode());
+        sync.drain(100);
+        assertThat(row().lastPayload()).contains("Tablette 2 · Emplacement 01");
+        MAARCH.verify(putRequestedFor(urlPathEqualTo("/recordsManagement/archives/Metadata"))
+            .withRequestBody(matchingJsonPath("$.description.localisation_physique", containing("Tablette 2"))));
+    }
+
+    @Test
+    @DisplayName("Même boîte une 2ᵉ fois → « déjà dans cette boîte », aucun mouvement, aucun envoi")
+    void storing_twice_in_the_same_box_writes_nothing() {
+        int movementsBefore = movementLog().size();
+        int storedBefore = audits("RECORD_STORED");
+
+        RecordContainerConflictException e = storeFails(box.barcode(), false);
+
+        assertThat(e.reason()).isEqualTo(RecordContainerConflictException.Reason.ALREADY_IN_THIS_BOX);
+        assertThat(movementLog()).hasSize(movementsBefore);
+        assertThat(audits("RECORD_STORED")).isEqualTo(storedBefore);
+        assertThat(row().status()).isEqualTo(MasterSync.Status.SENT);
+    }
+
+    @Test
+    @DisplayName("Transfert alors que la boîte d'origine est sortie en prêt → refusé, le dossier ne bouge pas")
+    void transfer_is_blocked_while_the_source_box_is_on_loan() {
+        PhysicalContainer b2 = secondBoxAtP2();
+        as(() -> {
+            var loan = requestLoan.execute(box.id(), "Awa Diop", "DRH", "Audit", Instant.now().plus(Duration.ofDays(10)), "it");
+            return markOut.execute(loan.id(), "it");
+        });
+
+        RecordContainerConflictException e = storeFails(b2.barcode(), true);
+
+        assertThat(e.reason()).isEqualTo(RecordContainerConflictException.Reason.TRANSFER_BLOCKED);
+        assertThat(e.getMessage()).contains("sortie en prêt");
+        assertThat(recordBox()).isEqualTo(box.barcode());
     }
 
     @Test

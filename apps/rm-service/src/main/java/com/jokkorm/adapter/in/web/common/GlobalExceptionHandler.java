@@ -125,6 +125,17 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "access-denied", e.getMessage(), request);
     }
 
+    @ExceptionHandler(com.jokkorm.application.record.RecordContainerConflictException.class)
+    public ResponseEntity<ProblemDetail> recordContainerConflict(
+        com.jokkorm.application.record.RecordContainerConflictException e, HttpServletRequest request) {
+        // « Un dossier, une seule boîte » : la boîte actuelle accompagne la réponse pour l'écran.
+        ProblemDetail pd = baseProblem(HttpStatus.CONFLICT, e.reason().slug(), e.getMessage(), request);
+        pd.setProperty("currentBarcode", e.currentBarcode());
+        pd.setProperty("currentLabel", e.currentLabel());
+        pd.setProperty("currentAddress", e.currentAddress());
+        return response(pd);
+    }
+
     @ExceptionHandler(com.jokkorm.application.record.LegalHoldException.class)
     public ResponseEntity<ProblemDetail> legalHold(
         com.jokkorm.application.record.LegalHoldException e, HttpServletRequest request) {

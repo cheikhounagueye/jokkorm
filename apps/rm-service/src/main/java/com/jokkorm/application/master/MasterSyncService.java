@@ -165,8 +165,11 @@ public class MasterSyncService {
         return new PhysicalStatus(address, state, asOf);
     }
 
-    /** « SALLE-A · Épi E1 · rang 3 · face A · Travée T03 · Tablette 2 · Emplacement 01 » — sans code-barres. */
-    private String address(TenantId tenant, StorageLocation position) {
+    /**
+     * « SALLE-A · Épi E1 · rang 3 · face A · Travée T03 · Tablette 2 · Emplacement 01 » — sans code-barres.
+     * Même libellé que celui affiché dans la GED maître : les messages à l'utilisateur le réutilisent.
+     */
+    public String address(TenantId tenant, StorageLocation position) {
         List<StorageLocation> chain = new ArrayList<>();
         StorageLocation cur = position;
         while (cur != null) {

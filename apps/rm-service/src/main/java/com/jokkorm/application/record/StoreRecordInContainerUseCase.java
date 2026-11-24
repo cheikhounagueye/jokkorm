@@ -2,6 +2,8 @@ package com.jokkorm.application.record;
 
 import com.jokkorm.application.audit.AuditChainService;
 import com.jokkorm.application.physical.PhysicalContainerNotFoundException;
+import com.jokkorm.application.record.RecordContainerConflictException.Reason;
+import com.jokkorm.domain.loan.PhysicalLoanRepository;
 import com.jokkorm.commons.tenancy.TenantContext;
 import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.audit.AuditAction;
@@ -31,6 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>Charger le record + la boîte (même tenant).</li>
  *   <li>Vérifier que la boîte a une position (sinon on ne peut pas remonter l'adresse au maître).</li>
+ *   <li>Règle « un dossier, une seule boîte » : déjà dans cette boîte → refus sans écriture ;
+ *       dans une autre boîte → refus, sauf transfert confirmé (et aucune des deux boîtes en prêt).</li>
  *   <li>Marquer le record {@code STORED} + lier au container.</li>
  *   <li>Marquer la boîte comme {@code OPEN} (EMPTY → OPEN auto).</li>
  *   <li>Récupérer l'adresse complète sur 5 niveaux (SITE/MAG/TRAV/TAB/POS) depuis la
@@ -56,6 +60,7 @@ public class StoreRecordInContainerUseCase {
     private final AuditChainService audit;
     private final Clock clock;
     private final com.jokkorm.application.master.MasterSyncService masterSync;
+    private final PhysicalLoanRepository loans;
 
     public StoreRecordInContainerUseCase(
         PhysicalArchiveRecordRepository records,
@@ -65,8 +70,10 @@ public class StoreRecordInContainerUseCase {
         SaeMasterPort master,
         AuditChainService audit,
         Clock clock,
-        com.jokkorm.application.master.MasterSyncService masterSync) {
+        com.jokkorm.application.master.MasterSyncService masterSync,
+        PhysicalLoanRepository loans) {
         this.masterSync = masterSync;
+        this.loans = loans;
         this.records = records;
         this.containers = containers;
         this.locations = locations;
@@ -76,8 +83,19 @@ public class StoreRecordInContainerUseCase {
         this.clock = clock;
     }
 
+    /** Premier rangement : refusé si le dossier est déjà dans une boîte (voir {@link #execute(Cote, String, boolean)}). */
     @Transactional
     public PhysicalArchiveRecord execute(Cote cote, String containerBarcode) {
+        return execute(cote, containerBarcode, false);
+    }
+
+    /**
+     * Range le dossier dans la boîte. S'il est déjà dans une autre boîte, il n'en change que si
+     * {@code transfer} est vrai (geste confirmé) et qu'aucune des deux boîtes n'est en prêt.
+     * Déjà dans cette boîte : refusé, rien n'est écrit.
+     */
+    @Transactional
+    public PhysicalArchiveRecord execute(Cote cote, String containerBarcode, boolean transfer) {
         TenantId tenant = TenantContext.current();
 
         PhysicalArchiveRecord record = records.findByCote(tenant, cote)
@@ -106,20 +124,45 @@ public class StoreRecordInContainerUseCase {
                     .formatted(container.barcode(), position.kind()));
         }
 
+        // Un dossier n'est que dans une seule boîte : jamais de changement de boîte en silence.
+        PhysicalContainer from = record.containerId()
+            .map(id -> containers.findById(tenant, id).orElse(null))
+            .orElse(null);
+        if (record.containerId().isPresent()) {
+            if (record.containerId().get().equals(container.id())) {
+                throw conflict(Reason.ALREADY_IN_THIS_BOX, tenant, container,
+                    "Le dossier %s est déjà dans cette boîte (%s) : rien à faire."
+                        .formatted(cote.value(), describe(container)));
+            }
+            if (!transfer) {
+                throw conflict(Reason.IN_ANOTHER_BOX, tenant, from,
+                    "Le dossier %s est déjà rangé dans la boîte %s, %s. Un dossier ne peut être que dans "
+                        .formatted(cote.value(), describe(from), where(tenant, from))
+                        + "une seule boîte : pour le changer de boîte, confirmez le transfert.");
+            }
+            requireNoLoan(tenant, from, "d'origine");
+            requireNoLoan(tenant, container, "d'arrivée");
+        }
+
         java.time.Instant now = clock.instant();
         boolean firstIngress = record.containerId().isEmpty();
 
         // 1) mise à jour record + container
-        record.storeInContainer(container.id(), now);
+        if (record.containerId().isPresent()) {
+            record.transferToContainer(container.id(), now);
+        } else {
+            record.storeInContainer(container.id(), now);
+        }
         container.markHasContent(now);
         records.save(record);
         containers.save(container);
 
-        // 2) journal physique : INGRESS pour un premier rangement, RELOCATE sinon (phase 5D)
+        // 2) journal physique : INGRESS pour un premier rangement, RELOCATE pour un transfert (phase 5D)
         MovementKind kind = firstIngress ? MovementKind.INGRESS : MovementKind.RELOCATE;
+        String fromPart = from == null ? "" : " from=" + from.barcode();
         movements.save(PhysicalMovement.create(
             tenant, record.id(), container.id(), kind, "user", now,
-            "container=%s path=%s".formatted(container.barcode(), position.path())));
+            "container=%s%s path=%s".formatted(container.barcode(), fromPart, position.path())));
 
         // 3) notify master avec l'adresse complète (5 niveaux parsés depuis le path)
         PhysicalLocation address = resolveFiveLevelLocation(position);
@@ -132,13 +175,55 @@ public class StoreRecordInContainerUseCase {
             AuditTargetType.PHYSICAL_ARCHIVE_RECORD,
             record.id(),
             "user",
-            "cote=%s container=%s path=%s kind=%s"
-                .formatted(cote.value(), container.barcode(), position.path(), kind));
+            "cote=%s container=%s%s path=%s kind=%s"
+                .formatted(cote.value(), container.barcode(), fromPart, position.path(), kind));
 
-        LOG.info("Record cote={} stored in container={} at path={} (kind={})",
-            cote.value(), container.barcode(), position.path(), kind);
+        LOG.info("Record cote={} stored in container={}{} at path={} (kind={})",
+            cote.value(), container.barcode(), fromPart, position.path(), kind);
 
         return record;
+    }
+
+    /** Une boîte en prêt (demandé ou sorti) ne gagne ni ne perd de dossier : son contenu est promis. */
+    private void requireNoLoan(TenantId tenant, PhysicalContainer box, String role) {
+        if (box == null) {
+            return;
+        }
+        loans.findActiveByContainer(tenant, box.id()).ifPresent(loan -> {
+            String state = loan.status().isActive() ? "est sortie en prêt" : "a une demande de prêt en cours";
+            throw conflict(Reason.TRANSFER_BLOCKED, tenant, box,
+                "Transfert impossible : la boîte %s %s %s. Terminez ou annulez le prêt d'abord."
+                    .formatted(role, describe(box), state));
+        });
+    }
+
+    private RecordContainerConflictException conflict(
+        Reason reason, TenantId tenant, PhysicalContainer box, String message) {
+        return new RecordContainerConflictException(reason, message,
+            box == null ? null : box.barcode(),
+            box == null ? null : box.label(),
+            box == null ? null : where(tenant, box));
+    }
+
+    /** « BOX-261124-2BR4K8 « Dossiers du personnel 2026 » ». */
+    private static String describe(PhysicalContainer box) {
+        if (box == null) {
+            return "(introuvable)";
+        }
+        return box.label() == null || box.label().isBlank()
+            ? box.barcode()
+            : "%s « %s »".formatted(box.barcode(), box.label().strip());
+    }
+
+    /** Adresse lisible de la boîte, même libellé que dans la GED maître. */
+    private String where(TenantId tenant, PhysicalContainer box) {
+        if (box == null) {
+            return "emplacement inconnu";
+        }
+        return box.positionId()
+            .flatMap(id -> locations.findById(tenant, id))
+            .map(p -> masterSync.address(tenant, p))
+            .orElse("pas encore sur une tablette");
     }
 
     /**

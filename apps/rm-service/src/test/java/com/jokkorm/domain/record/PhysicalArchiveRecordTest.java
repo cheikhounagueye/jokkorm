@@ -108,6 +108,42 @@ class PhysicalArchiveRecordTest {
     }
 
     @Test
+    @DisplayName("Un dossier, une seule boîte : ranger dans une 2ᵉ boîte est refusé, la même boîte ne change rien")
+    void store_never_switches_box_silently() {
+        java.util.UUID a = java.util.UUID.randomUUID();
+        java.util.UUID b = java.util.UUID.randomUUID();
+        PhysicalArchiveRecord r = PhysicalArchiveRecord.register(TENANT, COTE, NOW);
+        r.storeInContainer(a, NOW);
+
+        assertThatThrownBy(() -> r.storeInContainer(b, NOW.plusSeconds(60)))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("transfert");
+        assertThat(r.containerId()).contains(a);
+
+        r.storeInContainer(a, NOW.plusSeconds(120));
+        assertThat(r.lastTransitionAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("Transfert : explicite, depuis une boîte, vers une autre boîte, jamais sur un dossier gelé")
+    void transfer_rules() {
+        java.util.UUID a = java.util.UUID.randomUUID();
+        java.util.UUID b = java.util.UUID.randomUUID();
+        PhysicalArchiveRecord r = PhysicalArchiveRecord.register(TENANT, COTE, NOW);
+
+        assertThatThrownBy(() -> r.transferToContainer(b, NOW)).isInstanceOf(IllegalStateException.class);
+        r.storeInContainer(a, NOW);
+        assertThatThrownBy(() -> r.transferToContainer(a, NOW)).isInstanceOf(IllegalStateException.class);
+
+        r.transferToContainer(b, NOW.plusSeconds(60));
+        assertThat(r.containerId()).contains(b);
+        assertThat(r.status()).isEqualTo(PhysicalArchiveStatus.STORED);
+
+        r.markFrozen(NOW.plusSeconds(120));
+        assertThatThrownBy(() -> r.transferToContainer(a, NOW.plusSeconds(180)))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     @DisplayName("register() rejette tenant/cote/at null")
     void register_rejects_nulls() {
         assertThatThrownBy(() -> PhysicalArchiveRecord.register(null, COTE, NOW))

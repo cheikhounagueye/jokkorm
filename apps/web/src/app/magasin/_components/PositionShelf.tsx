@@ -24,11 +24,15 @@ import {
   getStorageSpace,
   listContainersAtPosition,
   placeContainer,
+  problemOf,
+  problemSlug,
   storeRecord,
   type PhysicalContainerResponse,
+  type ProblemDetail,
   type StorageLocationResponse,
 } from "@/lib/api";
 import { Icons } from "@/lib/icons";
+import { useMasterInfo } from "@/lib/useMasterInfo";
 import { BOX_FINISH, etiquetteHref } from "./kinds";
 import { LinkButton } from "./LinkButton";
 import { SpaceGauge } from "./SpaceGauge";
@@ -125,7 +129,8 @@ export function PositionShelf({ position }: { position: StorageLocationResponse 
       )}
 
       <div ref={placeRef}>
-        <PlaceExistingContainer position={position} onPlaced={refresh} />
+        {/* La boîte qu'on vient de poser devient la boîte sélectionnée : le dossier ira dedans, pas dans la voisine. */}
+        <PlaceExistingContainer position={position} onPlaced={(id) => { refresh(); setSelectedId(id); }} />
       </div>
     </>
   );
@@ -192,12 +197,38 @@ function FreeSlot({ onClick, placeableMm }: { onClick: () => void; placeableMm?:
   );
 }
 
+/** Le dossier saisi est déjà dans une autre boîte : on montre laquelle et on attend une confirmation. */
+type PendingTransfer = { cote: string; problem: ProblemDetail };
+type Stored = { cote: string; from: ProblemDetail | null };
+
+function boxName(label?: string | null, barcode?: string | null): string {
+  const l = label?.trim();
+  return l ? `« ${l} » (${barcode})` : barcode ?? "une autre boîte";
+}
+
 function BoxDetails({ box, onStored }: { box: PhysicalContainerResponse; onStored: () => void }) {
   const [cote, setCote] = useState("");
+  const [pending, setPending] = useState<PendingTransfer | null>(null);
+  const [stored, setStored] = useState<Stored | null>(null);
+  const masterName = useMasterInfo().data?.displayName ?? "la GED maître";
   const mutation = useMutation({
-    mutationFn: () => storeRecord(cote, box.barcode),
-    onSuccess: () => { setCote(""); onStored(); },
+    mutationFn: (v: { cote: string; transfer: boolean }) => storeRecord(v.cote, box.barcode, v.transfer),
+    onMutate: () => setStored(null),
+    onSuccess: (_r, v) => {
+      setStored({ cote: v.cote, from: v.transfer ? pending?.problem ?? null : null });
+      setPending(null);
+      setCote("");
+      onStored();
+    },
+    onError: (e, v) => {
+      if (!v.transfer && problemSlug(e) === "record-in-other-container") {
+        setPending({ cote: v.cote, problem: problemOf(e)! });
+      } else {
+        setPending(null);
+      }
+    },
   });
+  const slug = mutation.isError ? problemSlug(mutation.error) : null;
   const locked = box.state === "SEALED" || box.state === "DESTROYED";
   const formats = useBoxFormats();
   const current = formats.formatOf(box.boxFormatId);
@@ -236,19 +267,55 @@ function BoxDetails({ box, onStored }: { box: PhysicalContainerResponse; onStore
             )}
           </div>
 
-          <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}>
-            <Field label="Ranger un dossier dans cette boîte" hint={locked ? "Boîte scellée ou détruite : rangement impossible." : "Cote du dossier, ex. DMG/MP/2024/047"}>
+          <form onSubmit={(e) => { e.preventDefault(); mutation.mutate({ cote: cote.trim(), transfer: false }); }}>
+            <Field label={`Ranger un dossier dans ${boxName(box.label, box.barcode)}`}
+              hint={locked ? "Boîte scellée ou détruite : rangement impossible." : "Cote du dossier, ex. DMG/MP/2024/047"}>
               <div style={{ display: "flex", gap: 8 }}>
-                <Input value={cote} onChange={(e) => setCote(e.target.value)} disabled={locked}
-                  placeholder="Cote du dossier" style={{ flex: 1 }} />
-                <Button type="submit" icon={<Icons.record size={14} />} loading={mutation.isPending} disabled={locked || !cote}>
+                <Input value={cote} onChange={(e) => { setCote(e.target.value); setPending(null); mutation.reset(); }}
+                  disabled={locked} placeholder="Cote du dossier" style={{ flex: 1 }} />
+                <Button type="submit" icon={<Icons.record size={14} />} loading={mutation.isPending && !pending}
+                  disabled={locked || !cote.trim() || !!pending}>
                   Ranger ici
                 </Button>
               </div>
             </Field>
           </form>
-          {mutation.isSuccess && <Alert tone="success" title="Dossier rangé dans la boîte." />}
-          {mutation.isError && <Alert tone="danger">{(mutation.error as Error).message}</Alert>}
+
+          {pending && (
+            <Alert tone="warning" title="Ce dossier est déjà dans une autre boîte">
+              <div>
+                <strong>{pending.cote}</strong> est dans la boîte {boxName(pending.problem.currentLabel, pending.problem.currentBarcode)}
+                {pending.problem.currentAddress && <>, {pending.problem.currentAddress}</>}.
+                Un dossier ne peut être que dans une seule boîte.
+              </div>
+              <div style={{ marginTop: 6 }}>
+                Si vous l&apos;avez vraiment changé de boîte, confirmez le transfert : il sera tracé comme un
+                déplacement, et l&apos;adresse affichée dans {masterName} sera mise à jour.
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <Button size="sm" icon={<Icons.box size={14} />} loading={mutation.isPending}
+                  onClick={() => mutation.mutate({ cote: pending.cote, transfer: true })}>
+                  Transférer dans {boxName(box.label, box.barcode)}
+                </Button>
+                <Button size="sm" variant="ghost" disabled={mutation.isPending}
+                  onClick={() => { setPending(null); mutation.reset(); }}>
+                  Annuler
+                </Button>
+              </div>
+            </Alert>
+          )}
+          {stored && (stored.from
+            ? <Alert tone="success" title={`Dossier ${stored.cote} transféré dans cette boîte.`}>
+                Il a quitté la boîte {boxName(stored.from.currentLabel, stored.from.currentBarcode)}. Le déplacement est
+                tracé ; l&apos;adresse affichée dans {masterName} est mise à jour.
+              </Alert>
+            : <Alert tone="success" title={`Dossier ${stored.cote} rangé dans la boîte.`} />)}
+          {mutation.isError && slug === "record-already-in-container" && (
+            <Alert tone="info" title="Déjà dans cette boîte">Ce dossier est déjà rangé ici : rien à faire.</Alert>
+          )}
+          {mutation.isError && !pending && slug !== "record-already-in-container" && (
+            <Alert tone="danger">{(mutation.error as Error).message}</Alert>
+          )}
 
           {formats.active.length > 0 && box.state !== "DESTROYED" && (
             <div style={{ marginTop: 12, maxWidth: 360 }}>
@@ -280,7 +347,7 @@ function PlaceExistingContainer({
   position, onPlaced,
 }: {
   position: StorageLocationResponse;
-  onPlaced: () => void;
+  onPlaced: (containerId: string) => void;
 }) {
   const [barcode, setBarcode] = useState("");
   const mutation = useMutation({
@@ -291,7 +358,7 @@ function PlaceExistingContainer({
       const stayed = container.positionId === position.id;
       return { placed, moved, stayed };
     },
-    onSuccess: () => { setBarcode(""); onPlaced(); },
+    onSuccess: (r) => { setBarcode(""); onPlaced(r.placed.id); },
   });
 
   return (

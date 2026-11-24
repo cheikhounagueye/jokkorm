@@ -122,13 +122,17 @@ public class RecordController {
             + "`containerBarcode`. La boîte doit déjà avoir été rangée à une POSITION physique. "
             + "Déclenche notifyPhysicalLocation vers le maître avec l'adresse 5 niveaux, "
             + "ajoute un maillon à la chaîne d'audit HMAC. Statut record passe à STORED, "
-            + "boîte EMPTY passe à OPEN.")
+            + "boîte EMPTY passe à OPEN. Un dossier n'est que dans une seule boîte : déjà dans "
+            + "cette boîte → 409 `record-already-in-container` ; dans une autre boîte → 409 "
+            + "`record-in-other-container` (boîte actuelle dans `currentBarcode`, `currentLabel`, "
+            + "`currentAddress`), sauf `transfer: true` (déplacement RELOCATE tracé) ; transfert "
+            + "avec une des deux boîtes en prêt → 409 `record-transfer-blocked`.")
     public RecordResponse store(
         @Parameter(description = "Cote du dossier (slashes OK en query param)")
         @RequestParam String cote,
         @Valid @RequestBody StoreRecordRequest request) {
         return RecordResponse.from(
-            storeInContainer.execute(Cote.of(cote), request.containerBarcode()));
+            storeInContainer.execute(Cote.of(cote), request.containerBarcode(), request.isTransfer()));
     }
 
     @GetMapping("/consolidated")

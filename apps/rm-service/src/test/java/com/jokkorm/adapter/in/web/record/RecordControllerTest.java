@@ -215,4 +215,51 @@ class RecordControllerTest {
             }
         });
     }
+
+    @Test
+    @DisplayName("POST /records/store — dossier dans une autre boîte : 409 avec la boîte actuelle, transfert non demandé")
+    void store_in_other_box_returns_409_with_current_box() throws Exception {
+        when(storeInContainer.execute(any(), eq("BOX-B"), eq(false))).thenThrow(
+            new com.jokkorm.application.record.RecordContainerConflictException(
+                com.jokkorm.application.record.RecordContainerConflictException.Reason.IN_ANOTHER_BOX,
+                "Le dossier X/1 est déjà rangé dans la boîte BOX-A", "BOX-A", "Test gel",
+                "Salle de test (SALLE-T) · Travée T01 · Tablette 1 · Emplacement 02"));
+
+        TenantContext.runWith(TENANT, () -> {
+            try {
+                mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/records/store").param("cote", "X/1")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"containerBarcode\":\"BOX-B\"}"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.type").value("https://jokkorm.io/errors/record-in-other-container"))
+                    .andExpect(jsonPath("$.currentBarcode").value("BOX-A"))
+                    .andExpect(jsonPath("$.currentLabel").value("Test gel"))
+                    .andExpect(jsonPath("$.currentAddress").value(
+                        "Salle de test (SALLE-T) · Travée T01 · Tablette 1 · Emplacement 02"));
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("POST /records/store — transfer: true est transmis au cas d'usage")
+    void store_passes_the_transfer_flag() throws Exception {
+        PhysicalArchiveRecord rec = PhysicalArchiveRecord.register(TENANT, Cote.of("X/1"), Instant.now());
+        rec.storeInContainer(java.util.UUID.randomUUID(), Instant.now());
+        when(storeInContainer.execute(any(), eq("BOX-B"), eq(true))).thenReturn(rec);
+
+        TenantContext.runWith(TENANT, () -> {
+            try {
+                mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/records/store").param("cote", "X/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"containerBarcode\":\"BOX-B\",\"transfer\":true}"))
+                    .andExpect(status().isAccepted())
+                    .andExpect(jsonPath("$.cote").value("X/1"));
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+    }
 }

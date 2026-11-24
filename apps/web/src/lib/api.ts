@@ -41,6 +41,20 @@ export interface ProblemDetail {
   detail?: string;
   timestamp?: string;
   fieldErrors?: Record<string, string>;
+  /** Règle « un dossier, une seule boîte » : la boîte où se trouve déjà le dossier. */
+  currentBarcode?: string | null;
+  currentLabel?: string | null;
+  currentAddress?: string | null;
+}
+
+/** Slug d'erreur (`…/errors/<slug>`) d'une erreur levée par `parse`, sinon null. */
+export function problemSlug(error: unknown): string | null {
+  const type = (error as { problem?: ProblemDetail } | null)?.problem?.type;
+  return type ? type.substring(type.lastIndexOf("/") + 1) : null;
+}
+
+export function problemOf(error: unknown): ProblemDetail | null {
+  return (error as { problem?: ProblemDetail } | null)?.problem ?? null;
 }
 
 const TENANT_KEY = "jokkorm.tenant";
@@ -132,12 +146,16 @@ export async function getConsolidatedRecord(cote: string): Promise<ConsolidatedR
   return parse<ConsolidatedRecordResponse>(response);
 }
 
-export async function storeRecord(cote: string, containerBarcode: string): Promise<RecordResponse> {
+/**
+ * Range un dossier dans une boîte. Un dossier déjà rangé ailleurs est refusé (409
+ * `record-in-other-container`) sauf `transfer` : à ne passer qu'après confirmation explicite.
+ */
+export async function storeRecord(cote: string, containerBarcode: string, transfer = false): Promise<RecordResponse> {
   const qs = new URLSearchParams({ cote });
   const response = await fetch(`/api/v1/records/store?${qs.toString()}`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
-    body: JSON.stringify({ containerBarcode }),
+    body: JSON.stringify(transfer ? { containerBarcode, transfer: true } : { containerBarcode }),
   });
   return parse<RecordResponse>(response);
 }

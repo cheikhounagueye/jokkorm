@@ -14,6 +14,30 @@ Légende : **(M)** côté maître · **(J)** côté JokkoRM · **(2)** les deux,
 | 4 | **Mise en magasin** | J | Un emplacement est affecté : site, magasin, travée, tablette, position. JokkoRM le renvoie au maître. |
 | 5 | **Vie en magasin** | J | Consultations, prêts avec fantôme PDF+QR, retours, déplacements, récolements. Chaque mouvement est tracé dans la chaîne d'audit HMAC. |
 
+## Règle : un dossier, une seule boîte (retenue le 2026-11-24)
+
+Un dossier n'est jamais dans deux boîtes, et ne change jamais de boîte en silence.
+
+- **Ranger un dossier déjà dans une autre boîte est refusé.** L'écran dit dans quelle boîte il se
+  trouve et à quelle adresse (même libellé que dans la GED maître).
+- **Changer de boîte** (reconditionnement) est un geste confirmé : « Transférer dans cette boîte ».
+  Il est tracé comme un déplacement (`RELOCATE`, avec la boîte d'origine), et la nouvelle adresse
+  part vers le maître.
+- Le transfert est refusé si l'une des deux boîtes a un prêt en cours (demandé ou sorti) : son
+  contenu est promis à l'emprunteur.
+- Ranger une 2ᵉ fois dans la même boîte : « déjà dans cette boîte », rien n'est écrit.
+- Après avoir posé une boîte sur une position, c'est elle qui est sélectionnée : le dossier ne part
+  pas dans la boîte voisine.
+
+Origine : le 2026-11-24, un dossier rangé par erreur dans une boîte de test a été « rangé » dans une
+nouvelle boîte. JokkoRM l'avait déplacé sans le dire. Le journal gardait la trace, mais l'écran
+annonçait un simple rangement.
+
+API : `POST /api/v1/records/store?cote=…` corps `{ "containerBarcode": "…", "transfer": true }`.
+Sans `transfer` → 409 `record-in-other-container` (`currentBarcode`, `currentLabel`,
+`currentAddress`) ; même boîte → 409 `record-already-in-container` ; boîte en prêt → 409
+`record-transfer-blocked`.
+
 ## Échéance de la DUA
 
 À l'échéance de la Durée d'Utilité Administrative, le maître prononce le sort final. **JokkoRM ne décide jamais seul du devenir d'une archive : il exécute, il trace, il atteste.**
