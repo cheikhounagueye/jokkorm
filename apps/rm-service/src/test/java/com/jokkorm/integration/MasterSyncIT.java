@@ -539,6 +539,16 @@ class MasterSyncIT {
     }
 
     @Test
+    @DisplayName("Règle de profil : un archiviste ne peut ni l'activer ni la retirer (responsable des archives seulement)")
+    void only_the_head_of_archives_sets_a_profile_rule() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> as(() -> imports.setAutoImport("DOSIP", true, "archiviste-it")))
+            .isInstanceOf(com.jokkorm.commons.role.ForbiddenRoleException.class);
+        assertThat(audits("MASTER_AUTO_IMPORT_CHANGED")).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM master_import_profile WHERE tenant_id = ?",
+            Integer.class, tenant.value())).isZero();
+    }
+
+    @Test
     @DisplayName("Dépôt illisible puis lisible (droits corrigés) : le rattrapage le remet dans la liste à décider")
     void unreadable_deposit_is_reevaluated_by_catch_up() {
         Instant t = Instant.now().minusSeconds(120).truncatedTo(ChronoUnit.SECONDS);

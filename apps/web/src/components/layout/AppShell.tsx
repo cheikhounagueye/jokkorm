@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { IconTile } from "@/components/ui/IconTile";
+import { useRole } from "@/app/demandes/_components/useRole";
 import { getImportSummary, getMasterWatch } from "@/lib/api";
 import { Icons, type IconName } from "@/lib/icons";
 import { TopBar } from "./TopBar";
@@ -17,8 +18,11 @@ function OpenAlertsCount() {
 
 /** Nouvelles archives de la GED maître en attente de décision (étape 2). */
 function PendingImportsCount() {
-  const q = useQuery({ queryKey: ["imports-summary"], queryFn: getImportSummary, refetchInterval: 60_000, retry: false });
-  return <CountBadge n={q.data?.pending ?? 0} label="archive(s) à importer" color="var(--brand-500)" />;
+  const role = useRole();
+  const staff = role === "ARCHIVIST" || role === "ARCHIVES_HEAD" || role === "AUDITOR";
+  const q = useQuery({ queryKey: ["imports-summary"], queryFn: getImportSummary, refetchInterval: 60_000,
+    retry: false, enabled: staff });
+  return <CountBadge n={staff ? q.data?.pending ?? 0 : 0} label="archive(s) à importer" color="var(--brand-500)" />;
 }
 
 function CountBadge({ n, label, color }: { n: number; label: string; color: string }) {
