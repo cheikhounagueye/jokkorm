@@ -36,7 +36,7 @@ export function ContainerCreationCard() {
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}>
-        <Field label="Libellé">
+        <Field label="Libellé" hint="Unique : deux boîtes ne portent jamais le même libellé.">
           <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Marchés publics 2024" />
         </Field>
         <Field label="Capacité" hint="Nombre maximum de dossiers">

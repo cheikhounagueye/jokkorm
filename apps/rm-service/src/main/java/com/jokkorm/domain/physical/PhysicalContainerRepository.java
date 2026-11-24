@@ -18,6 +18,21 @@ public interface PhysicalContainerRepository {
 
     boolean existsByBarcode(TenantId tenant, String barcode);
 
+    /**
+     * Verrou de transaction sur les libellés de boîtes d'un espace : sérialise les créations
+     * pour que le contrôle « un libellé, une seule boîte » ne laisse pas passer deux doublons
+     * simultanés. Libéré à la fin de la transaction.
+     */
+    void lockLabels(TenantId tenant);
+
+    /** Boîtes non détruites portant ce libellé, casse et espaces en trop ignorés. */
+    List<PhysicalContainer> findActiveByLabel(TenantId tenant, String label, int limit);
+
+    /** Boîtes non détruites dont le libellé commence par {@code prefix}, casse et espaces ignorés. */
+    List<PhysicalContainer> findActiveByLabelPrefix(TenantId tenant, String prefix, int limit);
+
+    long countActiveByLabelPrefix(TenantId tenant, String prefix);
+
     /** Boîtes rangées à une position donnée. */
     List<PhysicalContainer> findByPosition(TenantId tenant, UUID positionId);
 

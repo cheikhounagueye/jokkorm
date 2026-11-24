@@ -105,7 +105,7 @@ export default function NewLotPage() {
               </Field>
             </div>
 
-            <Field label="Libellé commun" hint="Imprimé sur chaque étiquette, suivi automatiquement de · NNN/NNN.">
+            <Field label="Libellé commun" hint="Imprimé sur chaque étiquette, suivi automatiquement de · NNN/NNN. Unique : deux lots ne portent jamais le même libellé.">
               <Input
                 value={labelPattern}
                 onChange={(e) => setLabelPattern(e.target.value)}

@@ -127,9 +127,12 @@ class FurnitureFitIT {
         as(() -> setSpec.execute(node.id(), spec, "it"));
     }
 
+    private int boxes;
+
     private PhysicalContainer box() {
         UUID d10 = as(() -> formats.list().stream().filter(f -> f.spineMm() == 100).map(BoxFormat::id).findFirst().orElseThrow());
-        return as(() -> createBox.execute("Boîte dos 10", null, d10));
+        String label = "Boîte dos 10 n° " + (++boxes);   // un libellé, une seule boîte
+        return as(() -> createBox.execute(label, null, d10));
     }
 
     private PhysicalContainer put(PhysicalContainer box, StorageLocation position) {

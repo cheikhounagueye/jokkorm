@@ -255,8 +255,10 @@ public class DevRoomSeedingController {
                 .collect(Collectors.groupingBy(Map.Entry::getValue, LinkedHashMap::new, Collectors.toList()));
             Map<Integer, java.util.Iterator<PhysicalContainer>> boxesBySpine = new LinkedHashMap<>();
             for (var e : bySpine.entrySet()) {
+                // Un lot par format : le dos entre dans le libellé commun, qui reste unique dans l'espace.
                 var batch = createBatch.execute("Démo salle B — %s — dos %d".formatted(code, e.getKey() / 10),
-                    e.getValue().size(), theme, 50, spine(tenant, e.getKey()), ACTOR);
+                    e.getValue().size(), "%s — dos %d".formatted(theme, e.getKey() / 10), 50,
+                    spine(tenant, e.getKey()), ACTOR);
                 boxesBySpine.put(e.getKey(), batch.containers().iterator());
             }
             for (var step : plan) {

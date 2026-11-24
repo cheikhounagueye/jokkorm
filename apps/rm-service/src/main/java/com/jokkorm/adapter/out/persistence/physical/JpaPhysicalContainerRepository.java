@@ -57,6 +57,28 @@ public class JpaPhysicalContainerRepository implements PhysicalContainerReposito
     }
 
     @Override
+    public void lockLabels(TenantId tenant) {
+        jpa.advisoryXactLock("container-label:" + tenant.value());
+    }
+
+    @Override
+    public List<PhysicalContainer> findActiveByLabel(TenantId tenant, String label, int limit) {
+        return jpa.findActiveByNormalizedLabel(tenant.value(), label, limit)
+            .stream().map(PhysicalContainerEntity::toDomain).toList();
+    }
+
+    @Override
+    public List<PhysicalContainer> findActiveByLabelPrefix(TenantId tenant, String prefix, int limit) {
+        return jpa.findActiveByNormalizedLabelPrefix(tenant.value(), prefix, limit)
+            .stream().map(PhysicalContainerEntity::toDomain).toList();
+    }
+
+    @Override
+    public long countActiveByLabelPrefix(TenantId tenant, String prefix) {
+        return jpa.countActiveByNormalizedLabelPrefix(tenant.value(), prefix);
+    }
+
+    @Override
     public List<PhysicalContainer> findByPositions(TenantId tenant, java.util.Collection<UUID> positionIds) {
         if (positionIds.isEmpty()) return List.of();
         return jpa.findByTenantIdAndPositionIdInOrderByBarcodeAsc(tenant.value(), positionIds)

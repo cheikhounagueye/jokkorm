@@ -143,6 +143,32 @@ Chaque `physical_container` gagne :
 - Un lot peut être `ARCHIVED` mais **jamais supprimé** s'il contient au moins une boîte qui a servi
 - `defaultCapacity`, `labelPattern` : copiés dans chaque container à la création, modifiables par la suite boîte par boîte (pas de propagation rétroactive)
 
+### Règle : un libellé, une seule boîte (retenue le 2026-11-24)
+
+Le code-barres est l'identifiant technique : généré par JokkoRM, jamais saisi, unique en base
+(`uq_physical_container_tenant_barcode`). Le libellé est ce que lit le magasinier sur la tablette :
+il doit désigner une seule boîte.
+
+- **Une boîte seule** : un libellé déjà porté par une autre boîte de l'espace est refusé. L'écran dit
+  quelle boîte le porte et où elle est (adresse, ou « en zone tampon »).
+- **Un lot** : un libellé commun déjà utilisé par une autre série est refusé, même si la taille
+  diffère (« Test gel · 001/003 » et « Test gel · 001/001 » seraient deux « boîte 1 de Test gel »).
+  Le contrôle a lieu avant toute écriture : ni lot, ni boîte, ni ligne d'audit.
+- La comparaison ignore la casse et les espaces en trop ; le libellé est enregistré nettoyé.
+- Une boîte détruite libère son libellé. Une boîte sans libellé n'est pas concernée.
+- Deux créations simultanées du même libellé ne passent pas toutes les deux (verrou de transaction
+  par espace, `pg_advisory_xact_lock`).
+- Pas de contrainte en base : les doublons antérieurs à la règle (jeu de démonstration) restent en
+  place et se rangent normalement. Le changement de libellé d'une boîte n'existe pas encore ; quand
+  il existera, il passera par le même contrôle (`ContainerLabelGuard`).
+
+Origine : le 2026-11-24, question « puis-je créer deux boîtes de même référence ? ». Réponse : même
+code-barres impossible, mais même libellé possible. Le jeu de démonstration en contenait dix, dont
+deux « Contentieux · 001/006 » sur le même emplacement.
+
+API : `POST /api/v1/physical/containers` et `POST /api/v1/physical/batches` → 409
+`container-label-taken` (`currentBarcode`, `currentLabel`, `currentAddress`, `count`).
+
 ---
 
 ## Partie 3 — Étude de faisabilité et de cohérence

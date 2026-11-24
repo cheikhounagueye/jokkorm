@@ -75,6 +75,18 @@ public class GlobalExceptionHandler {
         return problem(HttpStatus.CONFLICT, "container-conflict", e.getMessage(), request);
     }
 
+    @ExceptionHandler(com.jokkorm.application.physical.ContainerLabelTakenException.class)
+    public ResponseEntity<ProblemDetail> containerLabelTaken(
+        com.jokkorm.application.physical.ContainerLabelTakenException e, HttpServletRequest request) {
+        // « Un libellé, une seule boîte » : la boîte qui porte déjà le libellé accompagne la réponse.
+        ProblemDetail pd = baseProblem(HttpStatus.CONFLICT, "container-label-taken", e.getMessage(), request);
+        pd.setProperty("currentBarcode", e.currentBarcode());
+        pd.setProperty("currentLabel", e.currentLabel());
+        pd.setProperty("currentAddress", e.currentAddress());
+        pd.setProperty("count", e.count());
+        return response(pd);
+    }
+
     @ExceptionHandler(com.jokkorm.application.physical.RoomEquipmentNotFoundException.class)
     public ResponseEntity<ProblemDetail> roomEquipmentNotFound(
         com.jokkorm.application.physical.RoomEquipmentNotFoundException e, HttpServletRequest request) {

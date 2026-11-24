@@ -18,6 +18,47 @@ public interface PhysicalContainerJpaRepository extends JpaRepository<PhysicalCo
 
     boolean existsByTenantIdAndBarcode(String tenantId, String barcode);
 
+    /** Verrou de transaction par espace (règle « un libellé, une seule boîte »). */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext(:key))", nativeQuery = true)
+    Integer advisoryXactLock(@Param("key") String key);
+
+    // Libellé normalisé : minuscules, blancs réduits à un espace, bords retirés.
+    @Query(value = """
+        SELECT * FROM physical_container
+        WHERE tenant_id = :tenantId
+          AND state <> 'DESTROYED'
+          AND btrim(regexp_replace(lower(label), '\\s+', ' ', 'g'))
+            = btrim(regexp_replace(lower(:label), '\\s+', ' ', 'g'))
+        ORDER BY created_at
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<PhysicalContainerEntity> findActiveByNormalizedLabel(
+        @Param("tenantId") String tenantId, @Param("label") String label, @Param("limit") int limit);
+
+    // Le préfixe arrive déjà nettoyé et se termine par « · » + espace : pas de btrim dessus.
+    @Query(value = """
+        SELECT * FROM physical_container
+        WHERE tenant_id = :tenantId
+          AND state <> 'DESTROYED'
+          AND left(btrim(regexp_replace(lower(label), '\\s+', ' ', 'g')),
+                   char_length(regexp_replace(lower(:prefix), '\\s+', ' ', 'g')))
+            = regexp_replace(lower(:prefix), '\\s+', ' ', 'g')
+        ORDER BY created_at
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<PhysicalContainerEntity> findActiveByNormalizedLabelPrefix(
+        @Param("tenantId") String tenantId, @Param("prefix") String prefix, @Param("limit") int limit);
+
+    @Query(value = """
+        SELECT count(*) FROM physical_container
+        WHERE tenant_id = :tenantId
+          AND state <> 'DESTROYED'
+          AND left(btrim(regexp_replace(lower(label), '\\s+', ' ', 'g')),
+                   char_length(regexp_replace(lower(:prefix), '\\s+', ' ', 'g')))
+            = regexp_replace(lower(:prefix), '\\s+', ' ', 'g')
+        """, nativeQuery = true)
+    long countActiveByNormalizedLabelPrefix(@Param("tenantId") String tenantId, @Param("prefix") String prefix);
+
     List<PhysicalContainerEntity> findByTenantIdAndPositionIdInOrderByBarcodeAsc(
         String tenantId, java.util.Collection<UUID> positionIds);
 

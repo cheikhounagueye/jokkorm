@@ -133,9 +133,12 @@ class ContainerMoveOccupancyIT {
             .map(BoxFormat::id).findFirst().orElseThrow());
     }
 
+    private int boxes;
+
     private PhysicalContainer box(int spineMm) {
         UUID f = format(spineMm);
-        return as(() -> createBox.execute("Boîte dos " + spineMm / 10, null, f));
+        String label = "Boîte dos " + spineMm / 10 + " n° " + (++boxes);   // un libellé, une seule boîte
+        return as(() -> createBox.execute(label, null, f));
     }
 
     private PhysicalContainer put(PhysicalContainer box, StorageLocation position) {

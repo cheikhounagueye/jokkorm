@@ -99,8 +99,9 @@ class RoomIndicatorsIT {
             return out;
         });
         UUID d10 = as(() -> formats.list().stream().filter(f -> f.spineMm() == 100).map(BoxFormat::id).findFirst().orElseThrow());
-        for (int i = 0; i < 3; i++) {
-            PhysicalContainer box = as(() -> createBox.execute("Boîte", null, d10));
+        for (int i = 1; i <= 3; i++) {
+            String label = "Boîte " + i;   // un libellé, une seule boîte
+            PhysicalContainer box = as(() -> createBox.execute(label, null, d10));
             as(() -> place.execute(box.id(), positions.get(0).id(), "it"));
         }
     }

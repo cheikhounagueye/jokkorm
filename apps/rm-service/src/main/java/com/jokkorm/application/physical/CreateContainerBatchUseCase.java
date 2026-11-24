@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Crée un lot de N boîtes en une transaction : N barcodes uniques générés + N containers
  * en transit (positionId=null), avec numérotation séquentielle 1..N dans le lot.
+ * Le libellé commun ne doit être celui d'aucune autre série de l'espace
+ * ({@link ContainerLabelGuard}) : contrôlé avant toute écriture.
  * Voir docs/pattern/06-provisioning-masse-boites.md.
  */
 @Service
@@ -32,6 +34,7 @@ public class CreateContainerBatchUseCase {
     private final BarcodeGenerator barcodeGenerator;
     private final AuditChainService audit;
     private final BoxFormatCatalog catalog;
+    private final ContainerLabelGuard labels;
     private final Clock clock;
 
     public CreateContainerBatchUseCase(
@@ -40,8 +43,10 @@ public class CreateContainerBatchUseCase {
         BarcodeGenerator barcodeGenerator,
         AuditChainService audit,
         BoxFormatCatalog catalog,
+        ContainerLabelGuard labels,
         Clock clock) {
         this.batches = batches;
+        this.labels = labels;
         this.containers = containers;
         this.barcodeGenerator = barcodeGenerator;
         this.audit = audit;
@@ -62,6 +67,8 @@ public class CreateContainerBatchUseCase {
     public Result execute(String reference, int size, String labelPattern,
                           Integer defaultCapacity, java.util.UUID boxFormatId, String createdBy) {
         TenantId tenant = TenantContext.current();
+        labelPattern = ContainerLabelGuard.clean(labelPattern);
+        labels.requireFreeSeries(tenant, labelPattern);
         java.time.Instant now = clock.instant();
         var format = catalog.resolveForNewBox(tenant, boxFormatId);
 
@@ -73,7 +80,7 @@ public class CreateContainerBatchUseCase {
             String barcode = barcodeGenerator.generateForContainer(tenant);
             String label = labelPattern == null
                 ? null
-                : labelPattern + " · " + String.format("%03d/%03d", i, size);
+                : labelPattern + ContainerLabelGuard.SERIES_SEPARATOR + String.format("%03d/%03d", i, size);
             PhysicalContainer c = PhysicalContainer.createInBatch(
                 tenant, barcode, label, defaultCapacity, batch.id(), i, format.id(), now);
             created.add(containers.save(c));
