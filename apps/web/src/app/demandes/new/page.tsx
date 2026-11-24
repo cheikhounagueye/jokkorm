@@ -219,7 +219,7 @@ export default function NewDemandePage() {
               </Button>
               <Link href="/demandes"><Button type="button" variant="ghost" size="lg">Annuler</Button></Link>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-tertiary)", marginLeft: "auto" }}>
-                <Icons.shield size={16} /> Qualifiée par l'archiviste, puis validée par le responsable des archives.
+                <Icons.shield size={16} /> Qualifiée par l’archiviste, puis validée par le responsable des archives.
               </span>
             </div>
           </form>

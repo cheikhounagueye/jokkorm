@@ -105,7 +105,7 @@ function QualifyPanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: st
           {blocked && (
             <div style={{ marginBottom: 10 }}>
               <Alert tone="danger" title="Au moins un contrôle bloquant">
-                La demande ne peut pas être qualifiée en l'état. Rejette-la avec un motif.
+                La demande ne peut pas être qualifiée en l’état. Rejette-la avec un motif.
               </Alert>
             </div>
           )}

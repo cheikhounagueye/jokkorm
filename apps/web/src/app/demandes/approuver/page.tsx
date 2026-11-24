@@ -102,7 +102,7 @@ function ApprovePanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: st
           <span>Qualifiée par <code>{r.qualifiedBy}</code></span>
           {r.qualifiedAt && <span style={{ color: "var(--text-tertiary)" }}>le {formatInstant(r.qualifiedAt)}</span>}
           <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-tertiary)" }}>
-            Contrôle 4 yeux : l'approbateur doit être différent du qualificateur.
+            Contrôle 4 yeux : l’approbateur doit être différent du qualificateur.
           </span>
         </div>
         {r.qualificationNotes && (

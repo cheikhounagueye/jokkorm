@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Alert, Card, IconTile, type Tone } from "@/components/ui";
 import { getRoomIndicators, ml } from "@/lib/api";
-import { Icons, type IconName } from "@/lib/icons";
+import { type IconName } from "@/lib/icons";
 import { spineLabel } from "./useBoxFormats";
 
 const pct = (r: number) => `${Math.round(r * 100)} %`;

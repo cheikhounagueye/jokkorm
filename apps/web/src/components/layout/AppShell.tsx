@@ -7,6 +7,8 @@ import { useEffect, type ReactNode } from "react";
 import { IconTile } from "@/components/ui/IconTile";
 import { useRole } from "@/app/demandes/_components/useRole";
 import { SESSION_STORAGE_KEYS, getImportSummary, getMasterWatch, listPendingConditioning } from "@/lib/api";
+import { Icons, type IconName } from "@/lib/icons";
+import { TopBar } from "./TopBar";
 
 /**
  * L'espace ou le rôle a changé dans un autre onglet : cet onglet recharge, pour ne jamais
@@ -24,8 +26,6 @@ function useFollowSessionChanges() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 }
-import { Icons, type IconName } from "@/lib/icons";
-import { TopBar } from "./TopBar";
 
 /** Nombre de signalements à traiter (veilleur du journal maître), rafraîchi chaque minute. */
 function OpenAlertsCount() {
@@ -91,7 +91,6 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 const SIDEBAR_WIDTH = 220;
-const TOPBAR_HEIGHT = 56;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
