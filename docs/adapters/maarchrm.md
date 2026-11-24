@@ -139,6 +139,16 @@ Maarch ne prévient personne : JokkoRM lit son journal du cycle de vie **chaque 
   - la lecture par pages de 2 retrouve exactement les 5 modifications d'une seule grande page ;
   - sur les 4 modifications de l'archive `FR094080_2026_AE0002`, dont le renommage par un
     agent de la DRH, aucun faux écart.
+- **Test d'acceptation réussi le 2026-11-24**, sur Maarch réel, compte de service `jokkorm` :
+  - un agent de la DRH a modifié le champ à la main à 08:56:40 ;
+  - JokkoRM l'a rétabli à 08:56:55, soit 15 s plus tard ;
+  - un seul signalement a été créé, à son nom, et aucun faux « à vérifier » pour la réécriture
+    de JokkoRM.
+- **Pourquoi le champ n'est pas verrouillé** : le seul verrou de Maarch est l'option « immuable »
+  du profil d'archivage. Elle grise le champ à l'écran, mais elle le bloque aussi côté serveur
+  pour **tous** les comptes, JokkoRM compris (`archiveModificationTrait` : « Attempt to modify
+  readonly field(s) »). Maarch afficherait alors un emplacement figé, donc faux. Le griser
+  seulement pour les agents demanderait de modifier les écrans de Maarch.
 - **Limites connues** :
   - le journal ne dit pas quel champ a changé, et JokkoRM lit l'état actuel de l'archive. Pour une
     même archive, seule la dernière modification de la minute est donc évaluée. Si deux personnes
