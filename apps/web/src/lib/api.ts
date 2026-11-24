@@ -84,6 +84,17 @@ function headers(extra: Record<string, string> = {}): HeadersInit {
 }
 
 /**
+ * En-tête Accept d'un téléchargement de fichier. Le défaut `application/json` de headers()
+ * fait répondre 406 par le backend à tout point d'accès qui ne produit qu'un PDF ou un
+ * Excel : on accepte le fichier ET l'erreur RFC 7807, pour garder son message lisible.
+ */
+const PDF = "application/pdf";
+const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+function acceptFile(mime: string): Record<string, string> {
+  return { "Accept": `${mime}, application/problem+json, application/json` };
+}
+
+/**
  * Récupère un binaire (image, PDF) avec l'en-tête tenant. Une balise <img src> ou un
  * lien <a href> ne peuvent pas porter X-Tenant-Id : passer par ici puis un blob.
  */
@@ -436,7 +447,7 @@ export async function cancelLoan(loanId: string, reason: string): Promise<LoanRe
 }
 
 export async function downloadGhostCard(loanId: string): Promise<void> {
-  const response = await fetch(`/api/v1/loans/${loanId}/ghost-card.pdf`, { headers: headers() });
+  const response = await fetch(`/api/v1/loans/${loanId}/ghost-card.pdf`, { headers: headers(acceptFile(PDF)) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
@@ -829,7 +840,7 @@ export function topographyTemplateUrl(): string {
 
 /** Télécharge le modèle Excel via fetch+blob (header X-Tenant-Id obligatoire). */
 export async function downloadTopographyTemplate(): Promise<void> {
-  const response = await fetch(topographyTemplateUrl(), { headers: headers() });
+  const response = await fetch(topographyTemplateUrl(), { headers: headers(acceptFile(XLSX)) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
@@ -994,7 +1005,7 @@ export async function downloadBatchLabelsPdf(
   symbology = "CODE128",
 ): Promise<void> {
   const response = await fetch(batchLabelsPdfUrl(batchId, template, symbology), {
-    headers: headers(),
+    headers: headers(acceptFile(PDF)),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as ProblemDetail;
@@ -1268,7 +1279,9 @@ export async function listPositionLabels(nodeId: string): Promise<PositionLabelR
 
 /** Planche Avery L7162 des étiquettes d'emplacement sous un nœud (fetch + blob : en-têtes requis). */
 export async function downloadPositionLabelsPdf(nodeId: string, fileName: string): Promise<void> {
-  const response = await fetch(`${MAGASIN}/locations/${nodeId}/position-labels.pdf`, { headers: accessHeaders() });
+  const response = await fetch(`${MAGASIN}/locations/${nodeId}/position-labels.pdf`, {
+    headers: { ...accessHeaders(), ...acceptFile(PDF) },
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as ProblemDetail;
     throw new Error(body.detail || body.title || `HTTP ${response.status}`);
