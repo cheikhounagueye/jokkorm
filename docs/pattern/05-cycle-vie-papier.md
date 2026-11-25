@@ -61,6 +61,34 @@ API : `GET /api/v1/physical/conditioning/pending` ; `POST /api/v1/physical/condi
 (`cote`, `reason`, `message` ; `cote` vide = la boîte). À l'unité, `POST /records/store` renvoie
 409 `container-full`, `container-on-loan` ou `container-closed`.
 
+## Un service et un sort final par boîte (R1, R2 ; retenu le 2026-11-25, étude D2)
+
+Deux règles bloquantes, à chaque entrée d'un dossier dans une boîte : rangement à l'unité, mise en
+boîte groupée, transfert, mode magasin.
+
+- **R1 — un seul service producteur** (respect des fonds ; restitution et communication par service).
+- **R2 — un seul sort final** : sinon la boîte ne peut être ni éliminée ni versée entière.
+- **La référence est le contenu de la boîte**, rien n'est inscrit sur la boîte. Une boîte vide prend
+  le service et le sort final de ses premiers dossiers ; une sélection qui mêle plusieurs services ou
+  sorts est refusée en entier, avec le compte par service (« RH : 3 ; FIN : 2 »).
+- **Les valeurs sont celles du maître**, lues dans la copie locale (pattern 03, D3). Une liaison coupée
+  n'empêche donc pas de ranger. Avant de refuser sur la foi de la copie, JokkoRM relit les fiches en
+  cause chez le maître : une fiche corrigée à l'instant compte tout de suite.
+- **Le service est comparé tel que le maître l'écrit** (casse et espaces ignorés), sans table
+  d'équivalence. Un service réorganisé ou renommé garde ses anciennes boîtes : c'est le respect des
+  fonds.
+- **Une boîte déjà mélangée** (reprise de l'existant, règle changée dans le maître) ne reçoit plus de
+  dossier. On la reconditionne en transférant les dossiers qui n'y ont pas leur place : sortir d'une
+  boîte n'est jamais bloqué, seule la boîte d'arrivée est contrôlée.
+- **On refuse quand on ne sait pas** : maître muet sans copie (« réessayez quand la liaison sera
+  rétablie »), dossier inconnu du maître, fiche sans service ou sans sort final (« complétez la fiche
+  dans la GED maître »), sort final que JokkoRM ne sait pas lire (la valeur est citée).
+- **Espace sans maître** : ni service ni sort final connus, les règles sont inactives.
+
+Refus (409, à l'unité `reason` ; en groupe dans `refusals`) : `box-service-mismatch`,
+`box-fate-mismatch`, `box-mixed`, `box-unverifiable`, `selection-mixed`, `master-facts-missing`,
+`master-facts-unreachable`.
+
 ## Échéance de la DUA
 
 À l'échéance de la Durée d'Utilité Administrative, le maître prononce le sort final. **JokkoRM ne décide jamais seul du devenir d'une archive : il exécute, il trace, il atteste.**

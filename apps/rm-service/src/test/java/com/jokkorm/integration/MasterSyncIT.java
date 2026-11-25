@@ -131,7 +131,7 @@ class MasterSyncIT {
     void setUp() {
         MAARCH.resetAll();
         MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).willReturn(json(
-            "[{\"archiveId\":\"arc-1\",\"archiverArchiveId\":\"" + COTE + "\"}]")));
+            "[{\"archiveId\":\"arc-1\",\"archiverArchiveId\":\"" + COTE + "\",\"originatorOrgRegNumber\":\"DRH\",\"finalDisposition\":\"destruction\"}]")));
         MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archives/Count")).willReturn(json("1")));
         MAARCH.stubFor(get(urlPathMatching("/recordsManagement/archive/Metadata/.*")).willReturn(json(
             "{\"archiveId\":\"arc-1\",\"archiverArchiveId\":\"" + COTE + "\",\"originatorArchiveId\":\"123\","
@@ -200,7 +200,7 @@ class MasterSyncIT {
     void buffer_box_then_placed_sends_address() {
         String cote2 = "FR-IT-0002";
         MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).willReturn(json(
-            "[{\"archiveId\":\"arc-2\",\"archiverArchiveId\":\"" + cote2 + "\"}]")));
+            "[{\"archiveId\":\"arc-2\",\"archiverArchiveId\":\"" + cote2 + "\",\"originatorOrgRegNumber\":\"DRH\",\"finalDisposition\":\"destruction\"}]")));
         MAARCH.stubFor(get(urlPathMatching("/recordsManagement/archive/Metadata/.*")).willReturn(json(
             "{\"archiveId\":\"arc-2\",\"archiverArchiveId\":\"" + cote2 + "\",\"originatorArchiveId\":\"124\","
                 + "\"archiveName\":\"Dossier 2\",\"originatingDate\":\"2026-01-03\",\"description\":{\"service\":\"RH\"}}")));
@@ -464,7 +464,7 @@ class MasterSyncIT {
                 + ",\"archiveName\":\"Titre\",\"description\":{}}")));
         MAARCH.stubFor(get(urlPathEqualTo("/recordsManagement/archives")).withQueryParam("archiverArchiveId", equalTo(cote))
             .willReturn(json("[{\"archiveId\":\"" + archiveId + "\",\"archiverArchiveId\":\"" + cote
-                + "\",\"archiveName\":\"Titre\",\"archivalProfileReference\":\"" + profile + "\"}]")));
+                + "\",\"archiveName\":\"Titre\",\"archivalProfileReference\":\"" + profile + "\",\"originatorOrgRegNumber\":\"DRH\",\"finalDisposition\":\"destruction\"}]")));
     }
 
     private void stubGone(String archiveId) {

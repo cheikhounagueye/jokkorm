@@ -11,6 +11,9 @@ package com.jokkorm.application.record;
  *   <li>{@link Reason#CONTAINER_ON_LOAN} — la boîte d'arrivée est en prêt : son contenu est promis.</li>
  *   <li>{@link Reason#CONTAINER_FULL} — la boîte a atteint sa capacité (règle R4).</li>
  *   <li>{@link Reason#CONTAINER_CLOSED} — la boîte est fermée ou détruite : elle ne reçoit plus rien.</li>
+ *   <li>Règles de regroupement R1 et R2 ({@link BoxGroupingRules}) : service ou sort final différent de
+ *       ceux de la boîte, boîte déjà mélangée, sélection mélangée, fiche du maître incomplète ou
+ *       illisible.</li>
  * </ul>
  *
  * <p>La boîte actuelle (code-barres, libellé, adresse) accompagne la réponse : l'écran peut
@@ -26,7 +29,21 @@ public class RecordContainerConflictException extends RuntimeException {
         TRANSFER_BLOCKED("record-transfer-blocked"),
         CONTAINER_ON_LOAN("container-on-loan"),
         CONTAINER_FULL("container-full"),
-        CONTAINER_CLOSED("container-closed");
+        CONTAINER_CLOSED("container-closed"),
+        /** R1 : le dossier n'est pas du service producteur des dossiers de la boîte. */
+        SERVICE_MISMATCH("box-service-mismatch"),
+        /** R2 : le dossier n'a pas le sort final des dossiers de la boîte. */
+        FATE_MISMATCH("box-fate-mismatch"),
+        /** La boîte mélange déjà plusieurs services ou sorts finaux : à reconditionner d'abord. */
+        BOX_MIXED("box-mixed"),
+        /** Le service ou le sort final d'un dossier déjà dans la boîte n'est pas connu. */
+        BOX_UNVERIFIABLE("box-unverifiable"),
+        /** Mise en boîte groupée : les dossiers choisis mêlent plusieurs services ou sorts finaux. */
+        SELECTION_MIXED("selection-mixed"),
+        /** Le maître a répondu, mais sa fiche ne dit pas (ou pas lisiblement) le service ou le sort final. */
+        MASTER_FACTS_MISSING("master-facts-missing"),
+        /** Le maître ne répond pas et JokkoRM n'a pas encore de copie de la fiche. */
+        MASTER_FACTS_UNREACHABLE("master-facts-unreachable");
 
         private final String slug;
 

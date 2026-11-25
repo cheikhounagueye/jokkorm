@@ -80,6 +80,20 @@ public class MasterSnapshotService {
     }
 
     /**
+     * Relit le dossier chez le maître avant de refuser une mise en boîte sur la foi de la copie : une
+     * fiche corrigée à l'instant dans le maître compte tout de suite.
+     *
+     * <p>Volontairement sans {@code @Transactional} : un maître injoignable ne doit pas condamner la
+     * transaction de l'appelant (qui peut encore aboutir). La copie relue s'écrit dans cette
+     * transaction ; si la mise en boîte est refusée, elle est annulée avec le reste, sans dommage.
+     *
+     * @throws MasterUnreachableException maître injoignable : l'appelant arrête de relire
+     */
+    public Optional<MasterRecordSnapshot> rereadNow(TenantId tenant, UUID recordId, Cote cote) {
+        return master.fetchByCote(tenant, cote).map(v -> record(tenant, recordId, v));
+    }
+
+    /**
      * Données de rangement des dossiers : la copie si elle existe, sinon une lecture chez le maître
      * (enregistrée). Le maître injoignable sans copie donne {@link Facts.Unreachable} : l'appelant
      * décide (les règles de mise en boîte refusent).
@@ -89,17 +103,25 @@ public class MasterSnapshotService {
         Map<UUID, Facts> out = new HashMap<>();
         Map<UUID, MasterRecordSnapshot> known =
             snapshots.findAll(tenant, records.stream().map(PhysicalArchiveRecord::id).toList());
+        // Au premier maître muet, les dossiers suivants sans copie ne le rappellent pas : sur une liaison
+        // dégradée, chaque appel coûterait le délai d'attente entier, sous le verrou de la boîte.
+        String down = null;
         for (PhysicalArchiveRecord r : records) {
             MasterRecordSnapshot s = known.get(r.id());
             if (s != null) {
                 out.put(r.id(), new Facts.Known(s));
                 continue;
             }
+            if (down != null) {
+                out.put(r.id(), new Facts.Unreachable(down));
+                continue;
+            }
             try {
                 out.put(r.id(), refresh(tenant, r.id(), r.cote())
                     .<Facts>map(Facts.Known::new).orElseGet(Facts.NotFound::new));
             } catch (MasterUnreachableException e) {
-                out.put(r.id(), new Facts.Unreachable(e.getMessage()));
+                down = e.getMessage();
+                out.put(r.id(), new Facts.Unreachable(down));
             }
         }
         return out;

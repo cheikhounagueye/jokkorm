@@ -39,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Règle « un dossier, une seule boîte » : déjà dans cette boîte → refus sans écriture ;
  *       dans une autre boîte → refus, sauf transfert confirmé (et aucune des deux boîtes en prêt).</li>
  *   <li>Boîte d'arrivée : ni fermée, ni détruite, ni en prêt, et pas pleine (règle R4).</li>
+ *   <li>Règles de regroupement R1 et R2 ({@link BoxGroupingRules}) : même service producteur et même
+ *       sort final que les dossiers déjà dans la boîte d'arrivée.</li>
  *   <li>Marquer le record {@code STORED} + lier au container.</li>
  *   <li>Marquer la boîte comme {@code OPEN} (EMPTY → OPEN auto).</li>
  *   <li>Boîte rangée : récupérer l'adresse complète sur 5 niveaux (SITE/MAG/TRAV/TAB/POS)
@@ -66,6 +68,7 @@ public class StoreRecordInContainerUseCase {
     private final Clock clock;
     private final com.jokkorm.application.master.MasterSyncService masterSync;
     private final PhysicalLoanRepository loans;
+    private final BoxGroupingRules grouping;
 
     public StoreRecordInContainerUseCase(
         PhysicalArchiveRecordRepository records,
@@ -76,7 +79,9 @@ public class StoreRecordInContainerUseCase {
         AuditChainService audit,
         Clock clock,
         com.jokkorm.application.master.MasterSyncService masterSync,
-        PhysicalLoanRepository loans) {
+        PhysicalLoanRepository loans,
+        BoxGroupingRules grouping) {
+        this.grouping = grouping;
         this.masterSync = masterSync;
         this.loans = loans;
         this.records = records;
@@ -147,24 +152,20 @@ public class StoreRecordInContainerUseCase {
         PhysicalContainer from = record.containerId()
             .map(id -> containers.findById(tenant, id).orElse(null))
             .orElse(null);
-        if (record.containerId().isPresent()) {
+        // Toutes les raisons de refuser passent avant « déjà dans une autre boîte » : l'écran ne
+        // propose ainsi jamais un transfert qui serait refusé ensuite (gel, prêt, boîte d'arrivée).
+        boolean boxed = record.containerId().isPresent();
+        if (boxed) {
             if (record.containerId().get().equals(container.id())) {
                 throw conflict(Reason.ALREADY_IN_THIS_BOX, tenant, container,
                     "Le dossier %s est déjà dans cette boîte (%s) : rien à faire."
                         .formatted(cote.value(), describe(container)));
             }
-            // Gel contentieux : ne pas proposer un transfert qui serait refusé ensuite.
             if (record.status() == PhysicalArchiveStatus.FROZEN) {
                 throw new LegalHoldException(
                     ("Le dossier %s est sous gel contentieux : il ne peut pas changer de boîte tant que le gel "
                         + "n'est pas levé dans la GED maître. Il reste dans la boîte %s, %s.")
                         .formatted(cote.value(), describe(from), where(tenant, from)));
-            }
-            if (!transfer) {
-                throw conflict(Reason.IN_ANOTHER_BOX, tenant, from,
-                    "Le dossier %s est déjà rangé dans la boîte %s, %s. Un dossier ne peut être que dans "
-                        .formatted(cote.value(), describe(from), where(tenant, from))
-                        + "une seule boîte : pour le changer de boîte, confirmez le transfert.");
             }
             requireNoLoan(tenant, from, "d'origine");
             requireNoLoan(tenant, container, "d'arrivée");
@@ -177,6 +178,15 @@ public class StoreRecordInContainerUseCase {
         }
         requireOpen(tenant, container);
         requireRoom(tenant, container);
+        // Règles R1 et R2 : un service producteur et un sort final par boîte (lus dans la copie du maître).
+        grouping.require(tenant, container, record,
+            (reason, message) -> conflict(reason, tenant, container, message));
+        if (boxed && !transfer) {
+            throw conflict(Reason.IN_ANOTHER_BOX, tenant, from,
+                "Le dossier %s est déjà rangé dans la boîte %s, %s. Un dossier ne peut être que dans "
+                    .formatted(cote.value(), describe(from), where(tenant, from))
+                    + "une seule boîte : pour le changer de boîte, confirmez le transfert.");
+        }
 
         java.time.Instant now = clock.instant();
         boolean firstIngress = record.containerId().isEmpty();

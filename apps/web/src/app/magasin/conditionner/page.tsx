@@ -58,6 +58,10 @@ export default function ConditionnerPage() {
     return next;
   });
 
+  // Règles R1 et R2 : prévenir avant le clic si la sélection mélange services ou sorts finaux
+  // (le serveur reste seul juge : il relit la GED maître avant de refuser).
+  const mix = selectionMix(items.filter((r) => selected.has(r.cote)), pending.data?.master);
+
   const capacity = box?.container.capacity ?? null;
   const after = (box?.recordCount ?? 0) + selected.size;
   const overflow = capacity !== null && after > capacity;
@@ -178,6 +182,14 @@ export default function ConditionnerPage() {
               ? <ChosenBox hit={box} adding={selected.size} onChange={() => { setBox(null); setDone(null); setRefusals([]); }} />
               : <BoxPicker onPick={(h) => { setBox(h); setDone(null); setRefusals([]); }} />)}
 
+            {canAct && mix.length > 0 && !pending.data?.standalone && (
+              <div style={{ marginTop: 14 }}>
+                <Alert tone="warning" title="Une boîte, un service et un sort final">
+                  {mix.map((m) => <div key={m}>{m}</div>)}
+                </Alert>
+              </div>
+            )}
+
             {canAct && box && (
               <div style={{ marginTop: 14 }}>
                 {overflow && (
@@ -254,6 +266,26 @@ function DoneCard({ done }: { done: Done }) {
       </div>
     </Card>
   );
+}
+
+/** Sélection qui mêle plusieurs services ou sorts finaux, d'après la copie locale du maître. */
+function selectionMix(chosen: { id: string }[], master: Record<string, MasterFacts> | undefined): string[] {
+  const services = new Map<string, number>();
+  const fates = new Map<string, number>();
+  for (const r of chosen) {
+    const f = master?.[r.id];
+    if (f?.serviceCode) {
+      const k = f.serviceCode.trim().toUpperCase();
+      services.set(k, (services.get(k) ?? 0) + 1);
+    }
+    if (f?.finalFate) fates.set(f.finalFate, (fates.get(f.finalFate) ?? 0) + 1);
+  }
+  const tally = (m: Map<string, number>, label: (k: string) => string) =>
+    [...m.entries()].map(([k, n]) => `${label(k)} : ${n}`).join(", ");
+  const out: string[] = [];
+  if (services.size > 1) out.push(`La sélection mêle ${services.size} services (${tally(services, (k) => k)}).`);
+  if (fates.size > 1) out.push(`La sélection mêle ${fates.size} sorts finaux (${tally(fates, (k) => FATES[k] ?? k)}).`);
+  return out;
 }
 
 const FATES: Record<string, string> = {

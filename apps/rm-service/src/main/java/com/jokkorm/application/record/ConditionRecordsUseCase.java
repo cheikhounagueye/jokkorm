@@ -28,6 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Sinon chaque dossier passe par {@link StoreRecordInContainerUseCase} (même règles, une entrée
  * d'audit et une ligne de journal par dossier), dans la même transaction.
  *
+ * <p>Règles de regroupement R1 et R2 ({@link BoxGroupingRules}) : les dossiers choisis ont le service
+ * producteur et le sort final des dossiers déjà dans la boîte, ou, si elle est vide, les mêmes entre eux.
+ *
  * <p>La boîte peut être en zone tampon (D1) : on conditionne avant de placer. Pas de transfert
  * ici : un dossier déjà dans une boîte en change par le geste de transfert, un par un, confirmé.
  */
@@ -43,12 +46,15 @@ public class ConditionRecordsUseCase {
     private final PhysicalContainerRepository containers;
     private final PhysicalLoanRepository loans;
     private final StoreRecordInContainerUseCase store;
+    private final BoxGroupingRules grouping;
 
     public ConditionRecordsUseCase(
         PhysicalArchiveRecordRepository records,
         PhysicalContainerRepository containers,
         PhysicalLoanRepository loans,
-        StoreRecordInContainerUseCase store) {
+        StoreRecordInContainerUseCase store,
+        BoxGroupingRules grouping) {
+        this.grouping = grouping;
         this.records = records;
         this.containers = containers;
         this.loans = loans;
@@ -96,6 +102,7 @@ public class ConditionRecordsUseCase {
                 .formatted(boxName, loan.status().isActive() ? "est sortie en prêt" : "a une demande de prêt en cours"))));
 
         List<Cote> accepted = new ArrayList<>();
+        List<PhysicalArchiveRecord> acceptedRecords = new ArrayList<>();
         for (String raw : wanted) {
             Cote cote;
             try {
@@ -114,7 +121,13 @@ public class ConditionRecordsUseCase {
                 refusals.add(refusal);
             } else {
                 accepted.add(cote);
+                acceptedRecords.add(record.get());
             }
+        }
+
+        // Règles R1 et R2 : un service producteur et un sort final par boîte, et entre les dossiers choisis.
+        for (BoxGroupingRules.Breach b : grouping.check(tenant, box, acceptedRecords)) {
+            refusals.add(new Refusal(b.cote(), b.reason().slug(), b.message()));
         }
 
         long inside = records.countByContainer(tenant, box.id());
