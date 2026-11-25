@@ -363,6 +363,11 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
     }
 
     @Override
+    public Optional<String> contentLinkOrigin(TenantId tenant) {
+        return config.publicUrl().isEmpty() ? Optional.empty() : Optional.of(config.publicUrl());
+    }
+
+    @Override
     public Optional<MasterArchiveRef> describe(TenantId tenant, String masterArchiveId) {
         // La réponse contient toute la description (données personnelles comprises) : jamais journalisée.
         JsonNode meta = send("GET", "/recordsManagement/archive/Metadata/"

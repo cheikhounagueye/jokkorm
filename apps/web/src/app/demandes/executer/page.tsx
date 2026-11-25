@@ -8,7 +8,7 @@ import {
   Card,
   EmptyState,
   Field,
-  IconTile,
+  Input,
   PageHeader,
   Textarea,
 } from "@/components/ui";
@@ -41,20 +41,9 @@ const INSTRUCTIONS: Record<RequestType, { title: string; text: string }> = {
   },
   DIGITIZE_EXTRACT: {
     title: "Numériser les pièces listées",
-    text: "Sors la boîte, numérise les pièces demandées et remets-la en place. Dépose le PDF ci-dessous : JokkoRM le transmet à Maarch RM et ne garde que le lien.",
+    text: "Sors la boîte, numérise les pièces demandées et remets-la en place. Dépose le scan dans Maarch RM, puis indique ci-dessous sa référence : JokkoRM ne garde jamais le fichier, seulement de quoi le retrouver dans Maarch RM.",
   },
 };
-
-/** Base64 par blocs (évite le dépassement de pile sur les gros PDF). */
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
 
 export default function ExecuterPage() {
   const query = useQuery({ queryKey: ["toFulfill"], queryFn: listToFulfill });
@@ -103,17 +92,14 @@ export default function ExecuterPage() {
 
 function FulfillPanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: string, message: string) => void }) {
   const [notes, setNotes] = useState("");
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [masterReference, setMasterReference] = useState("");
+  const [masterUrl, setMasterUrl] = useState("");
+  const isDigitize = r.type === "DIGITIZE_EXTRACT";
 
   const fulfillMut = useMutation({
-    mutationFn: async () => {
-      let base64: string | undefined;
-      if (r.type === "DIGITIZE_EXTRACT") {
-        if (!pdfFile) throw new Error("Dépose le PDF numérisé avant d'exécuter.");
-        base64 = await fileToBase64(pdfFile);
-      }
-      return fulfillAccessRequest(r.id, notes || undefined, base64);
-    },
+    mutationFn: async () => fulfillAccessRequest(r.id, notes || undefined,
+      isDigitize ? masterReference.trim() : undefined,
+      isDigitize && masterUrl.trim() ? masterUrl.trim() : undefined),
     onSuccess: async (res) => {
       if (r.type === "BORROW_BOX" && res.createdLoanId) {
         await downloadGhostCard(res.createdLoanId);
@@ -139,9 +125,18 @@ function FulfillPanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: st
         <Alert tone="info" title={INSTRUCTIONS[r.type].title}>{INSTRUCTIONS[r.type].text}</Alert>
       </div>
 
-      {r.type === "DIGITIZE_EXTRACT" && (
-        <div style={{ marginTop: 16 }}>
-          <PdfDropzone file={pdfFile} onChange={setPdfFile} />
+      {isDigitize && (
+        <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+          <Field label="Référence du scan dans Maarch RM" required
+            hint="N° d'archive ou cote de l'extrait, tel qu'affiché par Maarch RM.">
+            <Input value={masterReference} onChange={(e) => setMasterReference(e.target.value)}
+              maxLength={200} placeholder="ex. FR094080_2026_AE0002_001" autoComplete="off" />
+          </Field>
+          <Field label="Lien vers le scan dans Maarch RM"
+            hint="Facultatif. Adresse copiée depuis Maarch RM ; le demandeur l'ouvrira avec ses propres droits Maarch.">
+            <Input type="url" value={masterUrl} onChange={(e) => setMasterUrl(e.target.value)}
+              maxLength={2000} placeholder="https://…" autoComplete="off" />
+          </Field>
         </div>
       )}
 
@@ -159,57 +154,9 @@ function FulfillPanel({ r, onDone }: { r: AccessRequestResponse; onDone: (id: st
       )}
 
       <Button size="lg" onClick={() => fulfillMut.mutate()} loading={fulfillMut.isPending}
-        disabled={r.type === "DIGITIZE_EXTRACT" && !pdfFile} icon={<Icons.fulfill size={16} />}>
+        disabled={isDigitize && !masterReference.trim()} icon={<Icons.fulfill size={16} />}>
         {r.type === "BORROW_BOX" ? "Exécuter et télécharger le fantôme" : "Exécuter"}
       </Button>
     </Card>
-  );
-}
-
-function PdfDropzone({ file, onChange }: { file: File | null; onChange: (f: File | null) => void }) {
-  const [over, setOver] = useState(false);
-
-  if (file) {
-    return (
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-        background: "var(--success-50)", borderRadius: "var(--radius-md)",
-        border: "1px solid color-mix(in srgb, var(--success-500) 30%, transparent)",
-      }}>
-        <IconTile name="pdf" tone="danger" size={40} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{Math.max(1, Math.round(file.size / 1024))} Ko · prêt à transmettre</div>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => onChange(null)} icon={<Icons.close size={14} weight="bold" />}>
-          Retirer
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <label
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault(); setOver(false);
-        const f = e.dataTransfer.files?.[0];
-        if (f && f.type === "application/pdf") onChange(f);
-      }}
-      style={{
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-        padding: "28px 20px", cursor: "pointer", textAlign: "center",
-        background: over ? "var(--brand-50)" : "var(--surface-sunken)",
-        border: `2px dashed ${over ? "var(--brand-500)" : "var(--border-strong)"}`,
-        borderRadius: "var(--radius-lg)",
-        transition: "all 150ms ease",
-      }}>
-      <IconTile name="cloudUpload" tone="violet" size={48} />
-      <div style={{ fontSize: 14, fontWeight: 600 }}>Dépose le PDF numérisé ici</div>
-      <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>ou clique pour choisir un fichier · PDF uniquement</div>
-      <input type="file" accept="application/pdf" style={{ display: "none" }}
-        onChange={(e) => onChange(e.target.files?.[0] ?? null)} />
-    </label>
   );
 }

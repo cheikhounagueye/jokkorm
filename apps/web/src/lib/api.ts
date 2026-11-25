@@ -602,9 +602,13 @@ export const rejectAccessRequest = (id: string, reason: string) =>
   postAction<AccessRequestResponse>(id, "reject", { reason });
 export const cancelAccessRequest = (id: string, reason: string) =>
   postAction<AccessRequestResponse>(id, "cancel", { reason });
-export const fulfillAccessRequest = (id: string, notes?: string, digitizedPdfBase64?: string) =>
+/**
+ * Numérisation (pattern 07) : JokkoRM ne reçoit jamais le fichier. L'archiviste dépose le scan
+ * dans Maarch RM puis indique sa référence et, s'il le souhaite, son lien.
+ */
+export const fulfillAccessRequest = (id: string, notes?: string, masterReference?: string, masterUrl?: string) =>
   postAction<{ request: AccessRequestResponse; createdLoanId: string | null }>(id, "fulfill", {
-    notes, digitizedPdfBase64,
+    notes, masterReference, masterUrl,
   });
 export const completeAccessRequest = (id: string) => postAction<AccessRequestResponse>(id, "complete");
 

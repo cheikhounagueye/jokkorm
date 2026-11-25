@@ -116,4 +116,9 @@ public class RoutingSaeMasterPort implements SaeMasterPort {
     public Optional<com.jokkorm.domain.master.MasterArchiveRef> describe(TenantId tenant, String masterArchiveId) {
         return adapterFor(tenant).describe(tenant, masterArchiveId);
     }
+
+    @Override
+    public Optional<String> contentLinkOrigin(TenantId tenant) {
+        return adapterFor(tenant).contentLinkOrigin(tenant);
+    }
 }

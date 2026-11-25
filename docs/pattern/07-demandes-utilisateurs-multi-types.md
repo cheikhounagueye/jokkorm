@@ -116,6 +116,22 @@ Ces checks sont **informatifs** côté archiviste, mais certains sont **bloquant
 - Status demande : `FULFILLED` avec le lien Maarch envoyé par email au demandeur.
 - Status : `COMPLETED` dès que le lien est consulté (ou à la validation manuelle).
 
+**Procédure en vigueur tant que le connecteur d'envoi n'existe pas** (décision du 25 novembre
+2026 ; connecteur prévu après le lot 2 de l'étude « du dossier enregistré à la boîte en rayon ») :
+
+1. L'archiviste dépose lui-même le scan dans Maarch RM (sous-archive « Extrait » du dossier, ou
+   document ajouté à l'archive), avec les droits et la conservation que Maarch applique.
+2. Dans JokkoRM (« À exécuter »), il saisit la **référence** du scan chez Maarch (n° d'archive ou
+   cote de l'extrait, obligatoire) et, s'il le souhaite, son **lien** Maarch.
+3. JokkoRM enregistre ces deux valeurs (`maarchResId`, `maarchUrl`) et rien d'autre : l'API refuse
+   tout fichier (`digitizedPdfBase64` → 400), le lien doit être http(s), sans identifiant ni mot
+   de passe, et pointer vers l'adresse publique du maître quand elle est configurée.
+
+Pourquoi pas un dépôt « en attente » dans JokkoRM : une copie gardée hors du SAE, sans date de fin,
+échapperait à l'élimination décidée par Maarch, aux droits d'accès de Maarch et à ses sauvegardes.
+Le futur connecteur, s'il garde un fichier en transit, devra borner cette copie (empreinte SHA-256,
+suppression dès l'accusé de réception de Maarch) — ce sera un amendement de cette fiche, à valider.
+
 ## Pattern "une seule archive, deux gardiens" — rappel critique
 
 **JokkoRM ne garde JAMAIS les fichiers numérisés.** Ils vivent côté Maarch RM.

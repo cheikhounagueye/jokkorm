@@ -10,11 +10,12 @@ import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.access.AccessRequest;
 import com.jokkorm.domain.access.AccessRequestRepository;
 import com.jokkorm.domain.access.AccessRequestStatus;
-import com.jokkorm.domain.access.MaarchDigitizePort;
+import com.jokkorm.domain.access.MasterContentLink;
 import com.jokkorm.domain.access.RequestType;
 import com.jokkorm.domain.audit.AuditAction;
 import com.jokkorm.domain.audit.AuditTargetType;
 import com.jokkorm.domain.loan.PhysicalLoan;
+import com.jokkorm.domain.master.SaeMasterPort;
 import com.jokkorm.application.physical.PhysicalContainerNotFoundException;
 import com.jokkorm.domain.physical.PhysicalContainerRepository;
 import java.time.Clock;
@@ -41,7 +42,7 @@ public class AccessRequestWorkflow {
     private final QualificationChecksService checksService;
     private final RequestLoanUseCase requestLoan;
     private final MarkLoanOutUseCase markLoanOut;
-    private final MaarchDigitizePort maarchPort;
+    private final SaeMasterPort master;
     private final AuditChainService audit;
     private final Clock clock;
     private final boolean allowSelfApproval;
@@ -53,7 +54,7 @@ public class AccessRequestWorkflow {
         QualificationChecksService checksService,
         RequestLoanUseCase requestLoan,
         MarkLoanOutUseCase markLoanOut,
-        MaarchDigitizePort maarchPort,
+        SaeMasterPort master,
         AuditChainService audit,
         Clock clock,
         @Value("${jokkorm.access.allow-self-approval:false}") boolean allowSelfApproval,
@@ -64,7 +65,7 @@ public class AccessRequestWorkflow {
         this.checksService = checksService;
         this.requestLoan = requestLoan;
         this.markLoanOut = markLoanOut;
-        this.maarchPort = maarchPort;
+        this.master = master;
         this.audit = audit;
         this.clock = clock;
         this.allowSelfApproval = allowSelfApproval;
@@ -149,10 +150,24 @@ public class AccessRequestWorkflow {
         return saved;
     }
 
+    /**
+     * APPROVED → FULFILLED.
+     *
+     * @param masterReference pour une numérisation seulement : où retrouver le scan chez le maître
+     *                        (pattern 07 — JokkoRM ne garde jamais le fichier ; l'archiviste le
+     *                        dépose dans le maître puis saisit sa référence)
+     * @param masterUrl       lien facultatif vers ce scan dans l'interface du maître
+     */
     @Transactional
-    public FulfillResult fulfill(UUID id, String notes, byte[] digitizedPdf, String actor) {
+    public FulfillResult fulfill(UUID id, String notes, String masterReference, String masterUrl, String actor) {
         RoleContext.requireAny(UserRole.ARCHIVIST);
         AccessRequest r = loadOrThrow(id);
+        boolean linkGiven = (masterReference != null && !masterReference.isBlank())
+            || (masterUrl != null && !masterUrl.isBlank());
+        if (linkGiven && r.type() != RequestType.DIGITIZE_EXTRACT) {
+            throw new IllegalArgumentException(
+                "Une référence Maarch RM ne s'indique que pour une demande de numérisation.");
+        }
         var container = containers.findById(TenantContext.current(), r.containerId())
             .orElseThrow(() -> new PhysicalContainerNotFoundException(
                 "Container " + r.containerId() + " not found"));
@@ -174,18 +189,12 @@ public class AccessRequestWorkflow {
                 legalHolds.requireNoHold(TenantContext.current(), container.id(), container.barcode());
             }
             case DIGITIZE_EXTRACT -> {
-                if (digitizedPdf == null || digitizedPdf.length == 0) {
-                    throw new IllegalArgumentException(
-                        "DIGITIZE_EXTRACT fulfill requires a non-empty PDF");
-                }
-                var result = maarchPort.upload(
-                    TenantContext.current(), r.id(),
-                    container.barcode(), null, r.piecesDescription().orElse(""), digitizedPdf);
-                maarchResId = result.resId();
-                maarchUrl = result.url();
-                if (result.staging()) {
-                    notes = (notes == null ? "" : notes + " · ") + "[staging] Maarch interop pending";
-                }
+                // Le scan vit chez le maître (accès, conservation, élimination) : JokkoRM n'en
+                // garde que la référence, et un lien seulement s'il pointe vers le maître.
+                MasterContentLink link = MasterContentLink.of(masterReference, masterUrl,
+                    master.contentLinkOrigin(TenantContext.current()).orElse(null));
+                maarchResId = link.reference();
+                maarchUrl = link.url();
             }
         }
 

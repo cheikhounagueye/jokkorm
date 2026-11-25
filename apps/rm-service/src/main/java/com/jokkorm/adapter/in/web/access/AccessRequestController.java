@@ -13,7 +13,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -60,7 +59,13 @@ public class AccessRequestController {
 
     public record ReasonRequest(String reason) {}
     public record NotesRequest(String notes) {}
-    public record FulfillRequest(String notes, /** base64 PDF for DIGITIZE_EXTRACT */ String digitizedPdfBase64) {}
+    /**
+     * @param masterReference numérisation : référence du scan déposé dans Maarch RM (obligatoire)
+     * @param masterUrl       numérisation : lien vers ce scan dans Maarch RM (facultatif)
+     * @param digitizedPdfBase64 ancien champ, toujours refusé : JokkoRM ne reçoit plus de fichier
+     */
+    public record FulfillRequest(String notes, String masterReference, String masterUrl,
+                                 String digitizedPdfBase64) {}
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -124,14 +129,21 @@ public class AccessRequestController {
     }
 
     @PostMapping("/{id}/fulfill")
-    @Operation(summary = "APPROVED → FULFILLED. Archiviste. Pour DIGITIZE : digitizedPdfBase64 obligatoire.")
+    @Operation(summary = "APPROVED → FULFILLED. Archiviste. Pour DIGITIZE : masterReference obligatoire.",
+        description = "Pattern 07 : JokkoRM ne garde jamais un fichier numérisé. L'archiviste dépose le scan "
+            + "dans Maarch RM puis indique sa référence (masterReference) et, s'il le souhaite, son lien "
+            + "(masterUrl, http(s), vers l'adresse publique du maître quand elle est connue). "
+            + "Un fichier envoyé (digitizedPdfBase64) est refusé : 400.")
     public FulfillResponse fulfill(
         @PathVariable UUID id,
         @RequestBody(required = false) FulfillRequest body,
         @RequestHeader(value = "X-Actor", defaultValue = "archiviste") String actor) {
-        byte[] pdf = (body == null || body.digitizedPdfBase64() == null) ? null
-            : Base64.getDecoder().decode(body.digitizedPdfBase64());
-        var result = workflow.fulfill(id, body == null ? null : body.notes(), pdf, actor);
+        if (body != null && body.digitizedPdfBase64() != null) {
+            throw new IllegalArgumentException("JokkoRM ne conserve pas les numérisations : déposez le scan "
+                + "dans Maarch RM, puis indiquez ici sa référence.");
+        }
+        var result = workflow.fulfill(id, body == null ? null : body.notes(),
+            body == null ? null : body.masterReference(), body == null ? null : body.masterUrl(), actor);
         return new FulfillResponse(AccessRequestResponse.from(result.request()), result.createdLoanId());
     }
 

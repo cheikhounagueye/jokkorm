@@ -88,4 +88,13 @@ public interface SaeMasterPort {
     default Optional<MasterArchiveRef> describe(TenantId tenant, String masterArchiveId) {
         return Optional.empty();
     }
+
+    /**
+     * Adresse publique de l'interface du maître (ex. {@code https://maarch.example.org}) : un lien
+     * vers un contenu du maître saisi dans JokkoRM (numérisation, pattern 07) doit y pointer.
+     * {@code empty()} = maître sans interface (noop, démonstration) : pas de contrôle d'origine.
+     */
+    default Optional<String> contentLinkOrigin(TenantId tenant) {
+        return Optional.empty();
+    }
 }

@@ -149,7 +149,25 @@ export function requestDetailRows(r: AccessRequestResponse) {
   ];
   if (r.piecesDescription) rows.push({ label: "Pièces demandées", value: r.piecesDescription, icon: "documents" });
   if (r.expectedReturnAt) rows.push({ label: "Retour prévu", value: formatInstant(r.expectedReturnAt), icon: "returned" });
+  if (r.maarchResId) rows.push({ label: "Numérisation dans Maarch RM", value: <MasterScanRef r={r} />, icon: "digitize" });
   return rows;
+}
+
+/** Pattern 07 : le scan vit dans Maarch RM ; JokkoRM n'en montre que la référence et le lien. */
+function MasterScanRef({ r }: { r: AccessRequestResponse }) {
+  // Le backend n'enregistre que des liens http(s) ; on revérifie avant d'en faire un lien cliquable.
+  const safeUrl = r.maarchUrl && /^https?:\/\//i.test(r.maarchUrl) ? r.maarchUrl : null;
+  return (
+    <>
+      <code>{r.maarchResId}</code>
+      {safeUrl && (
+        <>
+          {" · "}
+          <a href={safeUrl} target="_blank" rel="noopener noreferrer">Ouvrir dans Maarch RM</a>
+        </>
+      )}
+    </>
+  );
 }
 
 /** Formulaire de rejet inline (remplace prompt()). */
