@@ -130,7 +130,11 @@ public class MaarchRmSaeMasterAdapter implements MasterAdapter {
             durationYears(text(a, "retentionDuration")),
             finalFate(text(a, "finalDisposition")),
             "frozen".equals(text(a, "status")),
-            pageUrl(text(a, "archiveId"))));
+            pageUrl(text(a, "archiveId")),
+            text(a, "originatorOrgRegNumber"),
+            date(text(a, "disposalDate")),
+            text(a, "classificationLevel"),
+            text(a, "finalDisposition")));
     }
 
     /**

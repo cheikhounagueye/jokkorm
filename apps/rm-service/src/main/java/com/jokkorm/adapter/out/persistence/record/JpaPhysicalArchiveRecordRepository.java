@@ -31,7 +31,9 @@ public class JpaPhysicalArchiveRecordRepository implements PhysicalArchiveRecord
         PhysicalArchiveRecordEntity existing = jpa.findById(record.id()).orElse(null);
         PhysicalArchiveRecordEntity saved;
         if (existing == null) {
-            saved = jpa.save(PhysicalArchiveRecordEntity.fromDomain(record));
+            // Écrit tout de suite : des tables lues ou écrites en JDBC dans la même transaction
+            // (copie de rangement du maître, D3) référencent le dossier par clé étrangère.
+            saved = jpa.saveAndFlush(PhysicalArchiveRecordEntity.fromDomain(record));
         } else {
             if (!existing.tenantId().equals(record.tenantId().value())) {
                 throw new IllegalStateException(

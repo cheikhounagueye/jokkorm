@@ -92,6 +92,7 @@ public class MasterWatchService {
     private final Clock clock;
     private final Duration initialLookback;
     private final MasterImportService imports;
+    private final MasterSnapshotService snapshots;
     /** Événements déjà traités récemment : évite de relire le maître pour la fenêtre de recouvrement. */
     private final Map<String, Boolean> recentlyHandled = Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, false) {
         @Override
@@ -105,8 +106,9 @@ public class MasterWatchService {
                               PhysicalLoanRepository loans, ApplyLegalHoldUseCase legalHold, AuditChainService audit,
                               TransactionTemplate tx, Clock clock,
                               @Value("${jokkorm.master.watch.initial-lookback-hours:24}") long initialLookbackHours,
-                              MasterImportService imports) {
+                              MasterImportService imports, MasterSnapshotService snapshots) {
         this.imports = imports;
+        this.snapshots = snapshots;
         this.master = master;
         this.states = states;
         this.alerts = alerts;
@@ -203,6 +205,9 @@ public class MasterWatchService {
         }
         if (ref == null) return false;  // archive inconnue ou invisible pour le compte de connexion
         Cote cote = Cote.of(ref.cote());
+        // D3 : l'archive a changé chez le maître → sa copie de rangement est relue (hors transaction ;
+        // maître injoignable = panne, l'événement sera relu au prochain passage).
+        records.findByCote(tenant, cote).ifPresent(r -> snapshots.refresh(tenant, r.id(), cote));
         Boolean raised = tx.execute(s -> switch (ev.kind()) {
             case METADATA_MODIFIED -> onMetadataModified(tenant, ev, cote, ref.displayedPhysicalStatus());
             case FROZEN -> onFrozen(tenant, ev, cote);

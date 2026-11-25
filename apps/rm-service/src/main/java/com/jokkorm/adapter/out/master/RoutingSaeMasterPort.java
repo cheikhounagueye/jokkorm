@@ -121,4 +121,9 @@ public class RoutingSaeMasterPort implements SaeMasterPort {
     public Optional<String> contentLinkOrigin(TenantId tenant) {
         return adapterFor(tenant).contentLinkOrigin(tenant);
     }
+
+    @Override
+    public String masterKind(TenantId tenant) {
+        return adapterFor(tenant).kind();
+    }
 }

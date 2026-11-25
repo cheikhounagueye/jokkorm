@@ -1319,11 +1319,26 @@ export async function searchContainers(q: string, limit = 20): Promise<Container
 
 const CONDITIONING = "/api/v1/physical/conditioning";
 
+/** Ce que le maître dit d'un dossier pour le ranger (copie locale en lecture seule, D3). */
+export interface MasterFacts {
+  serviceCode: string | null;
+  finalFate: string | null;
+  finalFateSource: string | null;
+  disposalDate: string | null;
+  classificationLevel: string | null;
+  legalHold: boolean;
+  fetchedAt: string;
+}
+
 export interface PendingConditioningPage {
   items: RecordResponse[];
   total: number;
   page: number;
   size: number;
+  /** Copie par id de dossier ; absente = pas encore lue chez le maître. */
+  master: Record<string, MasterFacts>;
+  /** Espace sans maître : service et sort final inconnus par nature. */
+  standalone: boolean;
 }
 
 /** À conditionner : dossiers dans aucune boîte (enregistrés ou gelés), les plus anciens d'abord. */

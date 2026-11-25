@@ -97,4 +97,17 @@ public interface SaeMasterPort {
     default Optional<String> contentLinkOrigin(TenantId tenant) {
         return Optional.empty();
     }
+
+    /** Maître qui sert ce tenant : {@code noop} (autonome, sans maître), {@code demo}, {@code maarchrm}… */
+    default String masterKind(TenantId tenant) {
+        return "unknown";
+    }
+
+    /**
+     * Vrai si le tenant fonctionne sans maître (adapter noop) : JokkoRM ne connaît alors ni le
+     * service, ni le sort final, et les règles de regroupement qui en dépendent ne s'appliquent pas.
+     */
+    default boolean isStandalone(TenantId tenant) {
+        return "noop".equals(masterKind(tenant));
+    }
 }

@@ -1,12 +1,21 @@
 package com.jokkorm.adapter.in.web.physical;
 
 import com.jokkorm.adapter.in.web.record.RecordResponse;
+import com.jokkorm.application.master.MasterSnapshotService;
 import com.jokkorm.application.record.ConditionRecordsUseCase;
 import com.jokkorm.commons.role.RoleContext;
 import com.jokkorm.commons.role.UserRole;
+import com.jokkorm.commons.tenancy.TenantContext;
+import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.common.Page;
 import com.jokkorm.domain.common.PageRequest;
+import com.jokkorm.domain.master.MasterRecordSnapshot;
 import com.jokkorm.domain.record.PhysicalArchiveRecord;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -31,12 +40,33 @@ import org.springframework.web.bind.annotation.RestController;
 public class ConditioningController {
 
     private final ConditionRecordsUseCase condition;
+    private final MasterSnapshotService snapshots;
 
-    public ConditioningController(ConditionRecordsUseCase condition) {
+    public ConditioningController(ConditionRecordsUseCase condition, MasterSnapshotService snapshots) {
         this.condition = condition;
+        this.snapshots = snapshots;
     }
 
-    public record PendingPage(List<RecordResponse> items, long total, int page, int size) {}
+    /**
+     * Ce que le maître dit d'un dossier pour le ranger (copie locale en lecture seule, D3).
+     *
+     * @param fetchedAt de quand date la copie
+     */
+    public record MasterFactsResponse(String serviceCode, String finalFate, String finalFateSource,
+                                      LocalDate disposalDate, String classificationLevel, boolean legalHold,
+                                      Instant fetchedAt) {
+        static MasterFactsResponse from(MasterRecordSnapshot s) {
+            return new MasterFactsResponse(s.serviceCode(), s.finalFate(), s.finalFateSource(), s.disposalDate(),
+                s.classificationLevel(), s.legalHold(), s.fetchedAt());
+        }
+    }
+
+    /**
+     * @param master     copie de rangement par dossier (absente = pas encore lue chez le maître)
+     * @param standalone espace sans maître : service et sort final inconnus par nature
+     */
+    public record PendingPage(List<RecordResponse> items, long total, int page, int size,
+                              Map<UUID, MasterFactsResponse> master, boolean standalone) {}
 
     public record ConditioningRequest(@NotBlank String containerBarcode, @NotEmpty List<String> cotes) {}
 
@@ -54,8 +84,12 @@ public class ConditioningController {
         RoleContext.requireAny(UserRole.ARCHIVIST, UserRole.ARCHIVES_HEAD, UserRole.AUDITOR);
         Page<PhysicalArchiveRecord> p = condition.pending(
             PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
+        TenantId tenant = TenantContext.current();
+        Map<UUID, MasterFactsResponse> facts = new LinkedHashMap<>();
+        snapshots.known(tenant, p.content().stream().map(PhysicalArchiveRecord::id).toList())
+            .forEach((id, s) -> facts.put(id, MasterFactsResponse.from(s)));
         return new PendingPage(p.content().stream().map(RecordResponse::from).toList(), p.totalElements(),
-            p.page(), p.size());
+            p.page(), p.size(), facts, snapshots.standalone(tenant));
     }
 
     @PostMapping

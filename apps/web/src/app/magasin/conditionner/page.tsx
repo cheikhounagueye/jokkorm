@@ -7,6 +7,7 @@ import { ArchiveBoxIso } from "@/components/illustrations/ArchiveBoxIso";
 import { Alert, Button, Card, CardHeader, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import {
   conditionRecords, listPendingConditioning, refusalsOf, type ConditioningRefusal, type ContainerHit,
+  type MasterFacts,
 } from "@/lib/api";
 import { formatInstant } from "@/lib/format";
 import { Icons } from "@/lib/icons";
@@ -109,6 +110,9 @@ export default function ConditionnerPage() {
                   </th>
                   <th>Cote</th>
                   <th>Statut</th>
+                  <th title="Service producteur, selon la GED maître">Service</th>
+                  <th title="Sort final, selon la GED maître">Sort final</th>
+                  <th title="Date à laquelle le sort final s'applique, selon la GED maître">Échéance</th>
                   <th>Enregistrée le</th>
                   <th />
                 </tr>
@@ -117,6 +121,8 @@ export default function ConditionnerPage() {
                 {items.map((r) => {
                   const frozen = r.status === "FROZEN";
                   const meta = ARCHIVE_STATUS[r.status];
+                  const facts = pending.data?.master[r.id];
+                  const unknown = pending.data?.standalone ? "sans maître" : "pas encore lu";
                   return (
                     <tr key={r.id} onClick={() => canAct && !frozen && toggle(r.cote)}
                       style={{ cursor: canAct && !frozen ? "pointer" : "default",
@@ -131,6 +137,10 @@ export default function ConditionnerPage() {
                         <StatusBadge meta={meta} />
                         {frozen && <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-tertiary)" }}>attend la levée du gel</span>}
                       </td>
+                      <MasterCell value={facts?.serviceCode ?? null} missing={facts ? "non indiqué" : unknown} code />
+                      <MasterCell value={facts ? fateLabel(facts) : null} missing={facts ? "non indiqué" : unknown} />
+                      <MasterCell value={facts?.disposalDate ? formatDay(facts.disposalDate) : null}
+                        missing={facts ? "non indiquée" : unknown} />
                       <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatInstant(r.registeredAt)}</td>
                       <td style={{ textAlign: "right" }}>
                         <Link href={`/records/detail?cote=${encodeURIComponent(r.cote)}`} onClick={(e) => e.stopPropagation()}
@@ -244,4 +254,30 @@ function DoneCard({ done }: { done: Done }) {
       </div>
     </Card>
   );
+}
+
+const FATES: Record<string, string> = {
+  DESTRUCTION: "Destruction",
+  CONSERVATION: "Conservation",
+  VERSEMENT_AN: "Versement",
+};
+
+/** Sort final lisible ; une valeur que JokkoRM ne sait pas traduire est montrée telle quelle. */
+function fateLabel(f: MasterFacts): string | null {
+  if (f.finalFate) return FATES[f.finalFate] ?? f.finalFate;
+  return f.finalFateSource ? `« ${f.finalFateSource} » (non reconnu)` : null;
+}
+
+/** AAAA-MM-JJ → JJ/MM/AAAA, sans fuseau (une échéance est un jour, pas un instant). */
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : iso;
+}
+
+/** Donnée lue chez le maître (copie locale) ; absente = dit pourquoi, en discret. */
+function MasterCell({ value, missing, code }: { value: string | null; missing: string; code?: boolean }) {
+  if (!value) {
+    return <td style={{ color: "var(--text-tertiary)", fontSize: 12, whiteSpace: "nowrap" }}>{missing}</td>;
+  }
+  return <td style={{ whiteSpace: "nowrap" }}>{code ? <code>{value}</code> : value}</td>;
 }

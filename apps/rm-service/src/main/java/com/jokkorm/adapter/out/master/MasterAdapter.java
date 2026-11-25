@@ -1,5 +1,6 @@
 package com.jokkorm.adapter.out.master;
 
+import com.jokkorm.commons.tenancy.TenantId;
 import com.jokkorm.domain.master.SaeMasterPort;
 
 /**
@@ -14,4 +15,9 @@ public interface MasterAdapter extends SaeMasterPort {
 
     /** Nom montré dans l'interface (« Maarch RM », « Maître de démonstration »…). */
     String displayName();
+
+    @Override
+    default String masterKind(TenantId tenant) {
+        return kind();
+    }
 }

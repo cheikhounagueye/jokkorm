@@ -84,8 +84,25 @@ public class DemoSaeMasterAdapter implements MasterAdapter {
         String classificationPath = classificationPath(raw, prefix);
         boolean legalHold = raw.toUpperCase(Locale.ROOT).matches(".*(GEL|LITIGE|HOLD).*");
 
+        // Données de regroupement (D3) : service = premier segment connu, échéance = année de la
+        // cote + DUA, classifié si la cote contient CONF. Inventé, mais assez varié pour montrer
+        // les règles de mise en boîte (deux services, deux sorts, deux années).
+        String service = PREFIXES.containsKey(firstSegment.toUpperCase(Locale.ROOT))
+            ? firstSegment.toUpperCase(Locale.ROOT) : "DIVERS";
+        LocalDate disposal = yearOf(raw).map(y -> LocalDate.of(y + prefix.duaYears, 12, 31)).orElse(null);
+        String classification = raw.toUpperCase(Locale.ROOT).contains("CONF") ? "CONFIDENTIEL" : null;
+
         return Optional.of(new MasterArchiveView(
-            cote, title, classificationPath, prefix.duaYears, prefix.finalFate, legalHold));
+            cote, title, classificationPath, prefix.duaYears, prefix.finalFate, legalHold, null,
+            service, disposal, classification, prefix.finalFate));
+    }
+
+    private static final java.util.regex.Pattern YEAR =
+        java.util.regex.Pattern.compile("(?<!\\d)(19|20)\\d{2}(?!\\d)");
+
+    private static Optional<Integer> yearOf(String cote) {
+        var m = YEAR.matcher(cote);
+        return m.find() ? Optional.of(Integer.parseInt(m.group())) : Optional.empty();
     }
 
     @Override

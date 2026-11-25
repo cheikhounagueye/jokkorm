@@ -1,6 +1,7 @@
 package com.jokkorm.application.record;
 
 import com.jokkorm.application.audit.AuditChainService;
+import com.jokkorm.application.master.MasterSnapshotService;
 import com.jokkorm.commons.role.RoleContext;
 import com.jokkorm.commons.role.UserRole;
 import com.jokkorm.commons.tenancy.TenantContext;
@@ -37,10 +38,12 @@ public class ImportFromMasterUseCase {
     private final MasterImportCandidateRepository candidates;
     private final AuditChainService audit;
     private final Clock clock;
+    private final MasterSnapshotService snapshots;
 
     public ImportFromMasterUseCase(SaeMasterPort master, PhysicalArchiveRecordRepository records,
                                    HandleCoteAssignedEventUseCase register, MasterImportCandidateRepository candidates,
-                                   AuditChainService audit, Clock clock) {
+                                   AuditChainService audit, Clock clock, MasterSnapshotService snapshots) {
+        this.snapshots = snapshots;
         this.master = master;
         this.records = records;
         this.register = register;
@@ -58,6 +61,8 @@ public class ImportFromMasterUseCase {
                 "La cote " + cote.value() + " est inconnue de la GED maître"));
         boolean existed = records.findByCote(tenant, cote).isPresent();
         PhysicalArchiveRecord record = register.execute(tenant, cote, actor);
+        // D3 : copie de rangement prise dans la réponse qu'on vient de lire (pas de second appel).
+        snapshots.record(tenant, record.id(), view);
         // Qu'il vienne de la liste « à importer » ou de la recherche, l'import solde la candidate (étape 2).
         candidates.markImportedByCote(tenant, cote.value(), actor, clock.instant()).ifPresent(c ->
             audit.record(AuditAction.MASTER_CANDIDATE_IMPORTED, AuditTargetType.PHYSICAL_ARCHIVE_RECORD, record.id(),

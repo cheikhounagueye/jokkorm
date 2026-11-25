@@ -91,6 +91,13 @@ jokkorm:
       delay-ms: ${JOKKORM_MASTER_WATCH_DELAY_MS:60000}
       # Premier démarrage : relire la dernière journée du journal (rien n'est rejoué deux fois).
       initial-lookback-hours: ${JOKKORM_MASTER_WATCH_INITIAL_LOOKBACK_HOURS:24}
+    # Copie locale en lecture seule des données de rangement (D3 : service, sort final, échéance,
+    # classification). Relue quand elle manque ou dépasse max-age (format ISO-8601, P1D = un jour).
+    snapshot:
+      worker-enabled: ${JOKKORM_MASTER_SNAPSHOT_WORKER_ENABLED:true}
+      delay-ms: ${JOKKORM_MASTER_SNAPSHOT_DELAY_MS:300000}
+      max-age: ${JOKKORM_MASTER_SNAPSHOT_MAX_AGE:P1D}
+      batch: ${JOKKORM_MASTER_SNAPSHOT_BATCH:50}
   physical:
     # Pattern 10 : longueur de tablette par défaut et marge de manipulation (validés 2026-11-23).
     default-tablette-length-mm: ${JOKKORM_DEFAULT_TABLETTE_LENGTH_MM:1000}

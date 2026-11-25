@@ -39,3 +39,5 @@ databaseChangeLog:
       file: db/changelog/0019-magasin-mode.yaml
   - include:
       file: db/changelog/0020-ghost-code.yaml
+  - include:
+      file: db/changelog/0021-master-record-snapshot.yaml
