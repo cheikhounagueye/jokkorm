@@ -63,6 +63,12 @@ export default function TerrainPage() {
   const [flash, setFlash] = useState<"ok" | "ko" | null>(null);
   const [manual, setManual] = useState("");
   const [showManual, setShowManual] = useState(false);
+  const manualRef = useRef<HTMLInputElement>(null);
+  /** Ouvre la saisie du code et y met le curseur, même si elle était déjà ouverte. */
+  const openManual = () => {
+    setShowManual(true);
+    window.setTimeout(() => manualRef.current?.focus(), 0);
+  };
   const [settings, setSettings] = useState<"closed" | "open" | "forced">("closed");
   const [who, setWho] = useState<{ tenant: string; actor: string } | null>(null);
   const tenants = useQuery({ queryKey: ["dev-tenants"], queryFn: listDevTenants, retry: false, staleTime: 60_000 });
@@ -359,9 +365,15 @@ export default function TerrainPage() {
             {def.steps.map((step, i) => {
               const s = scans[i];
               const current = i === scans.length;
+              // L'étape attendue n'est pas un menu : la toucher ouvre la saisie du code (étiquette illisible,
+              // pas de caméra). Le scan reste la preuve normale.
               return (
-                <div key={i} style={{
-                  flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 12,
+                <div key={i} role={current ? "button" : undefined} tabIndex={current ? 0 : undefined}
+                  aria-label={current ? `Saisir le code : ${STEP_LABEL[step]}` : undefined}
+                  onClick={current ? openManual : undefined}
+                  onKeyDown={current ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openManual(); } } : undefined}
+                  style={{
+                  flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 12, cursor: current ? "pointer" : undefined,
                   border: `1.5px solid ${s ? "var(--success-500)" : current ? "var(--brand-500)" : "var(--border-subtle)"}`,
                   background: s ? "var(--success-50)" : "var(--surface-card)",
                 }}>
@@ -371,8 +383,9 @@ export default function TerrainPage() {
                     {STEP_LABEL[step]}
                   </div>
                   <div style={{ fontSize: 12, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    color: s ? "var(--text-primary)" : "var(--text-tertiary)" }}>
-                    {s ? (s.kind === "CONTAINER" ? boxName(s) : s.position!.address.split(" · ").slice(-2).join(" · ")) : "—"}
+                    color: s ? "var(--text-primary)" : current ? "var(--brand-500)" : "var(--text-tertiary)" }}>
+                    {s ? (s.kind === "CONTAINER" ? boxName(s) : s.position!.address.split(" · ").slice(-2).join(" · "))
+                      : current ? "Scanner, ou toucher pour saisir" : "—"}
                   </div>
                 </div>
               );
@@ -421,15 +434,17 @@ export default function TerrainPage() {
         <section style={{ padding: "10px 12px 0" }}>
           {showManual ? (
             <form onSubmit={submitManual} style={{ display: "flex", gap: 8 }}>
-              <input value={manual} onChange={(e) => setManual(e.target.value)} autoFocus
-                placeholder="BOX-… ou EMP-…" aria-label="Code à saisir" autoCapitalize="characters" autoCorrect="off"
+              <input ref={manualRef} value={manual} onChange={(e) => setManual(e.target.value)} autoFocus
+                placeholder={expect === "position" ? "Code de l'emplacement : EMP-…"
+                  : expect === "any" ? "BOX-… ou EMP-…" : "Code de la boîte : BOX-…"}
+                aria-label="Code à saisir" autoCapitalize="characters" autoCorrect="off"
                 style={{ flex: 1, minWidth: 0, fontSize: 16, padding: "12px", borderRadius: 12,
                   border: "1px solid var(--border-strong)", background: "var(--surface-card)",
                   fontFamily: "var(--font-mono)", letterSpacing: "0.04em", color: "var(--text-primary)" }} />
               <Button type="submit" size="lg" disabled={!manual.trim() || busy}>OK</Button>
             </form>
           ) : (
-            <button type="button" onClick={() => setShowManual(true)} style={{
+            <button type="button" onClick={openManual} style={{
               display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 4px", border: "none",
               background: "transparent", color: "var(--text-secondary)", fontSize: 13, fontWeight: 600,
             }}>
