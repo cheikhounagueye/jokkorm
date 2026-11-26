@@ -81,13 +81,41 @@ boîte groupée, transfert, mode magasin.
   dossier. On la reconditionne en transférant les dossiers qui n'y ont pas leur place : sortir d'une
   boîte n'est jamais bloqué, seule la boîte d'arrivée est contrôlée.
 - **On refuse quand on ne sait pas** : maître muet sans copie (« réessayez quand la liaison sera
-  rétablie »), dossier inconnu du maître, fiche sans service ou sans sort final (« complétez la fiche
-  dans la GED maître »), sort final que JokkoRM ne sait pas lire (la valeur est citée).
+  rétablie »), dossier inconnu du maître, fiche sans service producteur (« complétez la fiche dans la
+  GED maître »), sort final que JokkoRM ne sait pas lire (la valeur est citée : c'est un réglage à
+  corriger, pas un sort absent).
 - **Espace sans maître** : ni service ni sort final connus, les règles sont inactives.
 
 Refus (409, à l'unité `reason` ; en groupe dans `refusals`) : `box-service-mismatch`,
 `box-fate-mismatch`, `box-mixed`, `box-unverifiable`, `selection-mixed`, `master-facts-missing`,
 `master-facts-unreachable`.
+
+### Sort à fixer (retenu le 2026-11-26)
+
+Un dossier dont la fiche du maître n'a **pas encore de sort final** (arriérés, aucun tableau de
+gestion adopté) n'est pas bloqué : laissé hors boîte, c'est le papier le moins protégé du magasin.
+
+- Il entre dans une boîte **« sort à fixer »** de son service (R1 s'applique toujours), jamais mêlée à
+  des dossiers dont le sort est connu : dans les deux sens, le refus dit où le ranger.
+- Comme le reste, la marque se calcule sur le contenu : rien n'est inscrit sur la boîte.
+- Quand le maître fixe **le même sort à tous** ses dossiers, la boîte devient une boîte ordinaire
+  d'elle-même. Un sort fixé à **une partie seulement** la rend mélangée : elle ne reçoit plus rien et
+  se reconditionne par transfert.
+- Une boîte « sort à fixer » n'est **ni éliminée ni versée** : seul le maître fixe un sort, et
+  JokkoRM n'en invente aucun (pas de sort par défaut, pas de saisie locale).
+
+Écarté : garder le blocage (le papier attend hors boîte des mois ou des années), saisir un sort
+provisoire dans JokkoRM (le sort appartient au maître, pattern 03), mêler les dossiers sans sort aux
+autres avec un accusé (boîtes mélangées dès le départ). Plus tard : regrouper aussi par série ou
+profil d'archive, pour que les dossiers d'une boîte reçoivent le même sort, et compter les dossiers
+« sort à fixer » dans le suivi du magasin.
+
+### R5, dossier gelé (décidé le 2026-11-26, à livrer avec R3 et R6)
+
+Alerte et marque « gel » calculée (étude D2), au lieu du refus actuel : le dossier gelé entre en
+boîte après confirmation de l'alerte, tracée ; toute sortie et toute élimination de la boîte restent
+bloquées ; le transfert d'un dossier gelé reste refusé. **D'ici la livraison avec les accusés de R3
+et R6, la mise en boîte d'un dossier gelé reste refusée.**
 
 ## Échéance de la DUA
 

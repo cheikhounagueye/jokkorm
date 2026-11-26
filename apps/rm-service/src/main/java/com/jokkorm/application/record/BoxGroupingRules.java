@@ -43,11 +43,19 @@ import org.springframework.stereotype.Service;
  * contrôlée : sortir un dossier d'une boîte mélangée (transfert) reste toujours possible, c'est
  * ainsi qu'on la reconditionne.
  *
+ * <p><b>Sort à fixer</b> (décision du 26 novembre 2026) : un dossier dont la fiche n'a pas encore
+ * de sort final (arriérés, pas de tableau de gestion adopté) entre dans une boîte « sort à fixer »
+ * de son service, jamais mêlée à des dossiers dont le sort est connu. Le papier est protégé tout de
+ * suite, et la boîte reste homogène : quand le maître fixe le même sort à tous ses dossiers, elle
+ * devient une boîte ordinaire d'elle-même ; un sort fixé à une partie seulement la rend mélangée
+ * (à reconditionner). Une telle boîte n'est ni éliminée ni versée tant que le sort n'est pas fixé :
+ * seul le maître le décide.
+ *
  * <p>Les données viennent de la copie locale du maître (D3) : une liaison coupée n'empêche pas de
  * ranger. On refuse quand on ne sait pas : maître muet sans copie, dossier inconnu du maître,
- * fiche sans service ou sans sort final, sort final que JokkoRM ne sait pas lire (la valeur est
- * nommée). Avant de refuser sur la foi de la copie, on relit les fiches concernées chez le maître :
- * une fiche corrigée à l'instant compte tout de suite.
+ * fiche sans service producteur, sort final que JokkoRM ne sait pas lire (la valeur est nommée :
+ * c'est un réglage à corriger, pas un sort absent). Avant de refuser sur la foi de la copie, on
+ * relit les fiches concernées chez le maître : une fiche corrigée à l'instant compte tout de suite.
  *
  * <p>Espace sans maître : ni service ni sort final connus, les règles sont inactives.
  */
@@ -60,6 +68,8 @@ public class BoxGroupingRules {
     static final Duration REREAD_OLDER_THAN = Duration.ofMinutes(1);
     /** Relectures au plus par contrôle : une liaison lente ne doit pas bloquer la boîte longtemps. */
     static final int MAX_REREADS = 20;
+    /** Clé de groupe des dossiers sans sort final chez le maître (aucun sort réel ne porte ce nom). */
+    static final String FATE_TO_SET = "A_FIXER";
 
     /** Un manquement : {@code cote} null = la boîte ou la sélection entière. */
     public record Breach(String cote, Reason reason, String message) {}
@@ -145,9 +155,9 @@ public class BoxGroupingRules {
         if (!contentUnknown.isEmpty()) {
             boxProblem = true;
             out.add(new Breach(null, Reason.BOX_UNVERIFIABLE,
-                ("La boîte %s contient %s dont la GED maître ne donne pas le service producteur ou le sort final "
-                    + "(%s) : impossible de vérifier qu'un nouveau dossier lui convient. Complétez ces fiches dans "
-                    + "la GED maître, ou sortez ces dossiers de la boîte.")
+                ("La boîte %s contient %s dont la GED maître ne donne pas le service producteur, ou un sort final "
+                    + "lisible (%s) : impossible de vérifier qu'un nouveau dossier lui convient. Complétez ces fiches "
+                    + "dans la GED maître, ou sortez ces dossiers de la boîte.")
                     .formatted(boxName, count(contentUnknown.size(), "dossier"), list(contentUnknown))));
         }
         if (boxServices.size() > 1 || boxFates.size() > 1) {
@@ -155,10 +165,13 @@ public class BoxGroupingRules {
             List<String> mixes = new ArrayList<>();
             if (boxServices.size() > 1) mixes.add("les services " + and(boxServices.values()));
             if (boxFates.size() > 1) mixes.add("les sorts finaux " + and(boxFates.stream().map(BoxGroupingRules::fateLabel).toList()));
+            boolean fixedSince = boxFates.size() > 1 && boxFates.contains(FATE_TO_SET);
             out.add(new Breach(null, Reason.BOX_MIXED,
                 ("La boîte %s mélange déjà %s : elle ne reçoit plus de dossier. Reconditionnez-la d'abord en "
                     + "transférant les dossiers qui n'y ont pas leur place.")
-                    .formatted(boxName, String.join(" et ", mixes))));
+                    .formatted(boxName, String.join(" et ", mixes))
+                    + (fixedSince ? " Une partie de ses dossiers a reçu son sort final dans la GED maître : ils vont "
+                        + "dans une boîte de ce sort." : "")));
         }
 
         // 2. Les dossiers qui arrivent : fiche connue, complète et lisible.
@@ -195,6 +208,18 @@ public class BoxGroupingRules {
                             .formatted(cote, g.service(), boxName, service, cote, g.service())
                             + (otherFate ? " Son sort final diffère aussi (%s, la boîte : %s)."
                                 .formatted(fateLabel(g.fate()), fateLabel(fate)) : "")));
+                } else if (otherFate && FATE_TO_SET.equals(g.fate())) {
+                    out.add(new Breach(cote, Reason.FATE_MISMATCH,
+                        ("%s n'a pas encore de sort final dans la GED maître ; la boîte %s contient des dossiers à %s. "
+                            + "Un dossier sans sort final va dans une boîte « sort à fixer » du service %s, jamais avec "
+                            + "des dossiers dont le sort est connu.")
+                            .formatted(cote, boxName, fateLabel(fate), g.service())));
+                } else if (otherFate && FATE_TO_SET.equals(fate)) {
+                    out.add(new Breach(cote, Reason.FATE_MISMATCH,
+                        ("%s a pour sort final %s ; la boîte %s est une boîte « sort à fixer » : elle ne reçoit que des "
+                            + "dossiers dont la GED maître n'a pas encore fixé le sort. Mettez %s dans une boîte %s.")
+                            .formatted(cote, fateLabel(g.fate()), boxName, cote,
+                                fateLabel(g.fate()) + " du service " + g.service())));
                 } else if (otherFate) {
                     out.add(new Breach(cote, Reason.FATE_MISMATCH,
                         ("%s a pour sort final %s ; la boîte %s contient des dossiers à %s. Une boîte n'a qu'un sort "
@@ -224,7 +249,9 @@ public class BoxGroupingRules {
             out.add(new Breach(null, Reason.SELECTION_MIXED,
                 ("Les dossiers choisis ont %d sorts finaux (%s) : une boîte n'en a qu'un. Choisissez des "
                     + "dossiers de même sort final.")
-                    .formatted(byFate.size(), tally(byFate, BoxGroupingRules::fateLabel))));
+                    .formatted(byFate.size(), tally(byFate, BoxGroupingRules::fateLabel))
+                    + (byFate.containsKey(FATE_TO_SET) ? " Les dossiers sans sort final vont dans une boîte à part, "
+                        + "« sort à fixer »." : "")));
         }
         return out;
     }
@@ -244,31 +271,38 @@ public class BoxGroupingRules {
         }
         MasterRecordSnapshot s = known.snapshot();
         boolean noService = s.service().isEmpty();
-        boolean noFate = s.fate().isEmpty();
-        if (!noService && !noFate) {
-            return null;
+        if (!noService && !unreadableFate(s)) {
+            return null; // sort final connu, ou absent : groupe « sort à fixer »
         }
-        String fix = " Complétez la fiche dans la GED maître, puis recommencez.";
-        if (noFate && s.finalFateSource() != null) {
+        if (unreadableFate(s)) {
             return new Breach(cote, Reason.MASTER_FACTS_MISSING,
                 ("Le sort final de %s dans la GED maître, « %s », n'est pas reconnu par JokkoRM : impossible de "
                     + "savoir avec quels dossiers le ranger. Signalez-le à l'administrateur de JokkoRM.")
                     .formatted(cote, s.finalFateSource())
                     + (noService ? " Sa fiche n'indique pas non plus de service producteur." : ""));
         }
-        String what = noService && noFate ? "ni service producteur ni sort final"
-            : noService ? "pas de service producteur" : "pas de sort final";
+        String what = s.fate().isEmpty() ? "ni service producteur ni sort final" : "pas de service producteur";
         return new Breach(cote, Reason.MASTER_FACTS_MISSING,
-            "La fiche de %s dans la GED maître n'indique %s.".formatted(cote, what) + fix);
+            "La fiche de %s dans la GED maître n'indique %s. Complétez la fiche dans la GED maître, puis recommencez."
+                .formatted(cote, what));
     }
 
-    /** Service et sort final utilisables, ou null (fiche inconnue, incomplète ou illisible). */
+    /** Une valeur de sort final est donnée, mais JokkoRM ne sait pas la traduire (réglage à corriger). */
+    private static boolean unreadableFate(MasterRecordSnapshot s) {
+        return s.fate().isEmpty() && s.finalFateSource() != null;
+    }
+
+    /**
+     * Service et sort final utilisables, ou null (fiche inconnue, sans service, ou sort illisible).
+     * Un sort final absent donne le groupe {@link #FATE_TO_SET}.
+     */
     private static Group group(Facts f) {
         if (!(f instanceof Facts.Known known)) return null;
         MasterRecordSnapshot s = known.snapshot();
-        if (s.service().isEmpty() || s.fate().isEmpty()) return null;
+        if (s.service().isEmpty() || unreadableFate(s)) return null;
         String service = s.service().get();
-        return new Group(service.toUpperCase(Locale.ROOT), service, s.fate().get().toUpperCase(Locale.ROOT));
+        String fate = s.fate().map(v -> v.toUpperCase(Locale.ROOT)).orElse(FATE_TO_SET);
+        return new Group(service.toUpperCase(Locale.ROOT), service, fate);
     }
 
     // --- relecture avant refus ---------------------------------------------------------------
@@ -315,6 +349,7 @@ public class BoxGroupingRules {
             case "CONSERVATION" -> "« conservation »";
             case "VERSEMENT_AN" -> "« versement »";
             case "TRI" -> "« tri »";
+            case FATE_TO_SET -> "« sort à fixer »";
             default -> "« " + fate.toLowerCase(Locale.ROOT) + " »";
         };
     }

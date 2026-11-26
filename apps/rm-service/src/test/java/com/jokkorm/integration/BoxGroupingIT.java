@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import com.jokkorm.adapter.out.master.noop.NoopSaeMasterAdapter;
+import com.jokkorm.application.master.MasterSnapshotService;
 import com.jokkorm.application.physical.CreatePhysicalContainerUseCase;
 import com.jokkorm.application.record.ConditionRecordsUseCase;
 import com.jokkorm.application.record.ConditioningRefusedException;
@@ -125,6 +126,7 @@ class BoxGroupingIT {
     @Autowired StoreRecordInContainerUseCase store;
     @Autowired PhysicalArchiveRecordRepository records;
     @Autowired MasterRecordSnapshotRepository snapshots;
+    @Autowired MasterSnapshotService snapshotService;
 
     @BeforeEach
     void setUp() {
@@ -269,6 +271,85 @@ class BoxGroupingIT {
                 assertThat(message(e, unknown)).contains("inconnu de la GED maître");
             });
         assertThat(in(SCRIPTED, () -> records.countByContainer(SCRIPTED, b.id()))).isZero();
+    }
+
+    @Test
+    @DisplayName("Sort à fixer : sans sort final, le dossier va dans une boîte « sort à fixer » de son service, jamais mêlée à un sort connu")
+    void fateToSet() {
+        String a = fiche("DRH", null, null);
+        String blank = fiche("DRH", null, " ");   // valeur vide = pas de sort
+        String daf = fiche("DAF", null, null);
+        String destroy = fiche("DRH", "DESTRUCTION", "destruction");
+        PhysicalContainer toSet = box(SCRIPTED);
+
+        // Une sélection qui mêle « sans sort » et sort connu est refusée, comptes à l'appui.
+        assertThatThrownBy(() -> in(SCRIPTED, () -> condition.execute(toSet.barcode(), List.of(a, destroy), "it")))
+            .isInstanceOfSatisfying(ConditioningRefusedException.class, e -> {
+                assertThat(e.refusals()).extracting(Refusal::cote, Refusal::reason)
+                    .containsExactly(tuple(null, "selection-mixed"));
+                assertThat(e.refusals().get(0).message())
+                    .contains("« sort à fixer » : 1").contains("« destruction » : 1").contains("boîte à part");
+            });
+
+        // Deux dossiers sans sort du même service entrent ensemble.
+        assertThat(in(SCRIPTED, () -> condition.execute(toSet.barcode(), List.of(a, blank), "it")).recordCount())
+            .isEqualTo(2);
+
+        // La boîte « sort à fixer » refuse un sort connu, et R1 s'applique toujours.
+        assertThatThrownBy(() -> storeIn(SCRIPTED, destroy, toSet))
+            .isInstanceOfSatisfying(RecordContainerConflictException.class, e ->
+                assertThat(e.reason()).isEqualTo(Reason.FATE_MISMATCH))
+            .hasMessageContaining("est une boîte « sort à fixer »");
+        assertThatThrownBy(() -> storeIn(SCRIPTED, daf, toSet))
+            .isInstanceOfSatisfying(RecordContainerConflictException.class, e ->
+                assertThat(e.reason()).isEqualTo(Reason.SERVICE_MISMATCH));
+
+        // Une boîte au sort connu refuse un dossier sans sort, et dit où il va.
+        PhysicalContainer known = box(SCRIPTED);
+        storeIn(SCRIPTED, destroy, known);
+        String later = fiche("DRH", null, null);
+        assertThatThrownBy(() -> storeIn(SCRIPTED, later, known))
+            .isInstanceOfSatisfying(RecordContainerConflictException.class, e ->
+                assertThat(e.reason()).isEqualTo(Reason.FATE_MISMATCH))
+            .hasMessageContaining("n'a pas encore de sort final")
+            .hasMessageContaining("boîte « sort à fixer » du service DRH");
+    }
+
+    @Test
+    @DisplayName("Sort fixé plus tard dans le maître : le même pour tous, la boîte devient ordinaire ; une partie seulement, elle est à reconditionner")
+    void fateSetLater() {
+        String a = fiche("DAF", null, null);
+        String b2 = fiche("DAF", null, null);
+        PhysicalContainer whole = box(SCRIPTED);
+        in(SCRIPTED, () -> condition.execute(whole.barcode(), List.of(a, b2), "it"));
+
+        // Le tableau de gestion est adopté : le maître fixe « destruction » aux deux ; la copie est relue.
+        fixFate(a, "DAF", "DESTRUCTION", "destruction");
+        fixFate(b2, "DAF", "DESTRUCTION", "destruction");
+        String destroy = fiche("DAF", "DESTRUCTION", "destruction");
+        storeIn(SCRIPTED, destroy, whole);
+        assertThat(containerOf(SCRIPTED, destroy)).contains(whole.id());
+
+        // Sort fixé pour un seul des deux : la boîte mélange, elle ne reçoit plus rien.
+        String c = fiche("DAF", null, null);
+        String d = fiche("DAF", null, null);
+        PhysicalContainer part = box(SCRIPTED);
+        in(SCRIPTED, () -> condition.execute(part.barcode(), List.of(c, d), "it"));
+        fixFate(c, "DAF", "CONSERVATION", "preservation");
+        String e2 = fiche("DAF", null, null);
+        assertThatThrownBy(() -> storeIn(SCRIPTED, e2, part))
+            .isInstanceOfSatisfying(RecordContainerConflictException.class, e ->
+                assertThat(e.reason()).isEqualTo(Reason.BOX_MIXED))
+            .hasMessageContaining("« sort à fixer »")
+            .hasMessageContaining("a reçu son sort final");
+    }
+
+    /** Le maître fixe le sort d'un dossier, et la copie locale est relue (veilleur ou relecture du jour). */
+    private void fixFate(String cote, String service, String fate, String source) {
+        ScriptedMaster.FICHES.put(cote, new MasterArchiveView(Cote.of(cote), "Dossier " + cote, "test", 10, fate,
+            false, null, service, LocalDate.of(2036, 12, 31), null, source));
+        UUID id = in(SCRIPTED, () -> records.findByCote(SCRIPTED, Cote.of(cote))).orElseThrow().id();
+        in(SCRIPTED, () -> snapshotService.refresh(SCRIPTED, id, Cote.of(cote)));
     }
 
     @Test

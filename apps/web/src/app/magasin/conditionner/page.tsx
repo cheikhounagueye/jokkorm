@@ -278,26 +278,35 @@ function selectionMix(chosen: { id: string }[], master: Record<string, MasterFac
       const k = f.serviceCode.trim().toUpperCase();
       services.set(k, (services.get(k) ?? 0) + 1);
     }
-    if (f?.finalFate) fates.set(f.finalFate, (fates.get(f.finalFate) ?? 0) + 1);
+    // Comme le serveur : pas de sort final = groupe « sort à fixer » ; une valeur illisible est refusée à part.
+    const fate = f ? (f.finalFate ?? (f.finalFateSource ? null : TO_SET)) : null;
+    if (fate) fates.set(fate, (fates.get(fate) ?? 0) + 1);
   }
   const tally = (m: Map<string, number>, label: (k: string) => string) =>
     [...m.entries()].map(([k, n]) => `${label(k)} : ${n}`).join(", ");
   const out: string[] = [];
   if (services.size > 1) out.push(`La sélection mêle ${services.size} services (${tally(services, (k) => k)}).`);
-  if (fates.size > 1) out.push(`La sélection mêle ${fates.size} sorts finaux (${tally(fates, (k) => FATES[k] ?? k)}).`);
+  if (fates.size > 1) {
+    out.push(`La sélection mêle ${fates.size} sorts finaux (${tally(fates, (k) => FATES[k] ?? k)}).`
+      + (fates.has(TO_SET) ? " Les dossiers sans sort final vont dans une boîte à part, « sort à fixer »." : ""));
+  }
   return out;
 }
+
+/** Dossier dont la GED maître n'a pas encore fixé le sort final : rangé dans une boîte « sort à fixer ». */
+const TO_SET = "A_FIXER";
 
 const FATES: Record<string, string> = {
   DESTRUCTION: "Destruction",
   CONSERVATION: "Conservation",
   VERSEMENT_AN: "Versement",
+  [TO_SET]: "Sort à fixer",
 };
 
 /** Sort final lisible ; une valeur que JokkoRM ne sait pas traduire est montrée telle quelle. */
 function fateLabel(f: MasterFacts): string | null {
   if (f.finalFate) return FATES[f.finalFate] ?? f.finalFate;
-  return f.finalFateSource ? `« ${f.finalFateSource} » (non reconnu)` : null;
+  return f.finalFateSource ? `« ${f.finalFateSource} » (non reconnu)` : FATES[TO_SET];
 }
 
 /** AAAA-MM-JJ → JJ/MM/AAAA, sans fuseau (une échéance est un jour, pas un instant). */
