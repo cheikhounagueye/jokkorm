@@ -37,10 +37,20 @@ La caméra d'un iPhone ne s'ouvre qu'en HTTPS avec un certificat de confiance (p
 Tant que la connexion (OIDC) n'est pas branchée, le rôle est simulé : ne faire ce test que sur un
 réseau de confiance, et arrêter `dev:lan` après.
 
+## Stack de développement (`make dev`)
+
+- Postgres et Mailpit repartent seuls après un redémarrage de Docker ou d'OrbStack
+  (`restart: unless-stopped`) ; `make dev-down` les arrête pour de bon. Pour qu'ils repartent après
+  un redémarrage du Mac, OrbStack doit lui-même démarrer à l'ouverture de session (réglage
+  d'OrbStack). Le backend et le front, lancés à la main, ne repartent pas seuls.
+- Postgres n'écoute que sur ce Mac (`127.0.0.1:5490`) : son mot de passe de développement n'est pas
+  exposé au réseau local. Changer de port ou d'adresse recrée le conteneur ; les données restent dans
+  le volume `deploy_jokkorm-pgdata` (sauvegarder avant).
+
 ## Health checks
 
 - Backend : `GET /actuator/health` (liveness + readiness)
-- Postgres : `pg_isready -h localhost -p 5490 -U jokkorm`
+- Postgres : `pg_isready -h 127.0.0.1 -p 5490 -U jokkorm`
 - Keycloak : `curl http://localhost:8085/health/ready`
 
 ## Logs
@@ -61,7 +71,7 @@ Métriques clés à surveiller (phase 2+) :
 
 ## Backup
 
-Phase ultérieure. Pour l'instant : `pg_dump -h localhost -p 5490 -U jokkorm jokkorm > backup.sql`.
+Phase ultérieure. Pour l'instant : `docker exec jokkorm-postgres pg_dump -U jokkorm -Fc jokkorm > jokkorm.dump`.
 
 ## Rotation secrets
 

@@ -10,12 +10,16 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: jokkorm-postgres
+    # Repart seul après un redémarrage de Docker/OrbStack (coupure, mise en veille) ;
+    # `make dev-down` l'arrête pour de bon.
+    restart: unless-stopped
     environment:
       POSTGRES_DB: jokkorm
       POSTGRES_USER: jokkorm
       POSTGRES_PASSWORD: jokkorm
     ports:
-      - "5490:5432"
+      # Mot de passe de développement : joignable depuis ce Mac seulement, pas depuis le réseau local.
+      - "127.0.0.1:5490:5432"
     volumes:
       - jokkorm-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -52,6 +56,7 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     container_name: jokkorm-mailpit
+    restart: unless-stopped
     ports:
       - "8025:8025"   # UI
       - "1025:1025"   # SMTP
